@@ -1,0 +1,334 @@
+@model VoxCrm.Domain.Entities.Patient
+@{
+    ViewData["Title"] = Model.Name;
+    ViewData["ActiveMenu"] = "patients";
+
+    var muayeneler = ViewBag.Muayeneler as IEnumerable<VoxCrm.Domain.Entities.Muayene>;
+    var vaccinations = ViewBag.Vaccinations as IEnumerable<VoxCrm.Domain.Entities.VaccinationRecord>;
+    var appointments = ViewBag.Appointments as IEnumerable<VoxCrm.Domain.Entities.Appointment>;
+    var debts = ViewBag.Debts as IEnumerable<VoxCrm.Domain.Entities.Debt>;
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <div>
+        <a href="/Patient" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Hastalar</a>
+        <h1 class="h3 fw-bold mb-0 mt-1">@Model.Name <i class="bi @(Model.cinsiyet == 'E' ? "bi-gender-male text-primary" : "bi-gender-female text-danger") fs-5"></i></h1>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <a href="/Muayene/Create?patientId=@Model.ID" class="btn btn-sm btn-primary">
+            <i class="bi bi-file-medical me-1"></i> Muayene Ekle
+        </a>
+        <a href="/Patient/Edit/@Model.ID" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-pencil me-1"></i> Düzenle
+        </a>
+    </div>
+</div>
+
+<ul class="nav nav-pills mb-4" id="patientTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="genel-tab" data-bs-toggle="tab" data-bs-target="#genel" type="button" role="tab"><i class="bi bi-person-lines-fill me-1"></i> Genel Bilgiler</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="muayene-tab" data-bs-toggle="tab" data-bs-target="#muayene" type="button" role="tab"><i class="bi bi-heart-pulse me-1"></i> Muayeneler</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="asi-tab" data-bs-toggle="tab" data-bs-target="#asi" type="button" role="tab"><i class="bi bi-capsule me-1"></i> Aşılar</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="randevu-tab" data-bs-toggle="tab" data-bs-target="#randevu" type="button" role="tab"><i class="bi bi-calendar-check me-1"></i> Randevular</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="finans-tab" data-bs-toggle="tab" data-bs-target="#finans" type="button" role="tab"><i class="bi bi-wallet2 me-1"></i> Finans (Borçlar)</button>
+  </li>
+</ul>
+
+<div class="tab-content" id="patientTabsContent">
+  <!-- GENEL BİLGİLER -->
+  <div class="tab-pane fade show active" id="genel" role="tabpanel">
+    <div class="row g-4">
+        <div class="col-12 col-lg-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase small mb-3">Hasta Bilgileri</h6>
+                    <dl class="row mb-0">
+                        <dt class="col-5 text-muted small">Tür</dt>
+                        <dd class="col-7 fw-semibold">@Model.Species</dd>
+                        <dt class="col-5 text-muted small">Irk</dt>
+                        <dd class="col-7">@(Model.Breed ?? "-")</dd>
+                        <dt class="col-5 text-muted small">Doğum Tarihi</dt>
+                        <dd class="col-7">@(Model.DateOfBirth?.ToString("dd.MM.yyyy") ?? "-")</dd>
+                        <dt class="col-5 text-muted small">Çip No</dt>
+                        <dd class="col-7">@(Model.MicrochipNumber ?? "-")</dd>
+                        <dt class="col-5 text-muted small">Pasaport No</dt>
+                        <dd class="col-7">@(Model.pasaportNumarasi ?? "-")</dd>
+                    </dl>
+                    @if (!string.IsNullOrEmpty(Model.Notes))
+                    {
+                        <hr>
+                        <h6 class="text-muted small">Notlar</h6>
+                        <p class="small text-dark bg-light p-2 rounded mb-0">@Model.Notes</p>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-8">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-bottom d-flex justify-content-between">
+                    <h6 class="mb-0 fw-semibold">Sahipler</h6>
+                    <span class="badge bg-primary">@Model.Owners.Count kişi</span>
+                </div>
+                <div class="card-body p-0">
+                    @if (!Model.Owners.Any())
+                    {
+                        <div class="text-center py-4 text-muted small">Sahip kaydı yok.</div>
+                    }
+                    else
+                    {
+                        @foreach (var o in Model.Owners)
+                        {
+                            if (o.PetOwner != null)
+                            {
+                                <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
+                                    <div>
+                                        <div class="fw-semibold">@o.PetOwner.FirstName @o.PetOwner.LastName</div>
+                                        <div class="text-muted small"><i class="bi bi-telephone"></i> @o.PetOwner.Phone</div>
+                                        @if (!string.IsNullOrEmpty(o.PetOwner.Email))
+                                        {
+                                            <div class="text-muted small"><i class="bi bi-envelope"></i> @o.PetOwner.Email</div>
+                                        }
+                                    </div>
+                                    @if (o.IsPrimaryOwner)
+                                    {
+                                        <span class="badge bg-success">Asıl Sahip</span>
+                                    }
+                                    <div class="d-flex align-items-center gap-2">
+                                        <a href="/PetOwner/Details/@o.PetOwner.ID" class="btn btn-sm btn-outline-secondary" title="Profile Git">
+                                            <i class="bi bi-person"></i>
+                                        </a>
+                                        <form method="post" action="/Patient/RemoveOwner" class="d-inline" onsubmit="return confirm('Bu sahibi hastadan koparmak istediğinize emin misiniz?');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="patientId" value="@Model.ID" />
+                                            <input type="hidden" name="ownerId" value="@o.PetOwnerId" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Kaldır">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    }
+                </div>
+                <div class="card-footer bg-light">
+                    <form method="post" action="/Patient/AddOwner" class="row g-2 align-items-center">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="patientId" value="@Model.ID" />
+                        <div class="col-8">
+                            <select name="ownerId" class="form-select form-select-sm" required>
+                                <option value="">-- Yeni Sahip Ekle --</option>
+                                @if (ViewBag.AvailableOwners != null)
+                                {
+                                    foreach (var ao in (IEnumerable<VoxCrm.Domain.Entities.PetOwner>)ViewBag.AvailableOwners)
+                                    {
+                                        <option value="@ao.ID">@ao.FirstName @ao.LastName (@ao.Phone)</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <button type="submit" class="btn btn-sm btn-primary w-100">
+                                <i class="bi bi-plus"></i> Ekle
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  <!-- MUAYENELER -->
+  <div class="tab-pane fade" id="muayene" role="tabpanel">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            @if (muayeneler == null || !muayeneler.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-clipboard2-pulse fs-1 d-block mb-2"></i>
+                    Geçmiş muayene kaydı bulunamadı.
+                </div>
+            }
+            else
+            {
+                <table class="table mb-0 table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Teşhis</th>
+                            <th>Ateş / Kilo</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in muayeneler)
+                        {
+                            <tr>
+                                <td>@m.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                <td><span class="text-truncate d-inline-block" style="max-width: 250px;">@(string.IsNullOrEmpty(m.Assessment) ? "-" : m.Assessment)</span></td>
+                                <td>@(m.Temperature?.ToString() ?? "-") °C / @(m.WeightAtVisit?.ToString() ?? "-") kg</td>
+                                <td class="text-end">
+                                    <a href="/Muayene/Details/@m.ID" class="btn btn-sm btn-outline-info"><i class="bi bi-eye"></i> Detay</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+  </div>
+
+  <!-- AŞILAR -->
+  <div class="tab-pane fade" id="asi" role="tabpanel">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            @if (vaccinations == null || !vaccinations.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-capsule fs-1 d-block mb-2"></i>
+                    Aşı kaydı bulunamadı.
+                </div>
+            }
+            else
+            {
+                <table class="table mb-0 table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Aşı Adı</th>
+                            <th>Yapılma Tarihi</th>
+                            <th>Sonraki Doz</th>
+                            <th>Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in vaccinations)
+                        {
+                            bool isPastDue = v.NextDueDate < DateTime.UtcNow.Date;
+                            <tr>
+                                <td>@(v.VaccineType?.Name ?? "-")</td>
+                                <td>@v.AdministeredDate.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                                <td class="@(isPastDue ? "text-danger fw-bold" : "")">@v.NextDueDate.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                                <td>
+                                    @if (isPastDue)
+                                    {
+                                        <span class="badge bg-danger">Gecikmiş</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success">Normal</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+  </div>
+
+  <!-- RANDEVULAR -->
+  <div class="tab-pane fade" id="randevu" role="tabpanel">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            @if (appointments == null || !appointments.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-calendar-x fs-1 d-block mb-2"></i>
+                    Randevu kaydı bulunamadı.
+                </div>
+            }
+            else
+            {
+                <table class="table mb-0 table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Randevu Tarihi</th>
+                            <th>Açıklama</th>
+                            <th>Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var a in appointments)
+                        {
+                            <tr>
+                                <td>@a.ScheduledAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@a.AppointmentType @(!string.IsNullOrEmpty(a.Reason) ? " - " + a.Reason : "")</td>
+                                <td>
+                                    @if(a.Status == "Planlandı") { <span class="badge bg-warning text-dark">Planlandı</span> }
+                                    else if(a.Status == "Tamamlandı") { <span class="badge bg-success">Tamamlandı</span> }
+                                    else if(a.Status == "İptal") { <span class="badge bg-danger">İptal Edildi</span> }
+                                    else { <span class="badge bg-secondary">@a.Status</span> }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+  </div>
+
+  <!-- FİNANS -->
+  <div class="tab-pane fade" id="finans" role="tabpanel">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            @if (debts == null || !debts.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-wallet2 fs-1 d-block mb-2"></i>
+                    Hastanın sahiplerine ait herhangi bir borç/ödeme kaydı bulunamadı.
+                </div>
+            }
+            else
+            {
+                <table class="table mb-0 table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Oluşturulma</th>
+                            <th>Sahip</th>
+                            <th>Açıklama</th>
+                            <th>Tutar</th>
+                            <th>Son Ödeme</th>
+                            <th>Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var d in debts)
+                        {
+                            <tr>
+                                <td>@d.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                                <td>@d.PetOwner?.FirstName @d.PetOwner?.LastName</td>
+                                <td>@d.Description</td>
+                                <td class="fw-semibold">@d.Amount.ToString("C2")</td>
+                                <td>@d.DueDate.ToString("dd.MM.yyyy")</td>
+                                <td>
+                                    @if (d.IsCollected)
+                                    {
+                                        <span class="badge bg-success">Ödendi</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">Ödenmedi</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+  </div>
+
+</div>

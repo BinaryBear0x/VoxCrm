@@ -1,0 +1,150 @@
+@model VoxCrm.Domain.Entities.PetOwner
+@{
+    ViewData["Title"] = $"{Model.FirstName} {Model.LastName}";
+    ViewData["ActiveMenu"] = "petowners";
+}
+
+<!-- Başlık Satırı -->
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <div>
+        <a href="/PetOwner" class="text-muted text-decoration-none small">
+            <i class="bi bi-arrow-left me-1"></i> Müşteriler
+        </a>
+        <h1 class="h3 fw-bold text-dark mb-0 mt-1">@Model.FirstName @Model.LastName</h1>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <a href="/PetOwner/Edit/@Model.ID" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-pencil me-1"></i> Düzenle
+        </a>
+        <form method="post" action="/PetOwner/Delete/@Model.ID" class="d-inline" onsubmit="return confirm('Bu müşteriyi silmek istediğinize emin misiniz? DİKKAT: Sahibi olduğu hayvanların sahiplik kaydı da silinebilir.');">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash me-1"></i> Sil
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Sol Kolon: Müşteri Bilgileri -->
+    <div class="col-12 col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center py-4">
+                <!-- Avatar -->
+                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center mx-auto mb-3"
+                     style="width:72px;height:72px;">
+                    <span class="text-white fw-bold fs-3">@Model.FirstName[0]</span>
+                </div>
+                <h5 class="fw-bold mb-0">@Model.FirstName @Model.LastName</h5>
+                <p class="text-muted small mb-3">Hayvan Sahibi</p>
+                @if (Model.WhatsAppConsent)
+                {
+                    <span class="badge bg-success mb-2"><i class="bi bi-whatsapp me-1"></i> WhatsApp Onaylı</span>
+                }
+            </div>
+            <div class="card-footer bg-transparent">
+                <div class="row g-2 small">
+                    <div class="col-12">
+                        <div class="text-muted"><i class="bi bi-telephone"></i> Telefon</div>
+                        <div class="fw-semibold">@Model.Phone</div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(Model.Email))
+                    {
+                        <div class="col-12 mt-2">
+                            <div class="text-muted"><i class="bi bi-envelope"></i> E-posta</div>
+                            <div class="fw-semibold">@Model.Email</div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sağ Kolon: Hastalar -->
+    <div class="col-12 col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-semibold"><i class="bi bi-hearts text-danger me-2"></i>Hayvanları</h5>
+                <span class="badge bg-primary">@Model.OwnedPatients.Count adet</span>
+            </div>
+            <div class="card-body p-0">
+                @if (!Model.OwnedPatients.Any())
+                {
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-heart-pulse fs-1 d-block mb-2"></i>
+                        <p>Henüz kayıtlı hayvanı yok.</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var po in Model.OwnedPatients)
+                    {
+                        var p = po.Patient;
+                        if (p != null)
+                        {
+                            <div class="d-flex align-items-center gap-3 p-3 border-bottom">
+                                <div class="rounded-circle bg-light d-flex align-items-center justify-content-center flex-shrink-0"
+                                     style="width:48px;height:48px;font-size:1.5rem; color: var(--secondary-color);">
+                                    <i class="bi bi-activity"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold">@p.Name</div>
+                                    <div class="text-muted small">
+                                        @p.Species @(p.Breed != null ? $"· {p.Breed}" : "")
+                                        @(p.DateOfBirth != null ? $"· {(DateTime.Today.Year - p.DateOfBirth.Value.Year)} yaşında" : "")
+                                    </div>
+                                </div>
+                                <div>
+                                    @if (p.cinsiyet == 'E')
+                                    {
+                                        <span class="badge bg-info text-dark me-2">♂ Erkek</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger me-2">♀ Dişi</span>
+                                    }
+                                    <div class="d-inline-block">
+                                        <a href="/Patient/Details/@p.ID" class="btn btn-sm btn-outline-secondary" title="Profile Git">
+                                            <i class="bi bi-heart"></i>
+                                        </a>
+                                        <form method="post" action="/PetOwner/RemovePatient" class="d-inline" onsubmit="return confirm('Bu hayvanı müşteriden koparmak istediğinize emin misiniz?');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="ownerId" value="@Model.ID" />
+                                            <input type="hidden" name="patientId" value="@p.ID" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Bağı Kopar">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                }
+            </div>
+            <div class="card-footer bg-light">
+                <form method="post" action="/PetOwner/AddPatient" class="row g-2 align-items-center">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="ownerId" value="@Model.ID" />
+                    <div class="col-8">
+                        <select name="patientId" class="form-select form-select-sm" required>
+                            <option value="">-- Kayıtlı Hayvan Ekle --</option>
+                            @if (ViewBag.AvailablePatients != null)
+                            {
+                                foreach (var ap in (IEnumerable<VoxCrm.Domain.Entities.Patient>)ViewBag.AvailablePatients)
+                                {
+                                    <option value="@ap.ID">@ap.Name (@ap.Species)</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <button type="submit" class="btn btn-sm btn-primary w-100">
+                            <i class="bi bi-plus"></i> Ekle
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

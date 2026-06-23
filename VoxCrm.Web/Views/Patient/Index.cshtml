@@ -1,0 +1,115 @@
+@model IEnumerable<VoxCrm.Domain.Entities.Patient>
+@{
+    ViewData["Title"] = "Hastalar";
+    ViewData["ActiveMenu"] = "patients";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <h1 class="h3 fw-bold mb-0">Hastalar</h1>
+    <a href="/Patient/Create" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i> Yeni Hasta
+    </a>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-2">
+        <form method="get" action="/Patient" class="d-flex gap-2">
+            <input type="text" name="search" value="@ViewBag.Search" class="form-control form-control-sm" placeholder="Isim veya tur ile ara...">
+            <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-search"></i></button>
+            @if (!string.IsNullOrEmpty(ViewBag.Search as string))
+            {
+                <a href="/Patient" class="btn btn-outline-secondary btn-sm">Temizle</a>
+            }
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-heart-pulse fs-1 d-block mb-2"></i>
+                <p>Henuz hasta kaydi yok.</p>
+                <a href="/Patient/Create" class="btn btn-primary btn-sm">Hasta Ekle</a>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive d-none d-md-block">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Ad</th>
+                            <th>Tur</th>
+                            <th>Irk</th>
+                            <th>Yas</th>
+                            <th>Cinsiyet</th>
+                            <th class="text-end">Islemler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@p.Name</td>
+                                <td>@p.Species</td>
+                                <td>@(p.Breed ?? "-")</td>
+                                <td>@(p.DateOfBirth.HasValue ? $"{DateTime.Today.Year - p.DateOfBirth.Value.Year} yas" : "-")</td>
+                                <td>
+                                    @if (p.cinsiyet == 'E')
+                                    { <span class="badge bg-info text-dark">Erkek</span> }
+                                    else
+                                    { <span class="badge bg-danger">Disi</span> }
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex justify-content-end gap-1">
+                                        <a href="/Patient/Details/@p.ID" class="btn btn-sm btn-outline-info" title="Detay">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        <a href="/Patient/Edit/@p.ID" class="btn btn-sm btn-outline-primary" title="Düzenle">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form method="post" action="/Patient/Delete/@p.ID" class="d-inline" onsubmit="return confirm('Bu hastayı silmek istediğinize emin misiniz?');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Sil">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-md-none">
+                @foreach (var p in Model)
+                {
+                    <div class="d-flex justify-content-between align-items-center border-bottom p-3">
+                        <div>
+                            <div class="fw-semibold">@p.Name</div>
+                            <div class="text-muted small">@p.Species @(p.Breed != null ? $"· {p.Breed}" : "")</div>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <a href="/Patient/Details/@p.ID" class="btn btn-sm btn-outline-info">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <a href="/Patient/Edit/@p.ID" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>

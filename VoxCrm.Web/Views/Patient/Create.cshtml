@@ -1,0 +1,73 @@
+@{
+    ViewData["Title"] = "Yeni Hasta";
+    ViewData["ActiveMenu"] = "patients";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <div>
+        <a href="/Patient" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Hastalar</a>
+        <h1 class="h3 fw-bold mb-0 mt-1">Yeni Hasta Ekle</h1>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <form method="post" action="/Patient/Create">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Hayvanin Adi *</label>
+                        <input type="text" name="Name" class="form-control" placeholder="Karabas" required>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Tur *</label>
+                            <input type="text" name="Species" class="form-control" placeholder="Kopek, Kedi..." required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Irk</label>
+                            <input type="text" name="Breed" class="form-control" placeholder="Golden, Tekir...">
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Cinsiyet *</label>
+                            <select name="cinsiyet" class="form-select" required>
+                                <option value="E">Erkek</option>
+                                <option value="D">Disi</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Dogum Tarihi</label>
+                            <input type="date" name="DateOfBirth" class="form-control">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Cip Numarasi</label>
+                        <input type="text" name="MicrochipNumber" class="form-control" placeholder="15 haneli cip no">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Sahip Sec</label>
+                        <select name="ownerId" class="form-select">
+                            <option value="">-- Sahip Sec (Opsiyonel) --</option>
+                            @foreach (var o in (ViewBag.Owners as List<VoxCrm.Domain.Entities.PetOwner> ?? new()))
+                            {
+                                <option value="@o.ID">@o.FirstName @o.LastName - @o.Phone</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Notlar</label>
+                        <textarea name="Notes" class="form-control" rows="3" placeholder="Bilinen hastalik, alerji vb."></textarea>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                        <a href="/Patient" class="btn btn-outline-secondary">Iptal</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

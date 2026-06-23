@@ -1,0 +1,72 @@
+@model VoxCrm.Domain.Entities.Patient
+@{
+    ViewData["Title"] = "Hasta Düzenle";
+    ViewData["ActiveMenu"] = "patients";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <div>
+        <a href="/Patient/Details/@Model.ID" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Geri Dön</a>
+        <h1 class="h3 fw-bold mb-0 mt-1">Hasta Düzenle</h1>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <form method="post" action="/Patient/Edit/@Model.ID">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="ID" value="@Model.ID" />
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Hayvanın Adı *</label>
+                        <input type="text" name="Name" class="form-control" value="@Model.Name" required>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Tür *</label>
+                            <input type="text" name="Species" class="form-control" value="@Model.Species" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Irk</label>
+                            <input type="text" name="Breed" class="form-control" value="@Model.Breed">
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Cinsiyet *</label>
+                            <select name="cinsiyet" class="form-select" required>
+                                <option value="E" selected="@(Model.cinsiyet == 'E')">Erkek</option>
+                                <option value="D" selected="@(Model.cinsiyet == 'D')">Dişi</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Doğum Tarihi</label>
+                            <input type="date" name="DateOfBirth" class="form-control" value="@(Model.DateOfBirth?.ToString("yyyy-MM-dd"))">
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Çip Numarası</label>
+                            <input type="text" name="MicrochipNumber" class="form-control" value="@Model.MicrochipNumber">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Pasaport Numarası</label>
+                            <input type="text" name="pasaportNumarasi" class="form-control" value="@Model.pasaportNumarasi">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Notlar</label>
+                        <textarea name="Notes" class="form-control" rows="3">@Model.Notes</textarea>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Değişiklikleri Kaydet</button>
+                        <a href="/Patient/Details/@Model.ID" class="btn btn-outline-secondary">İptal</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
