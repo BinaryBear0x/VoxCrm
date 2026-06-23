@@ -1,0 +1,52 @@
+@model VoxCrm.Domain.Entities.ServiceItem
+@{
+    ViewData["Title"] = "Hizmet/Ürün Düzenle";
+    ViewData["ActiveMenu"] = "settings";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <h1 class="h3 fw-bold mb-0">Hizmet/Ürün Düzenle</h1>
+    <a href="/ServiceItem" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i> Geri Dön
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <form action="/ServiceItem/Edit" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="ID" value="@Model.ID" />
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Hizmet / Ürün Adı</label>
+                        <input type="text" name="Name" class="form-control" value="@Model.Name" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Açıklama</label>
+                        <textarea name="Description" class="form-control" rows="3">@Model.Description</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Fiyat (TL)</label>
+                        @{
+                            var priceStr = Model.Price.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        }
+                        <input type="number" step="0.01" name="Price" class="form-control" value="@priceStr" required />
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" name="IsActive" value="true" @(Model.IsActive ? "checked" : "") id="isActiveCheck">
+                        <label class="form-check-label fw-semibold" for="isActiveCheck">Aktif</label>
+                    </div>
+
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-primary">Güncelle</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

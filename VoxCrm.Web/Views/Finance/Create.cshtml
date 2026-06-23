@@ -1,0 +1,51 @@
+@{
+    ViewData["Title"] = "Borc Ekle";
+    ViewData["ActiveMenu"] = "finance";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <div>
+        <a href="/Finance" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Finans</a>
+        <h1 class="h3 fw-bold mb-0 mt-1">Yeni Borc / Tahsilat</h1>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <form method="post" action="/Finance/Create">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Musteri *</label>
+                        <select name="PetOwnerId" class="form-select" required>
+                            <option value="">-- Musteri Sec --</option>
+                            @foreach (var o in (ViewBag.Owners as List<VoxCrm.Domain.Entities.PetOwner> ?? new()))
+                            {
+                                <option value="@o.ID">@o.FirstName @o.LastName - @o.Phone</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Aciklama *</label>
+                        <input type="text" name="Description" class="form-control" placeholder="Muayene, asi, ameliyat ucreti..." required>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Tutar (TL) *</label>
+                            <input type="number" name="Amount" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Son Odeme Tarihi *</label>
+                            <input type="date" name="DueDate" class="form-control" value="@DateTime.Today.AddDays(30).ToString("yyyy-MM-dd")" required>
+                        </div>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                        <a href="/Finance" class="btn btn-outline-secondary">Iptal</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

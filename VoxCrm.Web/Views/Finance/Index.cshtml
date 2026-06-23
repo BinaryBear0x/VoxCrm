@@ -1,0 +1,188 @@
+@model IEnumerable<VoxCrm.Domain.Entities.Debt>
+@{
+    ViewData["Title"] = "Finans";
+    ViewData["ActiveMenu"] = "finance";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <h1 class="h3 fw-bold mb-0">Finans</h1>
+    <a href="/Finance/Create" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i> Borc Ekle
+    </a>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show">@TempData["Success"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+
+<!-- Ozet Kartlari -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-4">
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="text-danger fw-bold fs-5">@((ViewBag.TotalOutstanding as decimal? ?? 0).ToString("N2")) TL</div>
+            <div class="text-muted small">Toplam Alacak</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4">
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="text-success fw-bold fs-5">@((ViewBag.TotalCollected as decimal? ?? 0).ToString("N2")) TL</div>
+            <div class="text-muted small">Toplam Tahsil</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtreler -->
+<div class="d-flex gap-2 mb-3 flex-wrap">
+    <a href="/Finance" class="btn btn-sm @(ViewBag.FilterCollected == null ? "btn-dark" : "btn-outline-secondary")">Tumu</a>
+    <a href="/Finance?collected=false" class="btn btn-sm @(ViewBag.FilterCollected?.ToString() == "False" ? "btn-danger" : "btn-outline-danger")">Odenmemis</a>
+    <a href="/Finance?collected=true" class="btn btn-sm @(ViewBag.FilterCollected?.ToString() == "True" ? "btn-success" : "btn-outline-success")">Tahsil Edilmis</a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-cash-coin fs-1 d-block mb-2"></i>
+                <p>Bu filtrede kayit yok.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive d-none d-md-block">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Musteri</th>
+                            <th>Aciklama</th>
+                            <th>Tutar</th>
+                            <th>Vade</th>
+                            <th>Durum</th>
+                            <th class="text-end">Islemler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var d in Model)
+                        {
+                            var totalPaid = d.Payments.Sum(p => p.Amount);
+                            var remainingAmount = d.Amount - totalPaid;
+                            var isOverdue = !d.IsCollected && d.DueDate.Date < DateTime.Today;
+                            <tr class="@(isOverdue ? "table-danger" : "")">
+                                <td class="fw-semibold">@d.PetOwner?.FirstName @d.PetOwner?.LastName</td>
+                                <td class="text-muted small">@d.Description</td>
+                                <td class="fw-semibold">
+                                    @d.Amount.ToString("N2") TL<br/>
+                                    <small class="text-success">Ödenen: @totalPaid.ToString("N2") TL</small>
+                                </td>
+                                <td class="@(isOverdue ? "text-danger fw-semibold" : "")">@d.DueDate.ToString("dd.MM.yyyy")</td>
+                                <td>
+                                    @if (d.IsCollected)
+                                    { <span class="badge bg-success">Tahsil Edildi</span> }
+                                    else if (isOverdue)
+                                    { <span class="badge bg-danger">Vadesi Gecmis</span> }
+                                    else
+                                    { <span class="badge bg-warning text-dark">Bekliyor</span> }
+                                </td>
+                                <td class="text-end">
+                                    @if (!d.IsCollected)
+                                    {
+                                        <button type="button" class="btn btn-success btn-sm"
+                                                data-bs-toggle="modal" data-bs-target="#collectModal"
+                                                data-id="@d.ID" data-name="@d.PetOwner?.FirstName @d.PetOwner?.LastName"
+                                                data-amount="@remainingAmount.ToString("0.00")">
+                                            Tahsilat Ekle
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">@d.PaymentMethod · @d.CollectedAt?.ToString("dd.MM")</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-md-none">
+                @foreach (var d in Model)
+                {
+                    var totalPaid = d.Payments.Sum(p => p.Amount);
+                    var remainingAmount = d.Amount - totalPaid;
+                    <div class="border-bottom p-3">
+                        <div class="d-flex justify-content-between">
+                            <div class="fw-semibold">@d.PetOwner?.FirstName @d.PetOwner?.LastName</div>
+                            <div class="fw-bold text-danger">@d.Amount.ToString("N2") TL</div>
+                        </div>
+                        <div class="text-muted small">@d.Description</div>
+                        <div class="text-success small">Ödenen: @totalPaid.ToString("N2") TL</div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <span class="text-muted small">Vade: @d.DueDate.ToString("dd.MM.yyyy")</span>
+                            @if (d.IsCollected)
+                            { <span class="badge bg-success">Tahsil</span> }
+                            else
+                            { <span class="badge bg-warning text-dark">Bekliyor</span> }
+                        </div>
+                        @if (!d.IsCollected)
+                        {
+                            <div class="mt-2 text-end">
+                                <button type="button" class="btn btn-success btn-sm"
+                                        data-bs-toggle="modal" data-bs-target="#collectModal"
+                                        data-id="@d.ID" data-name="@d.PetOwner?.FirstName @d.PetOwner?.LastName"
+                                        data-amount="@remainingAmount.ToString("0.00")">
+                                    Tahsilat Ekle
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Tahsil Et Modal -->
+<div class="modal fade" id="collectModal" tabindex="-1">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">Odeme Tahsil Et</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="/Finance/AddPayment">
+                @Html.AntiForgeryToken()
+                <div class="modal-body">
+                    <input type="hidden" name="debtId" id="collectId">
+                    <p class="small">Müşteri: <strong id="collectName"></strong><br>Kalan Tutar: <strong id="collectAmountText"></strong> TL</p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Tahsil Edilecek Tutar (TL)</label>
+                        <input type="number" step="0.01" name="amount" id="collectAmount" class="form-control form-control-sm" required>
+                    </div>
+
+                    <label class="form-label fw-semibold small">Ödeme Yöntemi</label>
+                    <select name="paymentMethod" class="form-select form-select-sm">
+                        <option value="Nakit">Nakit</option>
+                        <option value="Kredi Karti">Kredi Kartı</option>
+                        <option value="Havale/EFT">Havale / EFT</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success btn-sm w-100">Tahsilat Ekle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('collectModal').addEventListener('show.bs.modal', function (e) {
+            var btn = e.relatedTarget;
+            document.getElementById('collectId').value = btn.dataset.id;
+            document.getElementById('collectName').textContent = btn.dataset.name;
+            document.getElementById('collectAmountText').textContent = btn.dataset.amount;
+            document.getElementById('collectAmount').value = btn.dataset.amount;
+        });
+    </script>
+}
