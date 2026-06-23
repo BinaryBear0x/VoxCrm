@@ -1,0 +1,90 @@
+@model IEnumerable<VoxCrm.Domain.Entities.Muayene>
+@{
+    ViewData["Title"] = "Muayeneler";
+    ViewData["ActiveMenu"] = "muayeneler";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <h1 class="h3 fw-bold mb-0">Tıbbi Kayıtlar</h1>
+    <a href="/Muayene/Create" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i> Yeni Kayıt Ekle
+    </a>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-file-medical fs-1 d-block mb-2"></i>
+                <p>Henüz muayene kaydı eklenmemiş.</p>
+                <a href="/Muayene/Create" class="btn btn-primary btn-sm">İlk Kaydı Ekle</a>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Hasta</th>
+                            <th>Ateş / Kilo</th>
+                            <th>Teşhis (Assessment)</th>
+                            <th class="text-end">İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in Model)
+                        {
+                            <tr>
+                                <td>@m.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                <td class="fw-semibold">
+                                    <a href="/Patient/Details/@m.PatientId" class="text-decoration-none">@m.Patient?.Name</a>
+                                </td>
+                                <td>
+                                    @(m.Temperature.HasValue ? m.Temperature + " °C" : "-") /
+                                    @(m.WeightAtVisit.HasValue ? m.WeightAtVisit + " kg" : "-")
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(m.Assessment))
+                                    {
+                                        <span class="text-truncate d-inline-block" style="max-width: 250px;">@m.Assessment</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex justify-content-end gap-1">
+                                        <a href="/Muayene/Details/@m.ID" class="btn btn-sm btn-outline-info" title="Detay">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        <a href="/Muayene/Edit/@m.ID" class="btn btn-sm btn-outline-primary" title="Düzenle">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form method="post" action="/Muayene/Delete/@m.ID" class="d-inline" onsubmit="return confirm('Bu kaydı silmek istediğinize emin misiniz?');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Sil">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

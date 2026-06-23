@@ -1,0 +1,133 @@
+@model IEnumerable<VoxCrm.Domain.Entities.VaccinationRecord>
+@{
+    ViewData["Title"] = "Aşı Takvimi";
+    ViewData["ActiveMenu"] = "vaccines";
+    var today = DateTime.Today;
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <h1 class="h3 fw-bold mb-0">Aşı Takvimi</h1>
+    <a href="/Vaccination/Create" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i> Aşı Kaydı Ekle
+    </a>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show">
+        @TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Özet Bantları -->
+@{
+    var overdue = Model.Where(v => v.NextDueDate.Date < today).Count();
+    var upcoming = Model.Where(v => v.NextDueDate.Date >= today && v.NextDueDate.Date <= today.AddDays(7)).Count();
+}
+@if (overdue > 0 || upcoming > 0)
+{
+    <div class="d-flex gap-2 mb-3 flex-wrap">
+        @if (overdue > 0)
+        {
+            <div class="alert alert-danger py-2 px-3 mb-0 small">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>@overdue</strong> aşının vadesi geçmiş
+            </div>
+        }
+        @if (upcoming > 0)
+        {
+            <div class="alert alert-warning py-2 px-3 mb-0 small">
+                <i class="bi bi-bell me-1"></i> <strong>@upcoming</strong> aşı 7 gün içinde gelecek
+            </div>
+        }
+    </div>
+}
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-syringe fs-1 d-block mb-2"></i>
+                <p>Aşı kaydı bulunamadı.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive d-none d-md-block">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Hasta</th>
+                            <th>Aşı</th>
+                            <th>Yapıldı</th>
+                            <th>Sonraki Aşı</th>
+                            <th>Durum</th>
+                            <th>Bot</th>
+                            <th class="text-end">İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in Model)
+                        {
+                            var isOverdue = v.NextDueDate.Date < today;
+                            var isUpcoming = !isOverdue && v.NextDueDate.Date <= today.AddDays(7);
+                            <tr class="@(isOverdue ? "table-danger" : isUpcoming ? "table-warning" : "")">
+                                <td class="fw-semibold">@v.Patient?.Name</td>
+                                <td>@v.VaccineType?.Name</td>
+                                <td>@v.AdministeredDate.ToString("dd.MM.yyyy")</td>
+                                <td>@v.NextDueDate.ToString("dd.MM.yyyy")</td>
+                                <td>
+                                    @if (isOverdue)
+                                    { <span class="badge bg-danger">Vadesi Geçmiş</span> }
+                                    else if (isUpcoming)
+                                    { <span class="badge bg-warning text-dark">Yaklaşan</span> }
+                                    else
+                                    { <span class="badge bg-success">Bekliyor</span> }
+                                </td>
+                                <td>
+                                    @if (v.IsReminderSent)
+                                    { <span class="badge bg-info text-dark">Gönderildi</span> }
+                                    else
+                                    { <span class="badge bg-light text-muted">Bekliyor</span> }
+                                </td>
+                                <td class="text-end">
+                                    <a href="/Vaccination/Edit/@v.ID" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></a>
+                                    <form method="post" action="/Vaccination/Delete" class="d-inline ms-1" onsubmit="return confirm('Bu aşı kaydını silmek istediğinize emin misiniz?');">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@v.ID">
+                                        <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-md-none">
+                @foreach (var v in Model)
+                {
+                    var isOverdue = v.NextDueDate.Date < today;
+                    <div class="border-bottom p-3">
+                        <div class="d-flex justify-content-between">
+                            <div class="fw-semibold">@v.Patient?.Name</div>
+                            @if (isOverdue)
+                            { <span class="badge bg-danger">Vadesi Geçti</span> }
+                            else
+                            { <span class="badge bg-success">Bekliyor</span> }
+                        </div>
+                        <div class="text-muted small mb-2">@v.VaccineType?.Name · Sonraki: @v.NextDueDate.ToString("dd.MM.yyyy")</div>
+                        <div class="d-flex justify-content-end gap-1">
+                            <a href="/Vaccination/Edit/@v.ID" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></a>
+                            <form method="post" action="/Vaccination/Delete" class="d-inline" onsubmit="return confirm('Bu aşı kaydını silmek istediğinize emin misiniz?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@v.ID">
+                                <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>

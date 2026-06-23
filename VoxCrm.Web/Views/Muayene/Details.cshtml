@@ -1,0 +1,71 @@
+@model VoxCrm.Domain.Entities.Muayene
+@{
+    ViewData["Title"] = "Muayene Detayı";
+    ViewData["ActiveMenu"] = "muayeneler";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <div>
+        <a href="/Muayene" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Muayeneler</a>
+        <h1 class="h3 fw-bold mb-0 mt-1">Muayene Detayı</h1>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Muayene/Edit/@Model.ID" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-pencil me-1"></i> Düzenle
+        </a>
+        <a href="/Patient/Details/@Model.PatientId" class="btn btn-outline-info btn-sm">
+            <i class="bi bi-person-lines-fill me-1"></i> Hasta Profili
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3 border-bottom pb-2">Genel Bilgiler</h5>
+                <dl class="row mb-0">
+                    <dt class="col-sm-4 text-muted">Tarih</dt>
+                    <dd class="col-sm-8 fw-semibold">@Model.CreatedAt.ToLocalTime().ToString("dd MMMM yyyy, HH:mm")</dd>
+
+                    <dt class="col-sm-4 text-muted">Hasta</dt>
+                    <dd class="col-sm-8 fw-semibold">@Model.Patient?.Name</dd>
+
+                    <dt class="col-sm-4 text-muted">Ateş</dt>
+                    <dd class="col-sm-8">@(Model.Temperature.HasValue ? Model.Temperature + " °C" : "-")</dd>
+
+                    <dt class="col-sm-4 text-muted">Kilo</dt>
+                    <dd class="col-sm-8">@(Model.WeightAtVisit.HasValue ? Model.WeightAtVisit + " kg" : "-")</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8 mb-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3 border-bottom pb-2">SOAP Notları</h5>
+                
+                <div class="mb-4">
+                    <h6 class="text-primary fw-bold mb-1">Subjective (Şikayet)</h6>
+                    <p class="text-dark bg-light p-3 rounded mb-0">@(string.IsNullOrEmpty(Model.Subjective) ? "-" : Model.Subjective)</p>
+                </div>
+
+                <div class="mb-4">
+                    <h6 class="text-success fw-bold mb-1">Objective (Bulgular)</h6>
+                    <p class="text-dark bg-light p-3 rounded mb-0">@(string.IsNullOrEmpty(Model.Objective) ? "-" : Model.Objective)</p>
+                </div>
+
+                <div class="mb-4">
+                    <h6 class="text-danger fw-bold mb-1">Assessment (Teşhis)</h6>
+                    <p class="text-dark bg-light p-3 rounded mb-0 fw-semibold">@(string.IsNullOrEmpty(Model.Assessment) ? "-" : Model.Assessment)</p>
+                </div>
+
+                <div>
+                    <h6 class="text-info fw-bold mb-1">Plan (Tedavi)</h6>
+                    <p class="text-dark bg-light p-3 rounded mb-0">@(string.IsNullOrEmpty(Model.Plan) ? "-" : Model.Plan)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

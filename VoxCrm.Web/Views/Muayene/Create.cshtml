@@ -1,0 +1,69 @@
+@model VoxCrm.Domain.Entities.Muayene
+@{
+    ViewData["Title"] = "Yeni Muayene Kaydı";
+    ViewData["ActiveMenu"] = "muayeneler";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <div>
+        <a href="/Muayene" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Muayeneler</a>
+        <h1 class="h3 fw-bold mb-0 mt-1">Yeni Kayıt Ekle</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 col-lg-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <form method="post" action="/Muayene/Create">
+                    @Html.AntiForgeryToken()
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Hasta *</label>
+                        <select name="PatientId" class="form-select" asp-items="ViewBag.Patients" required>
+                            <option value="">-- Hasta Seç --</option>
+                        </select>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ateş (°C)</label>
+                            <input type="number" step="0.1" name="Temperature" class="form-control" placeholder="Örn: 38.5">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Kilo (kg)</label>
+                            <input type="number" step="0.01" name="WeightAtVisit" class="form-control" placeholder="Örn: 4.5">
+                        </div>
+                    </div>
+
+                    <h5 class="fw-bold mb-3 border-bottom pb-2">SOAP Notları</h5>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-primary">Subjective (Şikayet / Anamnez)</label>
+                        <textarea name="Subjective" class="form-control" rows="2" placeholder="Hasta sahibinin anlattıkları..."></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-success">Objective (Bulgular)</label>
+                        <textarea name="Objective" class="form-control" rows="2" placeholder="Fiziksel muayene bulgularınız..."></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-danger">Assessment (Teşhis / Değerlendirme)</label>
+                        <textarea name="Assessment" class="form-control" rows="2" placeholder="Ön tanı veya kesin teşhis..."></textarea>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold text-info">Plan (Tedavi Planı)</label>
+                        <textarea name="Plan" class="form-control" rows="3" placeholder="Uygulanacak tedavi, reçete, öneriler..."></textarea>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="/Muayene" class="btn btn-outline-secondary">İptal</a>
+                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

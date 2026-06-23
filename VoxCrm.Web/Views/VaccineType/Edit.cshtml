@@ -1,0 +1,47 @@
+@model VoxCrm.Domain.Entities.VaccineType
+@{
+    ViewData["Title"] = "Aşı Düzenle";
+    ViewData["ActiveMenu"] = "vaccinetypes";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <div>
+        <a href="/VaccineType" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Aşı Tanımları</a>
+        <h1 class="h3 fw-bold mb-0 mt-1">Aşı Düzenle</h1>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <form method="post" action="/VaccineType/Edit/@Model.ID">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="ID" value="@Model.ID" />
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Aşı Adı *</label>
+                        <input type="text" name="Name" class="form-control" value="@Model.Name" required>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Geçerlilik Süresi (Gün) *</label>
+                            <input type="number" name="ValidityDays" class="form-control" value="@Model.ValidityDays" required>
+                            <div class="form-text">Aşının kaç günde bir tekrarlanması gerektiği.</div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Hatırlatma (Gün Önce) *</label>
+                            <input type="number" name="ReminderDaysBefore" class="form-control" value="@Model.ReminderDaysBefore" required>
+                            <div class="form-text">Müşteriye kaç gün önceden bildirim gidecek.</div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Değişiklikleri Kaydet</button>
+                        <a href="/VaccineType" class="btn btn-outline-secondary">İptal</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,69 @@
+@model IEnumerable<VoxCrm.Domain.Entities.VaccineType>
+@{
+    ViewData["Title"] = "Aşı Tanımları";
+    ViewData["ActiveMenu"] = "vaccinetypes";
+}
+
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <h1 class="h3 fw-bold text-dark"><i class="bi bi-syringe me-2 text-primary"></i>Aşı Tanımları</h1>
+    <a href="/VaccineType/Create" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-1"></i> Yeni Aşı Ekle
+    </a>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-syringe fs-1 d-block mb-2"></i>
+                <p>Henüz sisteme aşı tanımı eklenmemiş.</p>
+                <a href="/VaccineType/Create" class="btn btn-primary btn-sm">İlk Aşınızı Ekleyin</a>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Aşı Adı</th>
+                            <th>Geçerlilik Süresi</th>
+                            <th>Hatırlatma</th>
+                            <th class="text-end">İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in Model)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@v.Name</td>
+                                <td>@v.ValidityDays Gün</td>
+                                <td>@v.ReminderDaysBefore Gün Önce</td>
+                                <td class="text-end">
+                                    <a href="/VaccineType/Edit/@v.ID" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-pencil"></i> Düzenle
+                                    </a>
+                                    <form method="post" action="/VaccineType/Delete/@v.ID" class="d-inline" onsubmit="return confirm('Bu aşı tanımını silmek istediğinize emin misiniz?');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="bi bi-trash"></i> Sil
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
