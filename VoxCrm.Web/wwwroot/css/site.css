@@ -1,0 +1,188 @@
+/* site.css - 2026 Modern Standards */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Vibrant, modern color tokens */
+  --primary-color: #6366f1; /* Indigo */
+  --primary-hover: #4f46e5;
+  --secondary-color: #ec4899; /* Pink */
+  --bg-body: #f1f5f9;
+  --surface-color: #ffffff;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+  --sidebar-bg: rgba(255, 255, 255, 0.85);
+  
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  
+  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+}
+
+html, body {
+  font-family: 'Outfit', sans-serif;
+  background-color: var(--bg-body);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Glassmorphism Sidebar */
+.sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+  padding: 0;
+  background: var(--sidebar-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid var(--border-color);
+  transition: transform 0.3s ease;
+}
+
+.sidebar-sticky {
+  position: relative;
+  top: 0;
+  height: 100vh;
+  padding-top: 1rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Sidebar Links */
+.sidebar .nav-link {
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 12px 24px;
+  border-radius: var(--radius-sm);
+  margin: 4px 16px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+}
+
+.sidebar .nav-link i {
+  margin-right: 12px;
+  font-size: 1.2rem;
+  transition: transform 0.2s;
+}
+
+.sidebar .nav-link:hover {
+  color: var(--primary-color);
+  background-color: rgba(99, 102, 241, 0.08);
+  transform: translateX(4px);
+}
+
+.sidebar .nav-link.active {
+  color: var(--primary-color);
+  background-color: rgba(99, 102, 241, 0.12);
+  font-weight: 600;
+}
+
+.sidebar .nav-link:hover i {
+  transform: scale(1.1);
+}
+
+.sidebar-heading {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 1.5rem 1rem 0.5rem 1.5rem;
+}
+
+/* Header Navbar */
+.navbar-top {
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.navbar-brand {
+  font-weight: 700;
+  font-size: 1.5rem;
+  color: var(--primary-color) !important;
+  padding: 1rem 1.5rem;
+  letter-spacing: -0.02em;
+  background: transparent !important;
+}
+
+/* Cards & Containers */
+.card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.card-header {
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
+  padding: 1.25rem 1.5rem;
+  font-weight: 600;
+}
+
+/* Buttons */
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 24px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+}
+
+/* Form Inputs */
+.form-control, .form-select {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  padding: 0.75rem 1rem;
+  transition: all 0.2s;
+  background-color: #f8fafc;
+}
+
+.form-control:focus, .form-select:focus {
+  background-color: #fff;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+/* Tables */
+.table {
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border-color);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  padding: 1rem;
+}
+
+.table td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - VoxCrm</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body { font-size: .875rem; background-color: #f8f9fa; }
+        .sidebar { position: fixed; top: 0; bottom: 0; left: 0; z-index: 100; padding: 48px 0 0; box-shadow: inset -1px 0 0 rgba(0,0,0,.1); }
+        .sidebar-sticky { position: relative; top: 0; height: calc(100vh - 48px); padding-top: .5rem; overflow-x: hidden; overflow-y: auto; }
+        .sidebar .nav-link { font-weight: 500; color: #444; padding: 9px 20px; transition: all 0.15s; }
+        .sidebar .nav-link:hover { color: #0d6efd; background-color: #f0f4ff; }
+        .sidebar .nav-link.active { color: #0d6efd; background-color: #e8f0fe; font-weight: 600; }
+        .sidebar .nav-link i { margin-right: 8px; font-size: 1rem; }
+        .sidebar-heading { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; }
+        .navbar-brand { padding-top: .75rem; padding-bottom: .75rem; font-size: 1rem; background-color: rgba(0,0,0,.2); font-weight: 600; }
+    </style>
+</head>
+<body>
+    <header class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0 shadow">
+        <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3" href="/">VoxCrm</a>
+        <button class="navbar-toggler position-absolute d-md-none collapsed" type="button"
+                data-bs-toggle="collapse" data-bs-target="#sidebarMenu"
+                aria-controls="sidebarMenu" aria-expanded="false" aria-label="Menu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="navbar-nav ms-auto">
+            <div class="nav-item text-nowrap d-flex align-items-center">
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <span class="nav-link text-white-50 d-none d-md-inline px-3 small">
+                        <i class="bi bi-person-circle me-1"></i>@User.Identity.Name
+                    </span>
+                    <form method="post" action="/Auth/Logout" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-sm text-white border-0 px-3 py-2 me-2">
+                            <i class="bi bi-box-arrow-right me-1"></i> Cikis
+                        </button>
+                    </form>
+                }
+            </div>
+        </div>
+    </header>
+
+    <div class="container-fluid">
+        <div class="row">
+            <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-white sidebar collapse">
+                <div class="sidebar-sticky pt-2">
+
+                    <h6 class="sidebar-heading px-3 mt-3 mb-1 text-muted">Ana Modul</h6>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewData["ActiveMenu"]?.ToString() == "dashboard" ? "active" : "")" href="/">
+                                <i class="bi bi-grid-1x2"></i> Gosterge Paneli
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewData["ActiveMenu"]?.ToString() == "petowners" ? "active" : "")" href="/PetOwner">
+                                <i class="bi bi-people"></i> Musteriler
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewData["ActiveMenu"]?.ToString() == "patients" ? "active" : "")" href="/Patient">
+                                <i class="bi bi-heart-pulse"></i> Hastalar
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewData["ActiveMenu"]?.ToString() == "appointments" ? "active" : "")" href="/Appointment">
+                                <i class="bi bi-calendar-check"></i> Randevular
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewData["ActiveMenu"]?.ToString() == "vaccines" ? "active" : "")" href="/Vaccination">
+                                <i class="bi bi-syringe"></i> Asi Takvimi
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewData["ActiveMenu"]?.ToString() == "finance" ? "active" : "")" href="/Finance">
+                                <i class="bi bi-cash-coin"></i> Finans
+                            </a>
+                        </li>
+                    </ul>
+
+                    <h6 class="sidebar-heading px-3 mt-4 mb-1 text-muted">Bayi Paneli</h6>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewData["ActiveMenu"]?.ToString() == "dealer" ? "active" : "")" href="/Dealer">
+                                <i class="bi bi-building"></i> Kliniklerim
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewData["ActiveMenu"]?.ToString() == "dealer-create" ? "active" : "")" href="/Dealer/Create">
+                                <i class="bi bi-plus-circle"></i> Yeni Klinik Ekle
+                            </a>
+                        </li>
+                    </ul>
+
+                    <h6 class="sidebar-heading px-3 mt-4 mb-1 text-muted">Ayarlar</h6>
+                    <ul class="nav flex-column mb-3">
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewData["ActiveMenu"]?.ToString() == "settings" ? "active" : "")" href="/ClinicSettings">
+                                <i class="bi bi-gear"></i> Klinik Ayarlari
+                            </a>
+                        </li>
+                    </ul>
+
+                </div>
+            </nav>
+
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 mt-4 pb-5">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

@@ -1,0 +1,115 @@
+@model VoxCrm.Web.Models.DashboardViewModel
+@{
+    ViewData["Title"] = "Gösterge Paneli";
+    ViewData["ActiveMenu"] = "dashboard";
+}
+
+<!-- Başlık Satırı -->
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <h1 class="h3 fw-bold text-dark">🐾 Gösterge Paneli</h1>
+    <span class="text-muted small">@DateTime.Now.ToString("dddd, dd MMMM yyyy", new System.Globalization.CultureInfo("tr-TR"))</span>
+</div>
+
+<!-- Başarı Mesajı -->
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- İstatistik Kartları -->
+<div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="rounded-3 p-3" style="background:#e8f4fd;">
+                    <i class="bi bi-people-fill text-primary fs-3"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Toplam Müşteri</div>
+                    <div class="fw-bold fs-4">@Model.TotalPetOwners</div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-0 pt-0">
+                <a href="/PetOwner" class="text-primary text-decoration-none small">Tümünü Gör →</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="rounded-3 p-3" style="background:#eaf7ea;">
+                    <i class="bi bi-heart-pulse-fill text-success fs-3"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Toplam Hasta</div>
+                    <div class="fw-bold fs-4">@Model.TotalPatients</div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-0 pt-0">
+                <a href="#" class="text-success text-decoration-none small">Tümünü Gör →</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="rounded-3 p-3" style="background:#fff8e8;">
+                    <i class="bi bi-cash-coin text-warning fs-3"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Toplam Alacak</div>
+                    <div class="fw-bold fs-4">@Model.TotalOutstandingDebt.ToString("N2") ₺</div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-0 pt-0">
+                <a href="#" class="text-warning text-decoration-none small">Finansa Git →</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="rounded-3 p-3" style="background:#fdf0ff;">
+                    <i class="bi bi-whatsapp text-purple fs-3" style="color:#6f42c1;"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Bekleyen Bot Mesajı</div>
+                    <div class="fw-bold fs-4">@Model.PendingWhatsAppMessages</div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-0 pt-0">
+                <span class="text-muted small">Bot İşleyecek</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hızlı Erişim Butonları -->
+<div class="row g-3">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom">
+                <h5 class="mb-0 fw-semibold">⚡ Hızlı İşlemler</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="/PetOwner/Create" class="btn btn-primary">
+                        <i class="bi bi-person-plus me-1"></i> Yeni Müşteri Ekle
+                    </a>
+                    <a href="/PetOwner" class="btn btn-outline-secondary">
+                        <i class="bi bi-people me-1"></i> Müşteri Listesi
+                    </a>
+                    <a href="/hangfire" target="_blank" class="btn btn-outline-dark">
+                        <i class="bi bi-clock-history me-1"></i> Hangfire Paneli
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

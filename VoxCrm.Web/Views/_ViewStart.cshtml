@@ -1,0 +1,19 @@
+@{
+    // ─── ROL BAZLI LAYOUT SEÇİMİ ──────────────────────────────────────────────
+    // Neden?
+    // "Dealer" rolündeki kullanıcı (bayi = siz) → Bayi Paneli layout'u
+    // "Clinic" rolündeki kullanıcı (klinik personeli) → Klinik layout'u
+    //
+    // Bu sayede her rol SADECE kendi sayfalarını görür.
+    // Klinik personeli /Dealer'a gidemez (Authorize ile zaten engellendi),
+    // üstelik sidebar'da o menüler hiç görünmez.
+    
+    if (User.IsInRole("Dealer"))
+    {
+        Layout = "~/Views/Shared/_DealerLayout.cshtml";
+    }
+    else
+    {
+        Layout = "~/Views/Shared/_ClinicLayout.cshtml";
+    }
+}
