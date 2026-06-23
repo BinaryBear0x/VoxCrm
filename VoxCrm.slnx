@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="VoxCrm.Api/VoxCrm.Api.csproj" />
+  <Project Path="VoxCrm.Application/VoxCrm.Application.csproj" />
+  <Project Path="VoxCrm.Domain/VoxCrm.Domain.csproj" />
+  <Project Path="VoxCrm.Infrastructure/VoxCrm.Infrastructure.csproj" />
+  <Project Path="VoxCrm.Web/VoxCrm.Web.csproj" />
+</Solution>
