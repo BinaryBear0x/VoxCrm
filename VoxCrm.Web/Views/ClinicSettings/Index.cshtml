@@ -1,0 +1,71 @@
+@model VoxCrm.Domain.Entities.Clinic
+@{
+    ViewData["Title"] = "Klinik Ayarlari";
+    ViewData["ActiveMenu"] = "settings";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <h1 class="h3 fw-bold mb-0">Klinik Ayarlari</h1>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show">@TempData["Success"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+
+@if (Model == null)
+{
+    <div class="alert alert-warning">Klinik bilgisi bulunamadi. Lutfen bayi panelinizden klinik ekleyin.</div>
+}
+else
+{
+    <div class="row justify-content-start">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <form method="post" action="/ClinicSettings">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="ID" value="@Model.ID">
+
+                        <h6 class="text-muted text-uppercase small mb-3">Genel Bilgiler</h6>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Klinik Adi *</label>
+                            <input type="text" name="Name" class="form-control" value="@Model.Name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Telefon</label>
+                            <input type="tel" name="phone" class="form-control" value="@Model.phone">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">E-posta</label>
+                            <input type="email" name="Email" class="form-control" value="@Model.Email">
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">Adres</label>
+                            <textarea name="Address" class="form-control" rows="3">@Model.Address</textarea>
+                        </div>
+
+                        <hr>
+                        <h6 class="text-muted text-uppercase small mb-3">WhatsApp Bot Ayarlari</h6>
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="IsWhatsAppEnabled" value="true"
+                                       id="waEnabled" @(Model.IsWhatsAppEnabled ? "checked" : "")>
+                                <label class="form-check-label fw-semibold" for="waEnabled">WhatsApp Bot Entegrasyonu</label>
+                            </div>
+                            <div class="form-text">Aktif edilirse Hangfire her gece otomatik mesaj listesi olusturur.</div>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">WhatsApp Phone Number ID</label>
+                            <input type="text" name="WhatsAppPhoneNumberId" class="form-control" value="@Model.WhatsAppPhoneNumberId" placeholder="Meta API'dan alinan numara ID">
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">Kaydet</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+}

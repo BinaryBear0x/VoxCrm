@@ -1,0 +1,91 @@
+@model IEnumerable<VoxCrm.Domain.Entities.Clinic>
+@{
+    ViewData["Title"] = "Kliniklerim";
+    ViewData["ActiveMenu"] = "dealer";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <h1 class="h3 fw-bold mb-0">Kliniklerim</h1>
+    <a href="/Dealer/Create" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i> Yeni Klinik
+    </a>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show">@TempData["Success"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-building fs-1 d-block mb-2"></i>
+                <p>Henuz kayitli klinik yok.</p>
+                <a href="/Dealer/Create" class="btn btn-primary btn-sm">Klinik Ekle</a>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive d-none d-md-block">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Klinik Adi</th>
+                            <th>Telefon</th>
+                            <th>E-posta</th>
+                            <th>WhatsApp</th>
+                            <th>Durum</th>
+                            <th class="text-end">Islemler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in Model)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@c.Name</td>
+                                <td>@(c.phone ?? "-")</td>
+                                <td>@(c.Email ?? "-")</td>
+                                <td>
+                                    @if (c.IsWhatsAppEnabled)
+                                    { <span class="badge bg-success">Aktif</span> }
+                                    else
+                                    { <span class="badge bg-secondary">Kapali</span> }
+                                </td>
+                                <td>
+                                    @if (c.IsActive)
+                                    { <span class="badge bg-success">Aktif</span> }
+                                    else
+                                    { <span class="badge bg-danger">Pasif</span> }
+                                </td>
+                                <td class="text-end">
+                                    <a href="/Dealer/Edit/@c.ID" class="btn btn-outline-primary btn-sm me-1">Duzenle</a>
+                                    <form method="post" action="/Dealer/Delete/@c.ID" class="d-inline"
+                                          onsubmit="return confirm('@c.Name klinikini sistemden kaldirmak istediginizden emin misiniz?')">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-outline-danger btn-sm">Kaldir</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-md-none">
+                @foreach (var c in Model)
+                {
+                    <div class="border-bottom p-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="fw-semibold">@c.Name</div>
+                                <div class="text-muted small">@(c.phone ?? "") @(c.Email != null ? $"· {c.Email}" : "")</div>
+                            </div>
+                            <a href="/Dealer/Edit/@c.ID" class="btn btn-outline-primary btn-sm">Duzenle</a>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
