@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Identity;
 using VoxCrm.Domain.Entities;
 using VoxCrm.Web.Services;
 
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
@@ -47,6 +49,9 @@ builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath       = "/Auth/Login";
     options.AccessDeniedPath = "/Auth/AccessDenied";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     options.ExpireTimeSpan  = TimeSpan.FromHours(8); // 8 saatte bir yeniden giriş
     options.SlidingExpiration = true; // Aktif kullanımda süre sıfırlanır
 });
@@ -90,7 +95,7 @@ app.UseRouting();
 app.UseAuthentication(); // Giriş yaptı mı?
 app.UseAuthorization();  // Bu sayfaya yetkisi var mı?
 
-// ─── GÜVENLİK AÇIĞI #5 DÜZELTİLDİ: Hangfire paneline yetki koruması ────────
+
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
     Authorization = new[] { new HangfireAuthFilter() }

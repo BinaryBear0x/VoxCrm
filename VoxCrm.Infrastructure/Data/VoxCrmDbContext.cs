@@ -51,6 +51,7 @@ namespace VoxCrm.Infrastructure.Data
                 builder.Entity<Appointment>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
                 builder.Entity<Muayene>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
                 builder.Entity<Debt>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
+                builder.Entity<PatientOwner>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
                 
                 builder.Entity<WhatsAppNotification>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
                 builder.Entity<ServiceItem>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
@@ -64,14 +65,28 @@ namespace VoxCrm.Infrastructure.Data
             return base.SaveChanges();
         }
 
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            ApplyTenantRules();
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
             ApplyTenantRules();
             return base.SaveChangesAsync(cancellationToken);
         }
 
+        public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        {
+            ApplyTenantRules();
+            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
         private void ApplyTenantRules()
         {
+            NormalizeDateTimes();
+
             if (_tenantService == null) return;
             var clinicId = _tenantService.GetClinicId();
             if (clinicId == Guid.Empty) return;
@@ -87,6 +102,35 @@ namespace VoxCrm.Infrastructure.Data
                     }
                 }
             }
+        }
+
+        private void NormalizeDateTimes()
+        {
+            foreach (var entry in ChangeTracker.Entries()
+                         .Where(e => e.State == EntityState.Added || e.State == EntityState.Modified))
+            {
+                foreach (var property in entry.Properties)
+                {
+                    if (property.Metadata.ClrType == typeof(DateTime) && property.CurrentValue is DateTime value)
+                    {
+                        property.CurrentValue = ToUtc(value);
+                    }
+                    else if (property.Metadata.ClrType == typeof(DateTime?) && property.CurrentValue is DateTime nullableValue)
+                    {
+                        property.CurrentValue = ToUtc(nullableValue);
+                    }
+                }
+            }
+        }
+
+        private static DateTime ToUtc(DateTime value)
+        {
+            return value.Kind switch
+            {
+                DateTimeKind.Utc => value,
+                DateTimeKind.Local => value.ToUniversalTime(),
+                _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+            };
         }
     }
 }

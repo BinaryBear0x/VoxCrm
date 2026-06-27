@@ -51,6 +51,17 @@ public class AppointmentController : Controller
                 .ToListAsync();
             return View(model);
         }
+        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
+        if (!patientExists)
+        {
+            ModelState.AddModelError(nameof(model.PatientId), "Geçerli bir hasta seçin.");
+            ViewBag.Patients = await _context.Patients
+                .Include(p => p.Owners).ThenInclude(po => po.PetOwner)
+                .OrderBy(p => p.Name)
+                .ToListAsync();
+            return View(model);
+        }
+
         _context.Appointments.Add(model);
         await _context.SaveChangesAsync();
         TempData["Success"] = "Randevu basariyla olusturuldu.";
@@ -98,6 +109,17 @@ public class AppointmentController : Controller
 
         var existing = await _context.Appointments.FindAsync(model.ID);
         if (existing == null) return NotFound();
+
+        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
+        if (!patientExists)
+        {
+            ModelState.AddModelError(nameof(model.PatientId), "Geçerli bir hasta seçin.");
+            ViewBag.Patients = await _context.Patients
+                .Include(p => p.Owners).ThenInclude(po => po.PetOwner)
+                .OrderBy(p => p.Name)
+                .ToListAsync();
+            return View(model);
+        }
 
         existing.PatientId = model.PatientId;
         existing.ScheduledAt = model.ScheduledAt;

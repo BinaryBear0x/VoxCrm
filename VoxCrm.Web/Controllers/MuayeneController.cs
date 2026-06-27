@@ -40,6 +40,15 @@ public class MuayeneController : Controller
             return View(model);
         }
 
+        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
+        if (!patientExists)
+        {
+            ModelState.AddModelError(nameof(model.PatientId), "Geçerli bir hasta seçin.");
+            var patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
+            ViewBag.Patients = new SelectList(patients, "ID", "Name", model.PatientId);
+            return View(model);
+        }
+
         _context.Muayeneler.Add(model);
         await _context.SaveChangesAsync();
         TempData["Success"] = "Muayene kaydı başarıyla oluşturuldu.";
@@ -72,6 +81,15 @@ public class MuayeneController : Controller
 
         var existing = await _context.Muayeneler.FindAsync(id);
         if (existing == null) return NotFound();
+
+        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
+        if (!patientExists)
+        {
+            ModelState.AddModelError(nameof(model.PatientId), "Geçerli bir hasta seçin.");
+            var patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
+            ViewBag.Patients = new SelectList(patients, "ID", "Name", model.PatientId);
+            return View(model);
+        }
 
         existing.PatientId = model.PatientId;
         existing.Subjective = model.Subjective;

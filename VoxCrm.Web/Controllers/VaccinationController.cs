@@ -32,16 +32,27 @@ public class VaccinationController : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(VaccinationRecord model)
     {
+        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
+        var vaccineType = await _context.VaccineTypes.FindAsync(model.VaccineTypeId);
+        ModelState.Remove(nameof(model.Patient));
+        ModelState.Remove(nameof(model.VaccineType));
+        ModelState.Remove(nameof(model.NextDueDate));
+
+        if (!patientExists || vaccineType == null)
+        {
+            ModelState.AddModelError("", "Geçerli bir hasta ve aşı tipi seçin.");
+            ViewBag.Patients     = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
+            ViewBag.VaccineTypes = await _context.VaccineTypes.OrderBy(v => v.Name).ToListAsync();
+            return View(model);
+        }
+
+        model.NextDueDate = model.AdministeredDate.AddDays(vaccineType.ValidityDays);
         if (!ModelState.IsValid)
         {
             ViewBag.Patients     = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
             ViewBag.VaccineTypes = await _context.VaccineTypes.OrderBy(v => v.Name).ToListAsync();
             return View(model);
         }
-
-        var vaccineType = await _context.VaccineTypes.FindAsync(model.VaccineTypeId);
-        if (vaccineType != null)
-            model.NextDueDate = model.AdministeredDate.AddDays(vaccineType.ValidityDays);
 
         _context.VaccinationRecords.Add(model);
         await _context.SaveChangesAsync();
@@ -63,6 +74,23 @@ public class VaccinationController : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(VaccinationRecord model)
     {
+        var existing = await _context.VaccinationRecords.FindAsync(model.ID);
+        if (existing == null) return NotFound();
+
+        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
+        var vaccineType = await _context.VaccineTypes.FindAsync(model.VaccineTypeId);
+        ModelState.Remove(nameof(model.Patient));
+        ModelState.Remove(nameof(model.VaccineType));
+        ModelState.Remove(nameof(model.NextDueDate));
+
+        if (!patientExists || vaccineType == null)
+        {
+            ModelState.AddModelError("", "Geçerli bir hasta ve aşı tipi seçin.");
+            ViewBag.Patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
+            ViewBag.VaccineTypes = await _context.VaccineTypes.OrderBy(v => v.Name).ToListAsync();
+            return View(model);
+        }
+
         if (!ModelState.IsValid)
         {
             ViewBag.Patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
@@ -70,16 +98,10 @@ public class VaccinationController : Controller
             return View(model);
         }
 
-        var existing = await _context.VaccinationRecords.FindAsync(model.ID);
-        if (existing == null) return NotFound();
-
         existing.PatientId = model.PatientId;
         existing.VaccineTypeId = model.VaccineTypeId;
         existing.AdministeredDate = model.AdministeredDate;
-
-        var vaccineType = await _context.VaccineTypes.FindAsync(model.VaccineTypeId);
-        if (vaccineType != null)
-            existing.NextDueDate = model.AdministeredDate.AddDays(vaccineType.ValidityDays);
+        existing.NextDueDate = model.AdministeredDate.AddDays(vaccineType.ValidityDays);
 
         await _context.SaveChangesAsync();
         TempData["Success"] = "Aşı kaydı başarıyla güncellendi.";

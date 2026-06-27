@@ -22,7 +22,7 @@
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body py-2">
         <form method="get" action="/Patient" class="d-flex gap-2">
-            <input type="text" name="search" value="@ViewBag.Search" class="form-control form-control-sm" placeholder="Isim veya tur ile ara...">
+            <input type="search" name="search" value="@ViewBag.Search" class="form-control form-control-sm" placeholder="İsim, tür, ırk, çip, pasaport, not veya sahip bilgisi ara..." data-auto-search>
             <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-search"></i></button>
             @if (!string.IsNullOrEmpty(ViewBag.Search as string))
             {
@@ -38,7 +38,7 @@
         {
             <div class="text-center py-5 text-muted">
                 <i class="bi bi-heart-pulse fs-1 d-block mb-2"></i>
-                <p>Henuz hasta kaydi yok.</p>
+                <p>Henüz hasta kaydı yok.</p>
                 <a href="/Patient/Create" class="btn btn-primary btn-sm">Hasta Ekle</a>
             </div>
         }
@@ -49,11 +49,12 @@
                     <thead class="table-light">
                         <tr>
                             <th>Ad</th>
-                            <th>Tur</th>
+                            <th>Tür</th>
                             <th>Irk</th>
-                            <th>Yas</th>
+                            <th>Sahip</th>
+                            <th>Yaş</th>
                             <th>Cinsiyet</th>
-                            <th class="text-end">Islemler</th>
+                            <th class="text-end">İşlemler</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -63,12 +64,26 @@
                                 <td class="fw-semibold">@p.Name</td>
                                 <td>@p.Species</td>
                                 <td>@(p.Breed ?? "-")</td>
-                                <td>@(p.DateOfBirth.HasValue ? $"{DateTime.Today.Year - p.DateOfBirth.Value.Year} yas" : "-")</td>
+                                <td>
+                                    @{
+                                        var primaryOwner = p.Owners.FirstOrDefault(o => o.IsPrimaryOwner)?.PetOwner ?? p.Owners.FirstOrDefault()?.PetOwner;
+                                    }
+                                    @if (primaryOwner != null)
+                                    {
+                                        <a href="/PetOwner/Details/@primaryOwner.ID" class="fw-semibold text-decoration-none">@primaryOwner.FirstName @primaryOwner.LastName</a>
+                                        <div class="text-muted small">@primaryOwner.Phone</div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>@(p.DateOfBirth.HasValue ? $"{DateTime.Today.Year - p.DateOfBirth.Value.Year} yaş" : "-")</td>
                                 <td>
                                     @if (p.cinsiyet == 'E')
                                     { <span class="badge bg-info text-dark">Erkek</span> }
                                     else
-                                    { <span class="badge bg-danger">Disi</span> }
+                                    { <span class="badge bg-danger">Dişi</span> }
                                 </td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end gap-1">
@@ -98,6 +113,13 @@
                         <div>
                             <div class="fw-semibold">@p.Name</div>
                             <div class="text-muted small">@p.Species @(p.Breed != null ? $"· {p.Breed}" : "")</div>
+                            @{
+                                var primaryOwnerMobile = p.Owners.FirstOrDefault(o => o.IsPrimaryOwner)?.PetOwner ?? p.Owners.FirstOrDefault()?.PetOwner;
+                            }
+                            @if (primaryOwnerMobile != null)
+                            {
+                                <div class="text-muted small"><i class="bi bi-person"></i> @primaryOwnerMobile.FirstName @primaryOwnerMobile.LastName · @primaryOwnerMobile.Phone</div>
+                            }
                         </div>
                         <div class="d-flex gap-1">
                             <a href="/Patient/Details/@p.ID" class="btn btn-sm btn-outline-info">

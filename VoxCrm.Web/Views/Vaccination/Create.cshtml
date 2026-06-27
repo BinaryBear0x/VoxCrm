@@ -18,7 +18,7 @@
                     @Html.AntiForgeryToken()
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Hasta *</label>
-                        <select name="PatientId" class="form-select" required>
+                        <select name="PatientId" class="form-select" required data-search-select="patient" data-required="true" data-placeholder="Hasta adı, tür, ırk, çip, sahip telefonu...">
                             <option value="">-- Hasta Sec --</option>
                             @foreach (var p in (ViewBag.Patients as List<VoxCrm.Domain.Entities.Patient> ?? new()))
                             {
