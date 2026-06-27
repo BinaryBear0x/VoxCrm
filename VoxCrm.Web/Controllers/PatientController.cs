@@ -14,13 +14,77 @@ public class PatientController : Controller
 
     public async Task<IActionResult> Index(string? search)
     {
-        var query = _context.Patients.AsQueryable();
+        var query = _context.Patients
+            .Include(p => p.Owners)
+                .ThenInclude(po => po.PetOwner)
+            .AsQueryable();
         if (!string.IsNullOrWhiteSpace(search))
-            query = query.Where(p => p.Name.Contains(search) || p.Species.Contains(search));
+        {
+            var term = search.Trim();
+            query = query.Where(p =>
+                p.Name.Contains(term) ||
+                p.Species.Contains(term) ||
+                (p.Breed != null && p.Breed.Contains(term)) ||
+                (p.MicrochipNumber != null && p.MicrochipNumber.Contains(term)) ||
+                (p.pasaportNumarasi != null && p.pasaportNumarasi.Contains(term)) ||
+                (p.Notes != null && p.Notes.Contains(term)) ||
+                p.Owners.Any(o =>
+                    o.PetOwner.FirstName.Contains(term) ||
+                    o.PetOwner.LastName.Contains(term) ||
+                    o.PetOwner.Phone.Contains(term) ||
+                    (o.PetOwner.Email != null && o.PetOwner.Email.Contains(term))));
+        }
 
         var list = await query.OrderBy(p => p.Name).ToListAsync();
         ViewBag.Search = search;
         return View(list);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Search(string? q)
+    {
+        var query = _context.Patients
+            .Include(p => p.Owners)
+                .ThenInclude(po => po.PetOwner)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim();
+            query = query.Where(p =>
+                p.Name.Contains(term) ||
+                p.Species.Contains(term) ||
+                (p.Breed != null && p.Breed.Contains(term)) ||
+                (p.MicrochipNumber != null && p.MicrochipNumber.Contains(term)) ||
+                (p.pasaportNumarasi != null && p.pasaportNumarasi.Contains(term)) ||
+                (p.Notes != null && p.Notes.Contains(term)) ||
+                p.Owners.Any(o =>
+                    o.PetOwner.FirstName.Contains(term) ||
+                    o.PetOwner.LastName.Contains(term) ||
+                    o.PetOwner.Phone.Contains(term) ||
+                    (o.PetOwner.Email != null && o.PetOwner.Email.Contains(term)) ||
+                    o.PetOwner.Address.Contains(term) ||
+                    o.PetOwner.Notes.Contains(term)));
+        }
+
+        var patients = await query
+            .OrderBy(p => p.Name)
+            .Take(20)
+            .ToListAsync();
+
+        var results = patients.Select(p => new
+            {
+                id = p.ID,
+                label = p.Name + " (" + p.Species + ")",
+                meta = string.Join(" · ", p.Owners
+                    .Where(o => o.PetOwner != null)
+                    .Select(o => o.PetOwner.FirstName + " " + o.PetOwner.LastName + " " + o.PetOwner.Phone)
+                    .Take(2)),
+                detail = (p.Breed ?? "-") + (p.MicrochipNumber != null ? " · Çip: " + p.MicrochipNumber : "")
+            })
+            .ToList();
+
+        return Json(results);
     }
 
     public async Task<IActionResult> Details(Guid id)
@@ -65,6 +129,9 @@ public class PatientController : Controller
 
         if (ownerId.HasValue && ownerId.Value != Guid.Empty)
         {
+            var ownerExists = await _context.PetOwners.AnyAsync(o => o.ID == ownerId.Value);
+            if (!ownerExists) return BadRequest("Geçersiz sahip seçimi.");
+
             _context.PatientOwners.Add(new PatientOwner
             {
                 PatientId    = model.ID,
@@ -129,6 +196,10 @@ public class PatientController : Controller
     public async Task<IActionResult> AddOwner(Guid patientId, Guid ownerId)
     {
         if (patientId == Guid.Empty || ownerId == Guid.Empty) return BadRequest();
+
+        var patientExists = await _context.Patients.AnyAsync(p => p.ID == patientId);
+        var ownerExists = await _context.PetOwners.AnyAsync(o => o.ID == ownerId);
+        if (!patientExists || !ownerExists) return NotFound();
 
         var exists = await _context.PatientOwners.AnyAsync(po => po.PatientId == patientId && po.PetOwnerId == ownerId);
         if (!exists)

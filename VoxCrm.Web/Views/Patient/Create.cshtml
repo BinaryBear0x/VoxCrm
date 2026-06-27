@@ -50,7 +50,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Sahip Sec</label>
-                        <select name="ownerId" class="form-select">
+                        <select name="ownerId" class="form-select" data-search-select="owner" data-placeholder="Sahip adı, telefon, e-posta, adres veya hayvan ara...">
                             <option value="">-- Sahip Sec (Opsiyonel) --</option>
                             @foreach (var o in (ViewBag.Owners as List<VoxCrm.Domain.Entities.PetOwner> ?? new()))
                             {

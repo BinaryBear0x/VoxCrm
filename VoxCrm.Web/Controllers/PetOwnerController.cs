@@ -17,16 +17,79 @@ public class PetOwnerController : Controller
     // GET: /PetOwner
     public async Task<IActionResult> Index(string? search)
     {
-        var query = _context.PetOwners.AsQueryable();
+        var query = _context.PetOwners
+            .Include(o => o.OwnedPatients)
+                .ThenInclude(po => po.Patient)
+            .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
-            query = query.Where(p => p.FirstName.Contains(search) ||
-                                     p.LastName.Contains(search) ||
-                                     p.Phone.Contains(search));
+        {
+            var term = search.Trim();
+            query = query.Where(p =>
+                p.FirstName.Contains(term) ||
+                p.LastName.Contains(term) ||
+                p.Phone.Contains(term) ||
+                (p.Email != null && p.Email.Contains(term)) ||
+                p.Address.Contains(term) ||
+                p.Notes.Contains(term) ||
+                p.OwnedPatients.Any(op =>
+                    op.Patient.Name.Contains(term) ||
+                    op.Patient.Species.Contains(term) ||
+                    (op.Patient.Breed != null && op.Patient.Breed.Contains(term)) ||
+                    (op.Patient.MicrochipNumber != null && op.Patient.MicrochipNumber.Contains(term)) ||
+                    (op.Patient.pasaportNumarasi != null && op.Patient.pasaportNumarasi.Contains(term))));
+        }
 
         var owners = await query.OrderBy(p => p.FirstName).ToListAsync();
         ViewBag.Search = search;
         return View(owners);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Search(string? q)
+    {
+        var query = _context.PetOwners
+            .Include(o => o.OwnedPatients)
+                .ThenInclude(po => po.Patient)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim();
+            query = query.Where(o =>
+                o.FirstName.Contains(term) ||
+                o.LastName.Contains(term) ||
+                o.Phone.Contains(term) ||
+                (o.Email != null && o.Email.Contains(term)) ||
+                o.Address.Contains(term) ||
+                o.Notes.Contains(term) ||
+                o.OwnedPatients.Any(op =>
+                    op.Patient.Name.Contains(term) ||
+                    op.Patient.Species.Contains(term) ||
+                    (op.Patient.Breed != null && op.Patient.Breed.Contains(term)) ||
+                    (op.Patient.MicrochipNumber != null && op.Patient.MicrochipNumber.Contains(term)) ||
+                    (op.Patient.pasaportNumarasi != null && op.Patient.pasaportNumarasi.Contains(term))));
+        }
+
+        var owners = await query
+            .OrderBy(o => o.FirstName)
+            .ThenBy(o => o.LastName)
+            .Take(20)
+            .ToListAsync();
+
+        var results = owners.Select(o => new
+            {
+                id = o.ID,
+                label = o.FirstName + " " + o.LastName,
+                meta = o.Phone + (string.IsNullOrWhiteSpace(o.Email) ? "" : " · " + o.Email),
+                detail = string.Join(", ", o.OwnedPatients
+                    .Where(op => op.Patient != null)
+                    .Select(op => op.Patient.Name + " (" + op.Patient.Species + ")")
+                    .Take(3))
+            })
+            .ToList();
+
+        return Json(results);
     }
 
     // GET: /PetOwner/Details/{id}
@@ -113,6 +176,10 @@ public class PetOwnerController : Controller
     public async Task<IActionResult> AddPatient(Guid ownerId, Guid patientId)
     {
         if (ownerId == Guid.Empty || patientId == Guid.Empty) return BadRequest();
+
+        var ownerExists = await _context.PetOwners.AnyAsync(o => o.ID == ownerId);
+        var patientExists = await _context.Patients.AnyAsync(p => p.ID == patientId);
+        if (!ownerExists || !patientExists) return NotFound();
 
         var exists = await _context.PatientOwners.AnyAsync(po => po.PetOwnerId == ownerId && po.PatientId == patientId);
         if (!exists)

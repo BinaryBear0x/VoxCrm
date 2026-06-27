@@ -127,7 +127,7 @@
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="ownerId" value="@Model.ID" />
                     <div class="col-8">
-                        <select name="patientId" class="form-select form-select-sm" required>
+                            <select name="patientId" class="form-select form-select-sm" required data-search-select="patient" data-required="true" data-placeholder="Hasta adı, tür, ırk, çip, sahip telefonu...">
                             <option value="">-- Kayıtlı Hayvan Ekle --</option>
                             @if (ViewBag.AvailablePatients != null)
                             {
