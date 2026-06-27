@@ -4,15 +4,13 @@
     ViewData["ActiveMenu"] = "petowners";
 }
 
-<!-- Başlık Satırı -->
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-2 mb-4 border-bottom">
-    <h1 class="h3 fw-bold text-dark">👤 Müşteriler</h1>
+    <h1 class="h3 fw-bold text-dark"><i class="bi bi-people me-2 text-primary"></i>Müşteriler</h1>
     <a href="/PetOwner/Create" class="btn btn-primary">
         <i class="bi bi-person-plus me-1"></i> Yeni Müşteri
     </a>
 </div>
 
-<!-- Başarı Mesajı -->
 @if (TempData["Success"] != null)
 {
     <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -21,12 +19,11 @@
     </div>
 }
 
-<!-- Arama Kutusu -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="get" action="/PetOwner" class="d-flex gap-2">
-            <input type="text" name="search" value="@ViewBag.Search" 
-                   class="form-control" placeholder="İsim veya telefon ile ara...">
+            <input type="search" name="search" value="@ViewBag.Search" 
+                   class="form-control" placeholder="İsim, telefon, e-posta, adres, not veya hayvan bilgisi ara..." data-auto-search>
             <button type="submit" class="btn btn-outline-primary">
                 <i class="bi bi-search"></i>
             </button>
@@ -38,7 +35,6 @@
     </div>
 </div>
 
-<!-- Müşteri Tablosu -->
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
         @if (!Model.Any())
@@ -51,7 +47,6 @@
         }
         else
         {
-            <!-- Masaüstü Tablo -->
             <div class="table-responsive d-none d-md-block">
                 <table class="table table-hover mb-0">
                     <thead class="table-light">
@@ -59,6 +54,7 @@
                             <th>Ad Soyad</th>
                             <th>Telefon</th>
                             <th>E-posta</th>
+                            <th>Hayvanları</th>
                             <th>WhatsApp</th>
                             <th class="text-end">İşlemler</th>
                         </tr>
@@ -70,6 +66,22 @@
                                 <td class="fw-semibold">@owner.FirstName @owner.LastName</td>
                                 <td>@owner.Phone</td>
                                 <td>@(owner.Email ?? "-")</td>
+                                <td>
+                                    @if (owner.OwnedPatients.Any())
+                                    {
+                                        <div class="fw-semibold">@owner.OwnedPatients.Count hayvan</div>
+                                        <div class="text-muted small">
+                                            @string.Join(", ", owner.OwnedPatients
+                                                .Where(op => op.Patient != null)
+                                                .Select(op => $"{op.Patient.Name} ({op.Patient.Species})")
+                                                .Take(3))
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
                                 <td>
                                     @if (owner.WhatsAppConsent)
                                     {
@@ -102,7 +114,6 @@
                 </table>
             </div>
 
-            <!-- Mobil Kart Görünümü -->
             <div class="d-md-none">
                 @foreach (var owner in Model)
                 {
@@ -110,6 +121,16 @@
                         <div>
                             <div class="fw-semibold">@owner.FirstName @owner.LastName</div>
                             <div class="text-muted small">@owner.Phone</div>
+                            @if (owner.OwnedPatients.Any())
+                            {
+                                <div class="text-muted small">
+                                    <i class="bi bi-heart-pulse"></i>
+                                    @string.Join(", ", owner.OwnedPatients
+                                        .Where(op => op.Patient != null)
+                                        .Select(op => op.Patient.Name)
+                                        .Take(3))
+                                </div>
+                            }
                             @if (owner.WhatsAppConsent)
                             {
                                 <span class="badge bg-success mt-1"><i class="bi bi-whatsapp"></i> WhatsApp Onaylı</span>

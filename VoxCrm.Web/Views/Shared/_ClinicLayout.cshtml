@@ -18,6 +18,20 @@
         </button>
         <div class="navbar-nav ms-auto">
             <div class="nav-item text-nowrap d-flex align-items-center">
+                <div class="dropdown me-2">
+                    <button class="btn btn-sm btn-primary dropdown-toggle quick-action-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-lightning-charge me-1"></i> Hızlı İşlem
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end quick-action-menu">
+                        <li><a class="dropdown-item" href="/PetOwner/Create"><i class="bi bi-person-plus"></i> Yeni Müşteri</a></li>
+                        <li><a class="dropdown-item" href="/Patient/Create"><i class="bi bi-heart-pulse"></i> Yeni Hasta</a></li>
+                        <li><a class="dropdown-item" href="/Appointment/Create"><i class="bi bi-calendar-plus"></i> Randevu Ekle</a></li>
+                        <li><a class="dropdown-item" href="/Vaccination/Create"><i class="bi bi-capsule"></i> Aşı Kaydı</a></li>
+                        <li><a class="dropdown-item" href="/Finance/Create"><i class="bi bi-receipt"></i> Borç Ekle</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="/ServiceItem/Create"><i class="bi bi-tag"></i> Hizmet Ekle</a></li>
+                    </ul>
+                </div>
                 <span class="nav-link text-muted d-none d-md-inline px-3 small fw-semibold">
                     <i class="bi bi-person-circle me-1 text-primary"></i>@User.Identity?.Name
                 </span>

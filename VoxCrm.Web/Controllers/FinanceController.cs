@@ -50,6 +50,15 @@ public class FinanceController : Controller
             ViewBag.Owners = await _context.PetOwners.OrderBy(o => o.FirstName).ToListAsync();
             return View(model);
         }
+
+        var ownerExists = await _context.PetOwners.AnyAsync(o => o.ID == model.PetOwnerId);
+        if (!ownerExists)
+        {
+            ModelState.AddModelError(nameof(model.PetOwnerId), "Geçerli bir müşteri seçin.");
+            ViewBag.Owners = await _context.PetOwners.OrderBy(o => o.FirstName).ToListAsync();
+            return View(model);
+        }
+
         _context.Borçlar.Add(model);
         await _context.SaveChangesAsync();
         TempData["Success"] = "Borc kaydi olusturuldu.";
@@ -62,11 +71,18 @@ public class FinanceController : Controller
         if (!AllowedPaymentMethods.Contains(paymentMethod))
             return BadRequest("Geçersiz ödeme yöntemi.");
 
+        if (amount <= 0)
+            return BadRequest("Tahsilat tutarı sıfırdan büyük olmalıdır.");
+
         var debt = await _context.Borçlar
             .Include(d => d.Payments)
             .FirstOrDefaultAsync(d => d.ID == debtId);
             
         if (debt == null) return NotFound();
+
+        var remainingAmount = debt.Amount - debt.Payments.Sum(p => p.Amount);
+        if (amount > remainingAmount)
+            return BadRequest("Tahsilat tutarı kalan borçtan büyük olamaz.");
 
         var payment = new Payment
         {

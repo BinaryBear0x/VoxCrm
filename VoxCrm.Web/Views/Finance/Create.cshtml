@@ -18,7 +18,7 @@
                     @Html.AntiForgeryToken()
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Musteri *</label>
-                        <select name="PetOwnerId" class="form-select" required>
+                        <select name="PetOwnerId" class="form-select" required data-search-select="owner" data-required="true" data-placeholder="Müşteri adı, telefon, e-posta, adres veya hayvan ara...">
                             <option value="">-- Musteri Sec --</option>
                             @foreach (var o in (ViewBag.Owners as List<VoxCrm.Domain.Entities.PetOwner> ?? new()))
                             {

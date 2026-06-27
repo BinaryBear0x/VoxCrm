@@ -82,11 +82,14 @@ public class AuthController : Controller
 
             // Claim'leri veritabanına ekle
             var existingClaims = await _userManager.GetClaimsAsync(user);
-            var claimsToAdd = additionalClaims.Where(c => !existingClaims.Any(x => x.Type == c.Type)).ToList();
-            if (claimsToAdd.Any())
-            {
-                await _userManager.AddClaimsAsync(user, claimsToAdd);
-            }
+            var staleTenantClaims = existingClaims
+                .Where(c => c.Type is "ClinicId" or "DealerId")
+                .ToList();
+            if (staleTenantClaims.Any())
+                await _userManager.RemoveClaimsAsync(user, staleTenantClaims);
+
+            if (additionalClaims.Any())
+                await _userManager.AddClaimsAsync(user, additionalClaims);
             
             // Çerezi (cookie) anında yenile ki yeni claim'ler hemen aktif olsun
             await _signInManager.RefreshSignInAsync(user);
@@ -95,9 +98,9 @@ public class AuthController : Controller
         // ─── ROL BAZLI YÖNLENDİRME ──────────────────────────────────────────
         // Dealer → kendi paneline, Clinic kullanıcıları → klinik dashboarduna
         if (user != null && await _userManager.IsInRoleAsync(user, "Dealer"))
-            return LocalRedirect(returnUrl ?? "/Dealer");
+            return RedirectLocalOrDefault(returnUrl, "/Dealer");
 
-        return LocalRedirect(returnUrl ?? "/");
+        return RedirectLocalOrDefault(returnUrl, "/");
     }
 
     // POST: /Auth/Logout
@@ -110,4 +113,12 @@ public class AuthController : Controller
 
     // GET: /Auth/AccessDenied
     public IActionResult AccessDenied() => View();
+
+    private IActionResult RedirectLocalOrDefault(string? returnUrl, string defaultUrl)
+    {
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            return LocalRedirect(returnUrl);
+
+        return LocalRedirect(defaultUrl);
+    }
 }
