@@ -15,18 +15,25 @@
     <div class="col-12 col-md-8 col-lg-6">
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
-                <form method="post" action="/Patient/Edit/@Model.ID">
+                <p class="text-muted small mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Tüm alanlar isteğe bağlıdır.
+                </p>
+
+                <form method="post" action="/Patient/Edit/@Model.ID" id="patientEditForm">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="ID" value="@Model.ID" />
 
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small" style="display:@(ViewData.ModelState.IsValid ? "none" : "block")"></div>
+
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Hayvanın Adı *</label>
-                        <input type="text" name="Name" class="form-control" value="@Model.Name" required>
+                        <label class="form-label fw-semibold">Hayvanın Adı</label>
+                        <input type="text" name="Name" class="form-control" value="@Model.Name">
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
-                            <label class="form-label fw-semibold">Tür *</label>
-                            <input type="text" name="Species" class="form-control" value="@Model.Species" required>
+                            <label class="form-label fw-semibold">Tür</label>
+                            <input type="text" name="Species" class="form-control" value="@Model.Species">
                         </div>
                         <div class="col-6">
                             <label class="form-label fw-semibold">Irk</label>
@@ -35,10 +42,19 @@
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
-                            <label class="form-label fw-semibold">Cinsiyet *</label>
-                            <select name="cinsiyet" class="form-select" required>
-                                <option value="E" selected="@(Model.cinsiyet == 'E')">Erkek</option>
-                                <option value="D" selected="@(Model.cinsiyet == 'D')">Dişi</option>
+                            <label class="form-label fw-semibold">Cinsiyet</label>
+                            <select name="cinsiyet" class="form-select">
+                                <option value="">-- Seçiniz --</option>
+                                @if (Model.cinsiyet == 'E') {
+                                    <option value="E" selected>Erkek</option>
+                                    <option value="D">Dişi</option>
+                                } else if (Model.cinsiyet == 'D') {
+                                    <option value="E">Erkek</option>
+                                    <option value="D" selected>Dişi</option>
+                                } else {
+                                    <option value="E">Erkek</option>
+                                    <option value="D">Dişi</option>
+                                }
                             </select>
                         </div>
                         <div class="col-6">
@@ -56,7 +72,7 @@
                             <input type="text" name="pasaportNumarasi" class="form-control" value="@Model.pasaportNumarasi">
                         </div>
                     </div>
-                    
+
                     <div class="mb-4">
                         <label class="form-label fw-semibold">Notlar</label>
                         <textarea name="Notes" class="form-control" rows="3">@Model.Notes</textarea>
@@ -70,3 +86,69 @@
         </div>
     </div>
 </div>
+
+<!-- Eksik alan onay modalı -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title" id="confirmModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i> Eksik Bilgi
+                </h5>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">Aşağıdaki alanlar boş bırakıldı:</p>
+                <ul id="missingFieldsList" class="text-muted small mb-0"></ul>
+                <p class="mt-3 mb-0">Yine de kaydetmek istiyor musunuz?</p>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Geri Dön</button>
+                <button type="button" class="btn btn-primary" id="confirmSaveBtn">
+                    <i class="bi bi-check-circle me-1"></i> Evet, Kaydet
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var formEl = document.getElementById('patientEditForm');
+    var confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    var confirmed = false;
+
+    var fieldLabels = {
+        'Name': 'Hayvanın Adı',
+        'Species': 'Tür',
+        'cinsiyet': 'Cinsiyet'
+    };
+
+    formEl.addEventListener('submit', function (e) {
+        if (confirmed) return;
+        var missing = [];
+        Object.keys(fieldLabels).forEach(function (name) {
+            var el = formEl.elements[name];
+            if (el && !el.value.trim()) missing.push(fieldLabels[name]);
+        });
+        if (missing.length > 0) {
+            e.preventDefault();
+            var list = document.getElementById('missingFieldsList');
+            list.innerHTML = '';
+            missing.forEach(function (f) {
+                var li = document.createElement('li');
+                li.textContent = f;
+                list.appendChild(li);
+            });
+            confirmModal.show();
+        }
+    });
+
+    document.getElementById('confirmSaveBtn').addEventListener('click', function () {
+        confirmed = true;
+        confirmModal.hide();
+        formEl.submit();
+    });
+})();
+</script>
+}

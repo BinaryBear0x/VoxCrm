@@ -3,6 +3,7 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using Hangfire.Dashboard;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authentication;
 using VoxCrm.Domain.Entities;
 using VoxCrm.Web.Services;
 
@@ -10,12 +11,27 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllersWithViews();
+const string DevOnlyWhatsAppSecret = "dev-only-change-this-very-long-whatsapp-gateway-secret";
+var configuredWhatsAppSecret = builder.Configuration["WhatsAppGateway:JwtSecret"];
+if (!builder.Environment.IsDevelopment()
+    && (string.IsNullOrWhiteSpace(configuredWhatsAppSecret) || configuredWhatsAppSecret == DevOnlyWhatsAppSecret))
+{
+    throw new InvalidOperationException("WhatsAppGateway:JwtSecret must be configured with a non-development value.");
+}
+
+builder.Services.AddScoped<AuditLogActionFilter>();
+builder.Services.AddControllersWithViews(options =>
+{
+    options.Filters.AddService<AuditLogActionFilter>();
+});
+builder.Services.AddHttpClient<WhatsAppGatewayClient>();
+builder.Services.AddHttpClient<SystemHealthService>();
 
 // HTTP bağlamını okumak için (TenantService kullanıyor)
 builder.Services.AddHttpContextAccessor();
 // BOLA koruması için aktif kliniği bulan servis
 builder.Services.AddScoped<VoxCrm.Domain.Common.ITenantService, VoxCrm.Web.Services.TenantService>();
+builder.Services.AddScoped<IClaimsTransformation, TenantClaimsTransformation>();
 
 // Veritabanı bağlantısı
 builder.Services.AddDbContext<VoxCrm.Infrastructure.Data.VoxCrmDbContext>(options =>
@@ -51,7 +67,9 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/Auth/AccessDenied";
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Lax;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest
+        : CookieSecurePolicy.Always;
     options.ExpireTimeSpan  = TimeSpan.FromHours(8); // 8 saatte bir yeniden giriş
     options.SlidingExpiration = true; // Aktif kullanımda süre sıfırlanır
 });
@@ -91,6 +109,16 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.TryAdd("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.TryAdd("X-Frame-Options", "DENY");
+    context.Response.Headers.TryAdd("Referrer-Policy", "strict-origin-when-cross-origin");
+    context.Response.Headers.TryAdd(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    await next();
+});
 app.UseRouting();
 app.UseAuthentication(); // Giriş yaptı mı?
 app.UseAuthorization();  // Bu sayfaya yetkisi var mı?
@@ -113,3 +141,5 @@ app.MapControllerRoute(
     .WithStaticAssets();
 
 app.Run();
+
+public partial class Program;

@@ -26,15 +26,15 @@ public class PetOwnerController : Controller
         {
             var term = search.Trim();
             query = query.Where(p =>
-                p.FirstName.Contains(term) ||
-                p.LastName.Contains(term) ||
-                p.Phone.Contains(term) ||
+                (p.FirstName != null && p.FirstName.Contains(term)) ||
+                (p.LastName != null && p.LastName.Contains(term)) ||
+                (p.Phone != null && p.Phone.Contains(term)) ||
                 (p.Email != null && p.Email.Contains(term)) ||
-                p.Address.Contains(term) ||
-                p.Notes.Contains(term) ||
+                (p.Address != null && p.Address.Contains(term)) ||
+                (p.Notes != null && p.Notes.Contains(term)) ||
                 p.OwnedPatients.Any(op =>
-                    op.Patient.Name.Contains(term) ||
-                    op.Patient.Species.Contains(term) ||
+                    (op.Patient.Name != null && op.Patient.Name.Contains(term)) ||
+                    (op.Patient.Species != null && op.Patient.Species.Contains(term)) ||
                     (op.Patient.Breed != null && op.Patient.Breed.Contains(term)) ||
                     (op.Patient.MicrochipNumber != null && op.Patient.MicrochipNumber.Contains(term)) ||
                     (op.Patient.pasaportNumarasi != null && op.Patient.pasaportNumarasi.Contains(term))));
@@ -57,15 +57,15 @@ public class PetOwnerController : Controller
         {
             var term = q.Trim();
             query = query.Where(o =>
-                o.FirstName.Contains(term) ||
-                o.LastName.Contains(term) ||
-                o.Phone.Contains(term) ||
+                (o.FirstName != null && o.FirstName.Contains(term)) ||
+                (o.LastName != null && o.LastName.Contains(term)) ||
+                (o.Phone != null && o.Phone.Contains(term)) ||
                 (o.Email != null && o.Email.Contains(term)) ||
-                o.Address.Contains(term) ||
-                o.Notes.Contains(term) ||
+                (o.Address != null && o.Address.Contains(term)) ||
+                (o.Notes != null && o.Notes.Contains(term)) ||
                 o.OwnedPatients.Any(op =>
-                    op.Patient.Name.Contains(term) ||
-                    op.Patient.Species.Contains(term) ||
+                    (op.Patient.Name != null && op.Patient.Name.Contains(term)) ||
+                    (op.Patient.Species != null && op.Patient.Species.Contains(term)) ||
                     (op.Patient.Breed != null && op.Patient.Breed.Contains(term)) ||
                     (op.Patient.MicrochipNumber != null && op.Patient.MicrochipNumber.Contains(term)) ||
                     (op.Patient.pasaportNumarasi != null && op.Patient.pasaportNumarasi.Contains(term))));
@@ -116,13 +116,36 @@ public class PetOwnerController : Controller
 
     // POST: /PetOwner/Create
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(PetOwner model)
+    public async Task<IActionResult> Create(
+        [Bind("FirstName,LastName,Phone,Email,Address,WhatsAppConsent,Notes")] PetOwner model)
     {
-        if (!ModelState.IsValid) return View(model);
+        // Sistem alanları formda olmadığı için doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(PetOwner.ClinicID));
+        ModelState.Remove(nameof(PetOwner.CreatedAt));
+        ModelState.Remove(nameof(PetOwner.IsActive));
+
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = "Müşteri bilgileri kaydedilemedi. Lütfen formdaki alanları kontrol edin.";
+            return View(model);
+        }
+
+        // Telefon numarası zaten kayıtlı mı?
+        if (!string.IsNullOrWhiteSpace(model.Phone))
+        {
+            var duplicate = await _context.PetOwners
+                .AnyAsync(p => p.Phone == model.Phone);
+            if (duplicate)
+            {
+                TempData["Error"] = $"Bu telefon numarası ({model.Phone}) zaten kayıtlı.";
+                return View(model);
+            }
+        }
 
         _context.PetOwners.Add(model);
-        await _context.SaveChangesAsync();
-        TempData["Success"] = $"{model.FirstName} {model.LastName} başarıyla eklendi.";
+        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
+        var displayName = string.Join(" ", new[] { model.FirstName, model.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        TempData["Success"] = $"{(string.IsNullOrWhiteSpace(displayName) ? "Müşteri" : displayName)} başarıyla eklendi.";
         return RedirectToAction(nameof(Details), new { id = model.ID });
     }
 
@@ -136,24 +159,44 @@ public class PetOwnerController : Controller
 
     // POST: /PetOwner/Edit/{id}
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Guid id, PetOwner model)
+    public async Task<IActionResult> Edit(Guid id,
+        [Bind("ID,FirstName,LastName,Phone,Email,Address,WhatsAppConsent,Notes")] PetOwner model)
     {
         if (id != model.ID) return BadRequest();
+
+        // Sistem alanları formda olmadığı için doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(PetOwner.ClinicID));
+        ModelState.Remove(nameof(PetOwner.CreatedAt));
+        ModelState.Remove(nameof(PetOwner.IsActive));
+
         if (!ModelState.IsValid) return View(model);
 
-        var existing = await _context.PetOwners.FindAsync(id);
+        var existing = await _context.PetOwners.FindAsync(id); // Global Query Filter: başka klinik = null
         if (existing == null) return NotFound();
 
-        existing.FirstName = model.FirstName;
-        existing.LastName = model.LastName;
-        existing.Phone = model.Phone;
-        existing.Email = model.Email;
-        existing.Address = model.Address;
+        if (!string.IsNullOrWhiteSpace(model.Phone))
+        {
+            var duplicate = await _context.PetOwners
+                .AnyAsync(p => p.ID != id && p.Phone == model.Phone);
+            if (duplicate)
+            {
+                TempData["Error"] = $"Bu telefon numarası ({model.Phone}) başka bir müşteride kayıtlı.";
+                return View(model);
+            }
+        }
+
+        existing.FirstName       = model.FirstName;
+        existing.LastName        = model.LastName;
+        existing.Phone           = model.Phone;
+        existing.Email           = model.Email;
+        existing.Address         = model.Address;
         existing.WhatsAppConsent = model.WhatsAppConsent;
-        existing.Notes = model.Notes;
+        existing.Notes           = model.Notes;
+        // ClinicID, CreatedAt, IsActive → hiç dokunulmaz ✅
 
         await _context.SaveChangesAsync();
-        TempData["Success"] = $"{model.FirstName} {model.LastName} başarıyla güncellendi.";
+        var editName = string.Join(" ", new[] { model.FirstName, model.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        TempData["Success"] = $"{(string.IsNullOrWhiteSpace(editName) ? "Müşteri" : editName)} başarıyla güncellendi.";
         return RedirectToAction(nameof(Index));
     }
 

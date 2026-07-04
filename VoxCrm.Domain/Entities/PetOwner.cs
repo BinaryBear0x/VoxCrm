@@ -8,15 +8,15 @@ namespace VoxCrm.Domain.Entities
     public class PetOwner : BaseEntity, ITenantEntity
     {
         public Guid ClinicID { get; set; }
-        public string FirstName { get; set; } = string.Empty;
-        public string LastName { get; set; } = string.Empty;
-        public string Phone { get; set; } = string.Empty;
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Phone { get; set; }
         public string? Email { get; set; }
         public bool WhatsAppConsent { get; set; } = false;
 
-        public string Notes { get; set; } = string.Empty;
+        public string? Notes { get; set; }
 
-        public string Address { get; set; }= string.Empty;
+        public string? Address { get; set; }
         public ICollection<PatientOwner> OwnedPatients { get; set; } = new List<PatientOwner>();
     }
 }

@@ -31,12 +31,18 @@ public class VaccineTypeController : Controller
 
     // POST: /VaccineType/Create
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(VaccineType model)
+    public async Task<IActionResult> Create(
+        [Bind("Name,ValidityDays,ReminderDaysBefore")] VaccineType model)
     {
+        // Sistem alanları doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(VaccineType.ClinicID));
+        ModelState.Remove(nameof(VaccineType.CreatedAt));
+        ModelState.Remove(nameof(VaccineType.IsActive));
+
         if (!ModelState.IsValid) return View(model);
 
         _context.VaccineTypes.Add(model);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
         TempData["Success"] = $"{model.Name} başarıyla eklendi.";
         return RedirectToAction(nameof(Index));
     }
@@ -51,17 +57,25 @@ public class VaccineTypeController : Controller
 
     // POST: /VaccineType/Edit/{id}
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Guid id, VaccineType model)
+    public async Task<IActionResult> Edit(Guid id,
+        [Bind("ID,Name,ValidityDays,ReminderDaysBefore")] VaccineType model)
     {
         if (id != model.ID) return BadRequest();
+
+        // Sistem alanları doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(VaccineType.ClinicID));
+        ModelState.Remove(nameof(VaccineType.CreatedAt));
+        ModelState.Remove(nameof(VaccineType.IsActive));
+
         if (!ModelState.IsValid) return View(model);
 
-        var existing = await _context.VaccineTypes.FindAsync(id);
+        var existing = await _context.VaccineTypes.FindAsync(id); // Global Query Filter: başka klinik = null
         if (existing == null) return NotFound();
 
-        existing.Name = model.Name;
-        existing.ValidityDays = model.ValidityDays;
-        existing.ReminderDaysBefore = model.ReminderDaysBefore;
+        existing.Name                = model.Name;
+        existing.ValidityDays        = model.ValidityDays;
+        existing.ReminderDaysBefore  = model.ReminderDaysBefore;
+        // ClinicID, CreatedAt, IsActive → hiç dokunulmaz ✅
 
         await _context.SaveChangesAsync();
         TempData["Success"] = $"{model.Name} başarıyla güncellendi.";

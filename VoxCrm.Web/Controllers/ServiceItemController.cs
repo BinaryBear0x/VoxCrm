@@ -31,12 +31,18 @@ public class ServiceItemController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(ServiceItem model)
+    public async Task<IActionResult> Create(
+        [Bind("Name,Description,Price")] ServiceItem model)
     {
+        // Sistem alanları doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(ServiceItem.ClinicID));
+        ModelState.Remove(nameof(ServiceItem.CreatedAt));
+        ModelState.Remove(nameof(ServiceItem.IsActive));
+
         if (ModelState.IsValid)
         {
             _context.ServiceItems.Add(model);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
             TempData["Success"] = "Hizmet kalemi eklendi.";
             return RedirectToAction(nameof(Index));
         }
@@ -52,22 +58,27 @@ public class ServiceItemController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Guid id, ServiceItem model)
+    public async Task<IActionResult> Edit(Guid id,
+        [Bind("ID,Name,Description,Price,IsActive")] ServiceItem model)
     {
         if (id != model.ID) return NotFound();
+
+        // Sistem alanları doğrulama dışı bırakılıyor (IsActive formdan geliyor, Bind'e dahil)
+        ModelState.Remove(nameof(ServiceItem.ClinicID));
+        ModelState.Remove(nameof(ServiceItem.CreatedAt));
 
         if (ModelState.IsValid)
         {
             try
             {
-                // Preserve ClinicID if it's set by EF Core tracker, but it's easier to just fetch and update
-                var existing = await _context.ServiceItems.FindAsync(id);
+                var existing = await _context.ServiceItems.FindAsync(id); // Global Query Filter: başka klinik = null
                 if (existing == null) return NotFound();
                 
-                existing.Name = model.Name;
+                existing.Name        = model.Name;
                 existing.Description = model.Description;
-                existing.Price = model.Price;
-                existing.IsActive = model.IsActive;
+                existing.Price       = model.Price;
+                existing.IsActive    = model.IsActive;
+                // ClinicID, CreatedAt → hiç dokunulmaz ✅
 
                 await _context.SaveChangesAsync();
                 TempData["Success"] = "Hizmet kalemi güncellendi.";

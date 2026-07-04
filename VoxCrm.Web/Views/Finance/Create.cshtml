@@ -17,9 +17,9 @@
                 <form method="post" action="/Finance/Create">
                     @Html.AntiForgeryToken()
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Musteri *</label>
+                        <label class="form-label fw-semibold">Müşteri *</label>
                         <select name="PetOwnerId" class="form-select" required data-search-select="owner" data-required="true" data-placeholder="Müşteri adı, telefon, e-posta, adres veya hayvan ara...">
-                            <option value="">-- Musteri Sec --</option>
+                            <option value="">-- Müşteri Seç --</option>
                             @foreach (var o in (ViewBag.Owners as List<VoxCrm.Domain.Entities.PetOwner> ?? new()))
                             {
                                 <option value="@o.ID">@o.FirstName @o.LastName - @o.Phone</option>

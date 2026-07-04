@@ -1,0 +1,169 @@
+@model VoxCrm.Web.Models.DealerHealthViewModel
+@{
+    ViewData["Title"] = "Sistem Sağlığı";
+    ViewData["ActiveMenu"] = "dealer-health";
+    string StatusBadge(string? status) => status == "ok" ? "success" : string.IsNullOrWhiteSpace(status) ? "secondary" : "danger";
+}
+
+<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
+    <div>
+        <h1 class="h3 fw-bold mb-0">Sistem Sağlığı</h1>
+        <div class="text-muted small">Son kontrol: @Model.GeneratedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Dealer/Logs" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-journal-text me-1"></i> Loglar
+        </a>
+        <a href="/Dealer/Health" class="btn btn-primary btn-sm">
+            <i class="bi bi-arrow-clockwise me-1"></i> Yenile
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">Web</div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">VoxCrm.Web</span>
+                    <span class="badge bg-success">@Model.WebStatus</span>
+                </div>
+                <div class="small text-muted mt-2">Başlangıç: @Model.StartedAt.ToLocalTime().ToString("dd.MM HH:mm")</div>
+                <div class="small text-muted">Bellek: @Model.WorkingSetMb MB</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">Database</div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">PostgreSQL</span>
+                    <span class="badge bg-@StatusBadge(Model.DatabaseStatus)">@Model.DatabaseStatus</span>
+                </div>
+                <div class="small text-muted mt-2">Dealer klinikleri: @Model.ClinicCount</div>
+                <div class="small text-muted">Aktif klinik: @Model.ActiveClinicCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">VoxCrm.Api</div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">Internal API</span>
+                    <span class="badge bg-@StatusBadge(Model.VoxCrmApiStatus)">@(Model.VoxCrmApiStatus ?? "unknown")</span>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.VoxCrmApiError))
+                {
+                    <div class="small text-danger mt-2">@Model.VoxCrmApiError</div>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">WhatsApp Gateway</div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">Gateway</span>
+                    <span class="badge bg-@StatusBadge(Model.GatewayHealth?.Status)">@(Model.GatewayHealth?.Status ?? "unknown")</span>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.GatewayError))
+                {
+                    <div class="small text-danger mt-2">@Model.GatewayError</div>
+                }
+                else
+                {
+                    <div class="small text-muted mt-2">Ready clinic: @(Model.GatewayHealth?.ReadyClinicCount ?? 0)</div>
+                    <div class="small text-muted">Queue lag: @(Model.GatewayHealth?.QueueLagSeconds ?? 0) sn</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-12 col-xl-5">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h6 fw-bold mb-3">WhatsApp Kuyruk Özeti</h2>
+                <dl class="row small mb-0">
+                    <dt class="col-7">WhatsApp aktif klinik</dt>
+                    <dd class="col-5">@Model.WhatsAppEnabledClinicCount</dd>
+                    <dt class="col-7">Pending</dt>
+                    <dd class="col-5">@Model.PendingWhatsAppCount</dd>
+                    <dt class="col-7">Failed</dt>
+                    <dd class="col-5">@Model.FailedWhatsAppCount</dd>
+                    <dt class="col-7">NeedsReview</dt>
+                    <dd class="col-5">@Model.NeedsReviewWhatsAppCount</dd>
+                    <dt class="col-7">Gateway failed</dt>
+                    <dd class="col-5">@(Model.GatewayHealth?.FailedCount ?? 0)</dd>
+                    <dt class="col-7">Gateway needs review</dt>
+                    <dd class="col-5">@(Model.GatewayHealth?.NeedsReviewCount ?? 0)</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-xl-7">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h6 fw-bold mb-3">Worker Özeti</h2>
+                @if (string.IsNullOrWhiteSpace(Model.GatewayWorkerSummary))
+                {
+                    <div class="text-muted small">Worker bilgisi alınamadı.</div>
+                }
+                else
+                {
+                    <pre class="small bg-light border rounded p-3 mb-0" style="white-space: pre-wrap;">@Model.GatewayWorkerSummary</pre>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="p-3 border-bottom">
+                    <h2 class="h6 fw-bold mb-0">Container Durumu</h2>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.ContainerStatusError))
+                {
+                    <div class="alert alert-warning m-3">@Model.ContainerStatusError</div>
+                }
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Container</th>
+                                <th>Image</th>
+                                <th>State</th>
+                                <th>Status</th>
+                                <th>Ports</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @if (!Model.Containers.Any())
+                        {
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">Container bilgisi yok.</td>
+                            </tr>
+                        }
+                        @foreach (var item in Model.Containers)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@item.Name</td>
+                                <td class="small">@item.Image</td>
+                                <td><span class="badge bg-@(item.State == "running" ? "success" : "secondary")">@item.State</span></td>
+                                <td class="small">@item.Status</td>
+                                <td class="small text-muted">@item.Ports</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

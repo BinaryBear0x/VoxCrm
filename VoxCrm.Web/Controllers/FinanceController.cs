@@ -43,8 +43,19 @@ public class FinanceController : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(Debt model)
+    public async Task<IActionResult> Create(
+        [Bind("PetOwnerId,Description,Amount,DueDate")] Debt model)
     {
+        // Sistem alanları, navigasyon özellikleri ve otomatik atanan alanlar doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(Debt.ClinicID));
+        ModelState.Remove(nameof(Debt.CreatedAt));
+        ModelState.Remove(nameof(Debt.IsActive));
+        ModelState.Remove(nameof(Debt.PetOwner));
+        ModelState.Remove(nameof(Debt.IsCollected));
+        ModelState.Remove(nameof(Debt.CollectedAt));
+        ModelState.Remove(nameof(Debt.PaymentMethod));
+        ModelState.Remove(nameof(Debt.Payments));
+
         if (!ModelState.IsValid)
         {
             ViewBag.Owners = await _context.PetOwners.OrderBy(o => o.FirstName).ToListAsync();
@@ -60,8 +71,8 @@ public class FinanceController : Controller
         }
 
         _context.Borçlar.Add(model);
-        await _context.SaveChangesAsync();
-        TempData["Success"] = "Borc kaydi olusturuldu.";
+        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
+        TempData["Success"] = "Borç kaydı oluşturuldu.";
         return RedirectToAction(nameof(Index));
     }
 
