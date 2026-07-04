@@ -1,0 +1,10 @@
+services:
+  gateway-api:
+    environment:
+      APP_ENVIRONMENT: production
+      AUTO_CREATE_DB: "false"
+
+  wa-worker:
+    environment:
+      NODE_ENV: production
+    ports: []

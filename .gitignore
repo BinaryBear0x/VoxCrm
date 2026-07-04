@@ -264,6 +264,7 @@ Generated_Code/
 # because we have git ;-)
 _UpgradeReport_Files/
 Backup*/
+!backups/
 UpgradeLog*.XML
 UpgradeLog*.htm
 ServiceFabricBackup/
@@ -480,3 +481,31 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# =============================================================
+# WhatsApp Gateway
+# =============================================================
+whatsapp-gateway/.env
+whatsapp-gateway/sessions/*
+!whatsapp-gateway/sessions/.gitkeep
+whatsapp-gateway/.venv/
+whatsapp-gateway/**/__pycache__/
+whatsapp-gateway/**/*.pyc
+whatsapp-gateway/**/.pytest_cache/
+whatsapp-gateway/**/node_modules/
+whatsapp-gateway/**/dist/
+whatsapp-gateway/**/*.log
+
+# =============================================================
+# Backups - klasor yapisi repoda kalir, gercek dump dosyalari girmez
+# =============================================================
+backups/daily/*
+backups/weekly/*
+backups/monthly/*
+!backups/daily/.gitkeep
+!backups/weekly/.gitkeep
+!backups/monthly/.gitkeep
+
+# Yedek dosya uzantilari (herhangi bir yerde olusursa)
+*.dump
+*.sql.gz

@@ -1,0 +1,35 @@
+services:
+  gateway-api:
+    build:
+      context: ./gateway-api
+    env_file: .env
+    environment:
+      GATEWAY_DATABASE_URL: postgresql+asyncpg://voxcrm:voxcrm_dev_password@voxcrm-postgres:5432/voxcrm_gateway_dev
+      WORKER_BASE_URL: http://wa-worker:8090
+      VOXCRM_API_BASE_URL: http://host.docker.internal:5072
+    ports:
+      - "127.0.0.1:8088:8088"
+    networks:
+      - voxcrm-dev-net
+    depends_on:
+      - wa-worker
+
+  wa-worker:
+    build:
+      context: ./wa-worker
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      PORT: 8090
+      SESSION_ROOT: /app/sessions
+      GATEWAY_INTERNAL_URL: http://gateway-api:8088
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - ./sessions:/app/sessions
+    networks:
+      - voxcrm-dev-net
+
+networks:
+  voxcrm-dev-net:
+    external: true
