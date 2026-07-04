@@ -1,0 +1,159 @@
+# WhatsApp Worker’ı Tamamen Baileys’e Geçirme Planı
+
+## Özet
+
+Mevcut clean architecture korunacak: **VoxCrm .NET**, **FastAPI Gateway** ve **Node wa-worker** ayrımı bozulmayacak. Gateway’in worker ile konuştuğu HTTP kontratı aynı kalacak; değişiklik sadece `wa-worker` içinde yapılacak.
+
+Karar: `whatsapp-web.js` tamamen kaldırılacak, fallback bırakılmayacak. Worker tek provider olarak **WhiskeySockets/Baileys** kullanacak. Bu geçiş Chromium/Puppeteer bağımlılığını kaldırır, container’ı hafifletir ve multi-tenant session yönetimini daha kontrollü hale getirir. Buna karşılık Baileys daha düşük seviyeli olduğu için auth-state, reconnect, LID/PN mapping ve inbound mesaj parse işleri bilinçli yazılacak.
+
+## Ana Mimari Değişiklikleri
+
+- `wa-worker` dış API’si değişmeyecek:
+  - `GET /health`
+  - `POST /clinics/:clinicId/connect`
+  - `POST /clinics/:clinicId/disconnect`
+  - `GET /clinics/:clinicId/status`
+  - `GET /clinics/:clinicId/qr`
+  - `POST /clinics/:clinicId/send`
+- `gateway-api/app/worker_client.py` değişmeyecek veya yalnızca timeout/error toleransı için küçük uyum alacak.
+- `whatsapp-web.js`, `LocalAuth`, Puppeteer, Chromium ve browser session mantığı tamamen silinecek.
+- Worker içinde modüler yapı kurulacak:
+  - HTTP server: Express endpointleri ve request validation.
+  - Baileys provider: socket lifecycle, QR, send, inbound.
+  - Session store: klinik bazlı Baileys auth-state persist.
+  - Message utils: telefon normalize, JID çözümleme, inbound text extraction.
+- Mevcut `sessions` volume korunacak ama iç yapı Baileys’e göre değişecek:
+  - `sessions/baileys/{clinicId}/auth.json`
+  - `sessions/baileys/{clinicId}/keys/*.json`
+  - `sessions/baileys/{clinicId}/messages/*.json` minimum getMessage cache için.
+
+## Eski Kodları Silme ve Baileys Geçişi
+
+- `wa-worker/package.json`:
+  - kaldır: `whatsapp-web.js`
+  - ekle: `baileys`, `pino`, `@hapi/boom`
+  - mevcut: `express`, `axios`, `qrcode` kalır.
+- `wa-worker/Dockerfile`:
+  - kaldır: `PUPPETEER_SKIP_DOWNLOAD`, `PUPPETEER_EXECUTABLE_PATH`
+  - kaldır: `chromium`, `fonts-liberation`
+  - Node 22 slim kalır.
+- `docker-compose.yml`:
+  - `wa-worker.shm_size: "1gb"` kaldırılır.
+  - `SESSION_ROOT=/app/sessions` kalır.
+  - worker portu local dev için aynı kalır; prod override’da dışarı açılmaması korunur.
+- `wa-worker/src/index.js` tek dosya olarak kalabilir ama önerilen uygulama daha temiz:
+  - `src/index.js`
+  - `src/baileysProvider.js`
+  - `src/sessionStore.js`
+  - `src/messageUtils.js`
+  - `src/security.js`
+
+## Baileys Davranış Tasarımı
+
+- `connect(clinicId)`:
+  - clinicId UUID validate edilir.
+  - Sadece o kliniğe ait socket yoksa oluşturulur.
+  - Baileys socket `makeWASocket` ile açılır.
+  - `markOnlineOnConnect: false` kullanılacak.
+  - `printQRInTerminal` kullanılmayacak; QR data URL worker response’unda dönecek.
+- `connection.update` mapping:
+  - QR geldiyse status `qr`
+  - connection `connecting` ise `connecting`
+  - connection `open` ise `ready`
+  - close + logged out ise `auth_failed`
+  - close + restartRequired veya transient ise socket yeniden oluşturulur
+  - close + kalıcı olmayan hata ise `disconnected`
+- `creds.update`:
+  - custom session store’a atomic şekilde yazılır.
+  - auth secret hiçbir log veya API response’a basılmaz.
+- `send`:
+  - telefon normalize edilir; geçersizse `INVALID_PHONE`.
+  - `onWhatsApp` ile numara kontrol edilir; yoksa `NOT_REGISTERED`.
+  - hedef JID bulunursa `sendMessage(jid, { text: message })`.
+  - başarıda `{ ok: true, messageId }`.
+  - Baileys/network/socket hataları `WORKER_TRANSIENT`.
+- `inbound`:
+  - `messages.upsert` sadece `type == "notify"` için işlenir.
+  - `fromMe`, group, status/broadcast mesajları V1’de ignore edilir.
+  - text extraction: `conversation`, `extendedTextMessage.text`.
+  - medya mesajları otomatik cevaplanmaz; inbound log’a `[media:image]`, `[media:document]` gibi placeholder gider.
+  - Gateway internal endpoint payload’ı değişmez.
+
+## Güvenlik ve Multi-Tenant Kuralları
+
+- Her clinicId sadece kendi Baileys socket/auth klasörüne erişir.
+- Path traversal engeli: clinicId sadece UUID regex ile kabul edilir, path join sonucu `SESSION_ROOT` dışına çıkamaz.
+- Her klinik için tek aktif socket tutulur.
+- Clinic A session’ı Clinic B mesajı gönderemez; send endpoint clinicId üzerinden socket seçer.
+- Auth-state dosyaları owner-only izinle yazılır: dizin `700`, dosyalar `600`.
+- Prod’da `WORKER_INTERNAL_TOKEN` dev default olamaz.
+- Prod’da `WORKER_SESSION_ENCRYPTION_KEY` zorunlu olacak; auth-state AES-GCM ile şifreli saklanacak.
+- Dev ortamında encryption key yoksa açık dosya saklama kabul edilebilir, ama health response bunu `sessionEncryption: "disabled"` olarak gösterecek.
+- Loglarda telefonlar mümkünse maskelenir; message body ve auth material loglanmaz.
+- Inbound otomatik cevap yok; spam/bot davranışı üretilmez.
+- Rate limit Gateway’de kalır; worker ek rate limiter yazmaz.
+
+## Gateway, Backup ve Operasyon Uyumu
+
+- Gateway claim/send/retry state machine aynen kalacak.
+- Backup script mevcut `SESSION_DIR` tar aldığı için Baileys session dosyalarını da kapsar.
+- Backup smoke testinde session archive içinde `baileys/` yapısı varsa doğrulanacak.
+- Health response genişletilecek:
+  - `provider: "baileys"`
+  - `sessions`
+  - `readySessions`
+  - `qrSessions`
+  - `authFailedSessions`
+  - `sessionEncryption`
+- UI ilk etapta değişmeyecek; QR ekranı aynı response alanlarını kullanacak.
+- README’de eski `whatsapp-web.js`/Chromium açıklamaları kaldırılıp Baileys çalışma modeli yazılacak.
+
+## Test Planı
+
+- Node worker testleri eklenecek:
+  - test runner: `vitest`
+  - HTTP test: `supertest`
+  - Baileys mock: gerçek WhatsApp bağlantısı açılmayacak.
+- Worker testleri:
+  - `/health` provider `baileys` döner.
+  - `connect` QR status üretir.
+  - `connection.open` sonrası status `ready`.
+  - `disconnect` sadece ilgili clinic socket’ini kapatır.
+  - Clinic A socket’i Clinic B mesajı gönderemez.
+  - invalid clinicId `400`.
+  - invalid phone `INVALID_PHONE`.
+  - `onWhatsApp` boşsa `NOT_REGISTERED`.
+  - successful send `messageId` döner.
+  - transient Baileys send hatası `WORKER_TRANSIENT`.
+  - inbound `fromMe` ignore edilir.
+  - inbound text Gateway’e forward edilir.
+  - group/status/broadcast inbound ignore edilir.
+  - auth-state clinic klasörleri ayrıdır.
+  - path traversal denemeleri reddedilir.
+- Gateway regression:
+  - mevcut pytest suite aynen çalışmalı.
+  - sender retry/permanent failure testleri değişmeden geçmeli.
+- Full doğrulama:
+  - `npm test` worker içinde geçmeli.
+  - `docker compose build wa-worker` Chrome kurmadan başarılı olmalı.
+  - `./scripts/test-all.sh` geçmeli.
+  - Backup smoke geçmeli.
+  - Local manuel smoke: iki clinic için ayrı QR/session/status doğrulanmalı.
+
+## Kabul Kriterleri
+
+- Repo içinde `whatsapp-web.js`, `LocalAuth`, `puppeteer`, `chromium`, `PUPPETEER_*` izi kalmamalı.
+- Gateway ve VoxCrm public kontratları bozulmamalı.
+- Her klinik kendi WhatsApp session’ıyla çalışmalı.
+- Inbound cevap üretmemeli, sadece loglamalı.
+- Auth-state tenant ayrımı ve dosya izinleri testlerle korunmalı.
+- Worker Docker image daha hafif olmalı ve `shm_size` gerektirmemeli.
+- Tüm otomatik testler yeşil olmalı.
+
+## Varsayımlar
+
+- WhatsApp Cloud API bu fazda yok.
+- Pairing code login bu fazda yok; V1 QR ile devam eder.
+- Baileys v7 kullanılacak.
+- `useMultiFileAuthState` prod implementation olarak kullanılmayacak; sadece davranışı referans alınacak.
+- Eski `whatsapp-web.js` fallback bırakılmayacak; geçiş tamamlandığında worker tek provider Baileys olacak.
