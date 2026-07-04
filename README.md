@@ -1,26 +1,26 @@
-# VoxCRM - Veteriner Klinik Yonetim Sistemi
+# VoxCRM - Veteriner Klinik Yönetim Sistemi
 
-VoxCRM, veteriner klinikleri ve klinik aglarini (bayiler) yonetmek icin tasarlanmis, cok kiracili (multi-tenant) bir CRM sistemidir. Hasta ve sahip yonetimi, randevu planlama, mali takip ve otomatik WhatsApp bildirimleri tek bir platformda bir araya getirilmistir.
+VoxCRM, veteriner klinikleri ve klinik ağlarını (bayiler) yönetmek için tasarlanmış, çok kiracılı (multi-tenant) bir CRM sistemidir. Hasta ve sahip yönetimi, randevu planlama, mali takip ve otomatik WhatsApp bildirimleri tek bir platformda bir araya getirilmiştir.
 
 ---
 
-## Ekran Goruntuleri
+## Ekran Görüntüleri
 
-**Giris Sayfasi**
+**Giriş Sayfası**
 
-![Giris Sayfasi](docs/screenshots/login.png)
+![Giriş Sayfası](docs/screenshots/login.png)
 
-**Goçsterge Paneli**
+**Gösterge Paneli**
 
-![Gosterge Paneli](docs/screenshots/dashboard.png)
+![Gösterge Paneli](docs/screenshots/dashboard.png)
 
-**Musteri Listesi**
+**Müşteri Listesi**
 
-![Musteri Listesi](docs/screenshots/petowner.png)
+![Müşteri Listesi](docs/screenshots/petowner.png)
 
 **WhatsApp Entegrasyonu**
 
-![WhatsApp Sayfasi](docs/screenshots/whatsapp.png)
+![WhatsApp Sayfası](docs/screenshots/whatsapp.png)
 
 **Bayi Paneli**
 
@@ -30,24 +30,24 @@ VoxCRM, veteriner klinikleri ve klinik aglarini (bayiler) yonetmek icin tasarlan
 
 ## Sistem Mimarisi
 
-Proje tek bir monorepo altinda uc ana bolumden olusuyor:
+Proje tek bir monorepo altında üç ana bölümden oluşuyor:
 
 ```
 VoxCRM
 ├── VoxCrm.*         (C# / .NET 8)  <-- Ana uygulama
-├── whatsapp-gateway (Python + Node) <-- WhatsApp gecidi
-└── backups/         (Bash + pg_dump) <-- Yedekleme klasoru
+├── whatsapp-gateway (Python + Node) <-- WhatsApp geçidi
+└── backups/         (Bash + pg_dump) <-- Yedekleme klasörü
 ```
 
-Servisler arasi iletisim asagidaki gibi isler:
+Servisler arası iletişim aşağıdaki gibi işler:
 
 ```
-Tarayici
+Tarayıcı
    |
    v
 VoxCrm.Web (:5114)
    |   |
-   |   +-- WhatsAppNotifications tablosuna kayit ekler (Pending)
+   |   +-- WhatsAppNotifications tablosuna kayıt ekler (Pending)
    |
    v
 VoxCrm.Api (:5072)   <-- gateway-api buraya poll eder
@@ -61,160 +61,160 @@ whatsapp-gateway/gateway-api (:8088)  [Python / FastAPI]
 whatsapp-gateway/wa-worker (:8090)    [Node.js / Baileys]
    |
    v
-WhatsApp (gercek mesaj gonderiyor)
+WhatsApp (gerçek mesaj gönderiliyor)
 ```
 
-Bildirim akisi kasitli olarak asenkrondir: Web uygulamasi dogrudan gateway'i cagirmaz. Mesaj once `WhatsAppNotifications` tablosuna `Pending` durumuyla yazilir; gateway periyodik olarak bu tabloyu okur, kilitleme (SELECT FOR UPDATE SKIP LOCKED) yaparak mesajlari isleme alir ve WhatsApp'a iletir.
+Bildirim akışı kasıtlı olarak asenkroniktir: Web uygulaması doğrudan gateway'i çağırmaz. Mesaj önce `WhatsAppNotifications` tablosuna `Pending` durumuyla yazılır; gateway periyodik olarak bu tabloyu okur, kilitleme (SELECT FOR UPDATE SKIP LOCKED) yaparak mesajları işleme alır ve WhatsApp'a iletir.
 
 ---
 
-## Klasor Yapisi ve Amaci
+## Klasör Yapısı ve Amacı
 
 ### VoxCrm.Domain/
 
-**Amac:** Uygulamanin cekirdek is mantigi ve entity'leri burada tanimlidir. Hicbir disariya bagimlilik yoktur; sadece saf C# siniflarindan olusur.
+**Amaç:** Uygulamanın çekirdek iş mantığı ve entity'leri burada tanımlıdır. Hiçbir dışarıya bağımlılık yoktur; sadece saf C# sınıflarından oluşur.
 
-**Icerik:**
-- `Entities/` — Tum veritabani entity'leri (`Clinic`, `PetOwner`, `Patient`, `Appointment`, `VaccinationRecord`, `WhatsAppNotification`, vb.)
-- `Common/` — Paylasilan arayuzler (`ITenantEntity` gibi tenant izolasyonunu zorunlu kilan arayuzler)
+**İçerik:**
+- `Entities/` — Tüm veritabanı entity'leri (`Clinic`, `PetOwner`, `Patient`, `Appointment`, `VaccinationRecord`, `WhatsAppNotification` vb.)
+- `Common/` — Paylaşılan arayüzler (`ITenantEntity` gibi tenant izolasyonunu zorunlu kılan arayüzler)
 
-**Kiminle konusur:** Hicbir servis katmaniyla dogrudan iletisme gecmez. Tum diger katmanlar Domain'e baglidir, Domain hicbir katmana bagimli degildir.
+**Kiminle konuşur:** Hiçbir servis katmanıyla doğrudan iletişime geçmez. Tüm diğer katmanlar Domain'e bağlıdır, Domain hiçbir katmana bağımlı değildir.
 
 ---
 
 ### VoxCrm.Application/
 
-**Amac:** CQRS (Command Query Responsibility Segregation) kalibini hayata geciren katman. Komutlar (yazma), sorgular (okuma) ve is kurallari buradadir.
+**Amaç:** CQRS (Command Query Responsibility Segregation) kalıbını hayata geçiren katman. Komutlar (yazma), sorgular (okuma) ve iş kuralları buradadır.
 
-**Kiminle konusur:** Sadece `VoxCrm.Domain` entity'lerini kullanir. Infrastructure ve Web katmanlari tarafindan cagrilir.
+**Kiminle konuşur:** Sadece `VoxCrm.Domain` entity'lerini kullanır. Infrastructure ve Web katmanları tarafından çağrılır.
 
 ---
 
 ### VoxCrm.Infrastructure/
 
-**Amac:** Veritabani erisimi, migration'lar ve zamanlanmis arka plan isleri burada yer alir.
+**Amaç:** Veritabanı erişimi, migration'lar ve zamanlanmış arka plan işleri burada yer alır.
 
-**Icerik:**
-- `Data/` — `VoxCrmDbContext` (Entity Framework Core), `DbSeeder` (baslangic test verileri)
-- `Migrations/` — PostgreSQL sema migration dosyalari
-- `Jobs/` — `ReminderJob.cs`: Hangfire tarafindan her gun tetiklenen asi hatirlatma islemi; son tarihi gecmis `VaccinationRecord` kayitlari icin `WhatsAppNotifications` tablosuna otomatik `Pending` kayit olusturur
+**İçerik:**
+- `Data/` — `VoxCrmDbContext` (Entity Framework Core), `DbSeeder` (başlangıç test verileri)
+- `Migrations/` — PostgreSQL şema migration dosyaları
+- `Jobs/` — `ReminderJob.cs`: Hangfire tarafından her gün tetiklenen aşı hatırlatma işlemi; son tarihi geçmiş `VaccinationRecord` kayıtları için `WhatsAppNotifications` tablosuna otomatik `Pending` kayıt oluşturur
 
-**Kiminle konusur:** `VoxCrm.Domain` entity'lerini kullanir. `VoxCrm.Web` ve `VoxCrm.Api` tarafindan servis olarak inject edilir.
+**Kiminle konuşur:** `VoxCrm.Domain` entity'lerini kullanır. `VoxCrm.Web` ve `VoxCrm.Api` tarafından servis olarak inject edilir.
 
 ---
 
 ### VoxCrm.Web/
 
-**Amac:** Klinik ve bayi kullanicilari icin ASP.NET Core MVC web uygulamasi. Bootstrap 5 ve Razor view'lar ile olusturulmus UI.
+**Amaç:** Klinik ve bayi kullanıcıları için ASP.NET Core MVC web uygulaması. Bootstrap 5 ve Razor view'larla oluşturulmuş arayüz.
 
-**Icerik:**
+**İçerik:**
 - `Controllers/` — 13 controller: Auth, Home, PetOwner, Patient, Appointment, Vaccination, Finance, WhatsApp, ServiceItem, VaccineType, Muayene, ClinicSettings, Dealer
-- `Views/` — Razor sayfalari (her controller icin ayri klasor)
-- `Services/` — HTTP istemcileri ve is mantigi servisleri
-- `wwwroot/` — Statik dosyalar (CSS, JS, resimler)
+- `Views/` — Razor sayfaları (her controller için ayrı klasör)
+- `Services/` — HTTP istemcileri ve iş mantığı servisleri
+- `wwwroot/` — Statik dosyalar (CSS, JS, görseller)
 
-**Onemli guvenlik mekanizmalari:**
+**Önemli güvenlik mekanizmaları:**
 - `[Bind("Id,Alan1,Alan2")]` attribute'u ile Mass Assignment koruması
-- `ModelState.Remove()` ile tenant ID'nin form gonderiminde manipüle edilmesi engellenir
-- Global Query Filter'lar sayesinde her sorgu otomatik olarak o klinige ait verileri getirir (tenant izolasyonu)
+- `ModelState.Remove()` ile tenant ID'nin form gönderiminde manipüle edilmesi engellenir
+- Global Query Filter'lar sayesinde her sorgu otomatik olarak o kliniğe ait verileri getirir (tenant izolasyonu)
 
-**Kiminle konusur:** PostgreSQL'e `VoxCrmDbContext` uzerinden erisir. `whatsapp-gateway/gateway-api`'ye JWT imzali HTTP istekleri atar (baglanti durumu, QR kodu). Hangfire panel'i icerir.
+**Kiminle konuşur:** PostgreSQL'e `VoxCrmDbContext` üzerinden erişir. `whatsapp-gateway/gateway-api`'ye JWT imzalı HTTP istekleri atar (bağlantı durumu, QR kodu). Hangfire panelini içerir.
 
 ---
 
 ### VoxCrm.Api/
 
-**Amac:** Yalnizca `whatsapp-gateway`'e acilan REST API. Tarayiciya veya son kullaniciya acik degildir. JWT (HS256, scope tabanli) ile korunur.
+**Amaç:** Yalnızca `whatsapp-gateway`'e açılan REST API. Tarayıcıya veya son kullanıcıya açık değildir. JWT (HS256, scope tabanlı) ile korunur.
 
-**Endpointler:**
-- `POST /api/whatsapp/notifications/claim` — Gateway, isleme alacagi mesajlari ceker (SELECT FOR UPDATE SKIP LOCKED)
+**Endpoint'ler:**
+- `POST /api/whatsapp/notifications/claim` — Gateway, işleme alacağı mesajları çeker (SELECT FOR UPDATE SKIP LOCKED)
 - `POST /api/whatsapp/notifications/{id}/status` — Gateway, mesaj sonucunu bildirir
-- `POST /api/whatsapp/notifications/recover-expired-processing` — Kilit suresi dolan mesajlari kurtarir
-- `POST /api/whatsapp/inbound` — WhatsApp'tan gelen mesajlari kaydeder
-- `GET /api/health` — Saglik kontrolu
+- `POST /api/whatsapp/notifications/recover-expired-processing` — Kilit süresi dolan mesajları kurtarır
+- `POST /api/whatsapp/inbound` — WhatsApp'tan gelen mesajları kaydeder
+- `GET /api/health` — Sağlık kontrolü
 
-**Kiminle konusur:** Sadece `whatsapp-gateway/gateway-api` bu API'yi cagirir. PostgreSQL'e `VoxCrmDbContext` uzerinden dogrudan erisir.
+**Kiminle konuşur:** Sadece `whatsapp-gateway/gateway-api` bu API'yi çağırır. PostgreSQL'e `VoxCrmDbContext` üzerinden doğrudan erişir.
 
 ---
 
 ### VoxCrm.IntegrationTests/
 
-**Amac:** Uygulama genelinde entegrasyon testleri. API endpoint davranislari ve veritabani katmani burada test edilir.
+**Amaç:** Uygulama genelinde entegrasyon testleri. API endpoint davranışları ve veritabanı katmanı burada test edilir.
 
 ---
 
 ### whatsapp-gateway/
 
-**Amac:** VoxCRM'den bagimsiz calisabilen, iki servisten olusan WhatsApp gecidi. `voxcrm-whatsapp-gateway` deposundan monorepo'ya tasindi.
+**Amaç:** VoxCRM'den bağımsız çalışabilen, iki servisten oluşan WhatsApp geçidi.
 
 #### whatsapp-gateway/gateway-api/ (Python / FastAPI)
 
-**Gorev:** Orchestrasyon servisi. VoxCrm.Api'yi poll eder, gonderim siralamasini yonetir, klinik WhatsApp durumlarini takip eder, kimlik dogrulama ve saglik endpointlerini sunar.
+**Görev:** Orkestrasyon servisi. VoxCrm.Api'yi poll eder, gönderim sıralamasını yönetir, klinik WhatsApp durumlarını takip eder, kimlik doğrulama ve sağlık endpoint'lerini sunar.
 
 **Temel dosyalar:**
-- `app/main.py` — API endpoint'leri, polling dongusu, saglik kontrolu
-- `app/sender.py` — Klinik bazli gonderim zamanlayici (per-clinic interval + jitter)
-- `app/voxcrm_client.py` — VoxCrm.Api ile HTTP konusmasi (claim, status)
-- `app/worker_client.py` — wa-worker ile HTTP konusmasi (send, status)
-- `app/auth.py` — JWT uretimi ve dogrulamasi
-- `app/config.py` — `.env` dosyasindan ortam degiskenleri
-- `alembic/` — Gateway veritabani migration'lari (PostgreSQL: `voxcrm_gateway_dev`)
+- `app/main.py` — API endpoint'leri, polling döngüsü, sağlık kontrolü
+- `app/sender.py` — Klinik bazlı gönderim zamanlayıcı (per-clinic interval + jitter)
+- `app/voxcrm_client.py` — VoxCrm.Api ile HTTP konuşması (claim, status)
+- `app/worker_client.py` — wa-worker ile HTTP konuşması (send, status)
+- `app/auth.py` — JWT üretimi ve doğrulaması
+- `app/config.py` — `.env` dosyasından ortam değişkenleri
+- `alembic/` — Gateway veritabanı migration'ları (PostgreSQL: `voxcrm_gateway_dev`)
 
 #### whatsapp-gateway/wa-worker/ (Node.js / Baileys)
 
-**Gorev:** WhatsApp linked-device protokolunu yoneten ic servis. QR kod yasam dongusu, oturum sifreleme ve gercek mesaj iletiminden sorumludur. Internete dogrudan bu servis baglanir; gateway-api ve VoxCrm.Web'e kapatilidir.
+**Görev:** WhatsApp linked-device protokolünü yöneten iç servis. QR kod yaşam döngüsü, oturum şifreleme ve gerçek mesaj iletiminden sorumludur. İnternete doğrudan bu servis bağlanır; gateway-api ve VoxCrm.Web'e kapatılıdır.
 
 **Temel dosyalar:**
-- `src/baileysProvider.js` — Baileys kutuphanesi entegrasyonu, oturum yonetimi
-- `src/sessionStore.js` — Klinik bazli oturum saklama ve sifreleme
-- `src/security.js` — Ic token dogrulamasi (gateway-api'den gelen istekleri authenticate eder)
+- `src/baileysProvider.js` — Baileys kütüphanesi entegrasyonu, oturum yönetimi
+- `src/sessionStore.js` — Klinik bazlı oturum saklama ve şifreleme
+- `src/security.js` — İç token doğrulaması (gateway-api'den gelen istekleri doğrular)
 - `src/app.js` — Express endpoint'leri (send, connect, disconnect, status, qr)
 
 #### whatsapp-gateway/scripts/
 
-**Gorev:** Bakim ve yedekleme araclari.
+**Görev:** Bakım ve yedekleme araçları.
 
-- `backup.sh` — PostgreSQL dump (voxcrm_dev + voxcrm_gateway_dev), klinik bazli JSON exportu, WhatsApp session arsivi. Ozel klasorler: `backups/daily/`, `backups/weekly/`, `backups/monthly/`
-- `restore.sh` — Belirlenen backup snapshot'ini yerel veritabanina yukler (kasitli olarak interaktif; yanlislikla calistirilmaz)
-- `test-all.sh` — .NET build + NuGet audit + pytest + Vitest + syntax check + backup smoke test'ini sirayla calistirir
-- `test-backup-smoke.sh` — Gercek veri silmeden backup script'ini test eder
+- `backup.sh` — PostgreSQL dump (voxcrm_dev + voxcrm_gateway_dev), klinik bazlı JSON export, WhatsApp session arşivi. Hedef klasörler: `backups/daily/`, `backups/weekly/`, `backups/monthly/`
+- `restore.sh` — Belirlenen backup snapshot'ını yerel veritabanına yükler (kasıtlı olarak interaktif; yanlışlıkla çalıştırılmaz)
+- `test-all.sh` — .NET build + NuGet audit + pytest + Vitest + syntax check + backup smoke test'ini sırayla çalıştırır
+- `test-backup-smoke.sh` — Gerçek veri silmeden backup script'ini test eder
 
 #### whatsapp-gateway/.env.example
 
-Calistirmak icin kopyalanmasi gereken ortam degiskeni sablonu. Gercek `.env` dosyasi repoya girmez.
+Çalıştırmak için kopyalanması gereken ortam değişkeni şablonu. Gerçek `.env` dosyası repoya girmez.
 
 ---
 
 ### backups/
 
-**Amac:** Yedekleme klasoru yapisi. Gercek dump dosyalari `.gitignore` ile Git disinda tutulur; sadece klasor iskelet yapisi (`.gitkeep`) repoda yer alir.
+**Amaç:** Yedekleme klasörü yapısı. Gerçek dump dosyaları `.gitignore` ile Git dışında tutulur; sadece klasör iskelet yapısı (`.gitkeep`) repoda yer alır.
 
 ```
 backups/
-├── daily/    # Son 7 gunluk yedekler (backup.sh otomatik temizler)
-├── weekly/   # Son 4 haftanin pazartesi yedekleri
-└── monthly/  # Son 3 ayin 1. gunu yedekleri
+├── daily/    # Son 7 günlük yedekler (backup.sh otomatik temizler)
+├── weekly/   # Son 4 haftanın pazartesi yedekleri
+└── monthly/  # Son 3 ayın 1. günü yedekleri
 ```
 
-**Her snapshot icerigi:**
-- `voxcrm-db.dump` — Ana PostgreSQL veritabani (pg_dump -Fc)
-- `gateway-db.dump` — Gateway PostgreSQL veritabani
-- `clinic-{uuid}.json.gz` — Klinik bazli okunabilir JSON export (hasta, sahip, randevu, mali kayitlar, WhatsApp verileri)
-- `whatsapp-sessions.tar.gz` — Baileys oturum dosyalari arsivi
+**Her snapshot içeriği:**
+- `voxcrm-db.dump` — Ana PostgreSQL veritabanı (pg_dump -Fc)
+- `gateway-db.dump` — Gateway PostgreSQL veritabanı
+- `clinic-{uuid}.json.gz` — Klinik bazlı okunabilir JSON export (hasta, sahip, randevu, mali kayıtlar, WhatsApp verileri)
+- `whatsapp-sessions.tar.gz` — Baileys oturum dosyaları arşivi
 
 ---
 
 ### docs/screenshots/
 
-**Amac:** README icin uygulama ekran goruntuleri.
+**Amaç:** README içi uygulama ekran görüntüleri.
 
 ---
 
-## Servisler Arasi Iliski Haritasi
+## Servisler Arası İlişki Haritası
 
 ```
 +---------------------------+
-|       Tarayici (UI)       |
+|       Tarayıcı (UI)       |
 +---------------------------+
             |
             v
@@ -237,7 +237,7 @@ backups/
 |    FastAPI :8088           |     | voxcrm_gateway_dev|
 +---------------------------+     +-------------------+
             |
-            | (HTTP, ic token)
+            | (HTTP, iç token)
             v
 +---------------------------+     +-------------------+
 |      wa-worker            |---> | WhatsApp          |
@@ -247,66 +247,65 @@ backups/
 
 ---
 
-## Teknoloji Yigini
+## Teknoloji Yığını
 
 | Katman | Teknoloji |
 |--------|-----------|
-| Web Uygulamasi | C# / .NET 8, ASP.NET Core MVC, Razor Pages |
+| Web Uygulaması | C# / .NET 8, ASP.NET Core MVC, Razor Pages |
 | API | C# / .NET 8, ASP.NET Core Minimal API |
 | ORM | Entity Framework Core 9, Code-First Migrations |
-| Veritabani | PostgreSQL 16 |
-| Arka Plan Isleri | Hangfire (PostgreSQL storage) |
-| WhatsApp Gateway | Python 3.12 / FastAPI, SQLAlchemy, Alembic |
-| WhatsApp Istemci | Node.js 22 / Baileys (linked-device) |
-| Container | Docker Compose (gelistirme), OrbStack (yerel) |
-| Frontend | Bootstrap 5, jQuery, Vanilla CSS/JS |
+| Veritabanı | PostgreSQL 16 |
+| Arka Plan İşleri | Hangfire (PostgreSQL storage) |
+| WhatsApp Geçidi | Python 3.12 / FastAPI, SQLAlchemy, Alembic |
+| WhatsApp İstemci | Node.js 22 / Baileys (linked-device) |
+| Container | Docker Compose (geliştirme), OrbStack (yerel) |
+| Ön Yüz | Bootstrap 5, jQuery, Vanilla CSS/JS |
 
 ---
 
-## Kurulum ve Calistirma
+## Kurulum ve Çalıştırma
 
-### Onkosullar
+### Ön Koşullar
 
 - .NET 8 SDK
 - Python 3.12
 - Node.js 22
 - PostgreSQL 16 (OrbStack veya Docker)
-- Redis (gateway icin)
+- Redis (gateway için)
 
-### 1. Veritabani Olustur
+### 1. Veritabanını Oluştur
 
 ```bash
-# OrbStack veya Docker ile:
 docker start voxcrm-postgres voxcrm-redis
 ```
 
-### 2. Ana Uygulamayi Baslat
+### 2. Ana Uygulamayı Başlat
 
 ```bash
-# Baglanti ayarlarini guncelle:
+# Bağlantı ayarlarını güncelle:
 # VoxCrm.Web/appsettings.Development.json
 # VoxCrm.Api/appsettings.Development.json
 
-# Migration'lari uygula:
+# Migration'ları uygula:
 dotnet ef database update --project VoxCrm.Infrastructure --startup-project VoxCrm.Web
 
-# API'yi baslat:
+# API'yi başlat:
 dotnet run --project VoxCrm.Api
 
-# Web uygulamasini baslat:
+# Web uygulamasını başlat:
 dotnet run --project VoxCrm.Web
 ```
 
-### 3. WhatsApp Gateway'i Baslat
+### 3. WhatsApp Gateway'i Başlat
 
 ```bash
 cd whatsapp-gateway
 
-# .env olustur:
+# .env oluştur:
 cp .env.example .env
-# .env icindeki VOXCRM_API_BASE_URL degerini duzenle
+# .env içindeki VOXCRM_API_BASE_URL değerini düzenle
 
-# Docker ile (onerilen):
+# Docker ile (önerilen):
 docker compose up -d gateway-api wa-worker
 
 # Veya elle:
@@ -321,22 +320,22 @@ npm install
 npm run dev
 ```
 
-### 4. WhatsApp Baglantisi
+### 4. WhatsApp Bağlantısı
 
-Tarayicida `VoxCrm.Web > WhatsApp` menusunden klinige ait "Bagla" dugmesine tiklayarak QR kod taranir. QR kodunu wa-worker uretir, gateway-api araciligiyla Web'e iletilir.
+Tarayıcıda `VoxCrm.Web > WhatsApp` menüsünden kliniğe ait "Bağla" düğmesine tıklayarak QR kod taranır. QR kodunu wa-worker üretir, gateway-api aracılığıyla Web'e iletilir.
 
 ---
 
 ## Yedekleme
 
 ```bash
-# Gunluk yedek al:
+# Günlük yedek al:
 ./whatsapp-gateway/scripts/backup.sh
 
-# Yedekler su klasore yazilir:
+# Yedekler şu klasöre yazılır:
 # backups/daily/YYYYMMDDTHHMMSSZ/
 
-# Geri yukle (dikkatli kullan, yerel veritabanini degistirir):
+# Geri yükle (dikkatli kullan, yerel veritabanını değiştirir):
 ./whatsapp-gateway/scripts/restore.sh backups/daily/<timestamp>
 ```
 
@@ -345,7 +344,7 @@ Tarayicida `VoxCrm.Web > WhatsApp` menusunden klinige ait "Bagla" dugmesine tikl
 ## Testler
 
 ```bash
-# Tum test suiti (build + NuGet + pytest + Vitest + backup smoke):
+# Tüm test süreci (build + NuGet + pytest + Vitest + backup smoke):
 ./whatsapp-gateway/scripts/test-all.sh
 
 # Sadece .NET testleri:
@@ -365,12 +364,12 @@ npm test
 
 ---
 
-## Test Kullanicilari (Gelistirme Ortami)
+## Test Kullanıcıları (Geliştirme Ortamı)
 
-Veritabani ilk calismada `DbSeeder` tarafindan asagidaki test verileriyle doldurulur:
+Veritabanı ilk çalışmada `DbSeeder` tarafından aşağıdaki test verileriyle doldurulur:
 
-| Rol | E-posta | Sifre |
+| Rol | E-posta | Şifre |
 |-----|---------|-------|
-| Bayi Yoneticisi | admin@voxcrm.com | Admin123! |
+| Bayi Yöneticisi | admin@voxcrm.com | Admin123! |
 | Klinik - Mutlu Patiler | iletisim@mutlupatiler.com | Klinik123! |
-| Klinik - Sifa Vet | bilgi@sifavet.com | Klinik123! |
+| Klinik - Şifa Vet | bilgi@sifavet.com | Klinik123! |
