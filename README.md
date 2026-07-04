@@ -16,7 +16,6 @@ VoxCRM, veteriner klinikleri ve klinik ağlarını (bayiler) yönetmek için tas
 
 **Müşteri Listesi**
 
-![Müşteri Listesi](docs/screenshots/petowner.png)
 
 **WhatsApp Entegrasyonu**
 
