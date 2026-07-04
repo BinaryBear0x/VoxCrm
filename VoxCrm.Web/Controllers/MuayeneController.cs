@@ -31,8 +31,16 @@ public class MuayeneController : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(Muayene model)
+    public async Task<IActionResult> Create(
+        [Bind("PatientId,AppointmentId,Subjective,Objective,Assessment,Plan,WeightAtVisit,Temperature")] Muayene model)
     {
+        // Sistem alanları ve navigasyon özellikleri doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(Muayene.ClinicID));
+        ModelState.Remove(nameof(Muayene.CreatedAt));
+        ModelState.Remove(nameof(Muayene.IsActive));
+        ModelState.Remove(nameof(Muayene.Patient));
+        ModelState.Remove(nameof(Muayene.Appointment));
+
         if (!ModelState.IsValid)
         {
             var patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
@@ -50,7 +58,7 @@ public class MuayeneController : Controller
         }
 
         _context.Muayeneler.Add(model);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
         TempData["Success"] = "Muayene kaydı başarıyla oluşturuldu.";
         
         return RedirectToAction(nameof(Index));
@@ -68,9 +76,17 @@ public class MuayeneController : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Guid id, Muayene model)
+    public async Task<IActionResult> Edit(Guid id,
+        [Bind("ID,PatientId,AppointmentId,Subjective,Objective,Assessment,Plan,WeightAtVisit,Temperature")] Muayene model)
     {
         if (id != model.ID) return BadRequest();
+
+        // Sistem alanları ve navigasyon özellikleri doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(Muayene.ClinicID));
+        ModelState.Remove(nameof(Muayene.CreatedAt));
+        ModelState.Remove(nameof(Muayene.IsActive));
+        ModelState.Remove(nameof(Muayene.Patient));
+        ModelState.Remove(nameof(Muayene.Appointment));
 
         if (!ModelState.IsValid)
         {
@@ -79,7 +95,7 @@ public class MuayeneController : Controller
             return View(model);
         }
 
-        var existing = await _context.Muayeneler.FindAsync(id);
+        var existing = await _context.Muayeneler.FindAsync(id); // Global Query Filter: başka klinik = null
         if (existing == null) return NotFound();
 
         var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
@@ -91,13 +107,14 @@ public class MuayeneController : Controller
             return View(model);
         }
 
-        existing.PatientId = model.PatientId;
-        existing.Subjective = model.Subjective;
-        existing.Objective = model.Objective;
-        existing.Assessment = model.Assessment;
-        existing.Plan = model.Plan;
+        existing.PatientId     = model.PatientId;
+        existing.Subjective    = model.Subjective;
+        existing.Objective     = model.Objective;
+        existing.Assessment    = model.Assessment;
+        existing.Plan          = model.Plan;
         existing.WeightAtVisit = model.WeightAtVisit;
-        existing.Temperature = model.Temperature;
+        existing.Temperature   = model.Temperature;
+        // ClinicID, CreatedAt, IsActive → hiç dokunulmaz ✅
 
         await _context.SaveChangesAsync();
         TempData["Success"] = "Muayene kaydı güncellendi.";

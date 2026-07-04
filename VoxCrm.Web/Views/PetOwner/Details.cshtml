@@ -1,6 +1,11 @@
 @model VoxCrm.Domain.Entities.PetOwner
 @{
-    ViewData["Title"] = $"{Model.FirstName} {Model.LastName}";
+    var displayName = string.Join(" ", new[] { Model.FirstName, Model.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    displayName = string.IsNullOrWhiteSpace(displayName) ? "Müşteri" : displayName;
+    var avatarText = string.IsNullOrWhiteSpace(Model.FirstName)
+        ? "?"
+        : Model.FirstName[..1].ToUpperInvariant();
+    ViewData["Title"] = displayName;
     ViewData["ActiveMenu"] = "petowners";
 }
 
@@ -10,7 +15,7 @@
         <a href="/PetOwner" class="text-muted text-decoration-none small">
             <i class="bi bi-arrow-left me-1"></i> Müşteriler
         </a>
-        <h1 class="h3 fw-bold text-dark mb-0 mt-1">@Model.FirstName @Model.LastName</h1>
+        <h1 class="h3 fw-bold text-dark mb-0 mt-1">@displayName</h1>
     </div>
     <div class="d-flex align-items-center gap-2">
         <a href="/PetOwner/Edit/@Model.ID" class="btn btn-sm btn-outline-primary">
@@ -33,9 +38,9 @@
                 <!-- Avatar -->
                 <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center mx-auto mb-3"
                      style="width:72px;height:72px;">
-                    <span class="text-white fw-bold fs-3">@Model.FirstName[0]</span>
+                    <span class="text-white fw-bold fs-3">@avatarText</span>
                 </div>
-                <h5 class="fw-bold mb-0">@Model.FirstName @Model.LastName</h5>
+                <h5 class="fw-bold mb-0">@displayName</h5>
                 <p class="text-muted small mb-3">Hayvan Sahibi</p>
                 @if (Model.WhatsAppConsent)
                 {

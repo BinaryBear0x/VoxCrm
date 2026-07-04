@@ -32,6 +32,9 @@ namespace VoxCrm.Infrastructure.Data
         public DbSet<Muayene> Muayeneler { get; set; } 
         public DbSet<Debt> Borçlar { get; set; }
         public DbSet<WhatsAppNotification> WhatsAppNotifications { get; set; }
+        public DbSet<WhatsAppTemplate> WhatsAppTemplates { get; set; }
+        public DbSet<WhatsAppInboundMessage> WhatsAppInboundMessages { get; set; }
+        public DbSet<SystemAuditLog> SystemAuditLogs { get; set; }
         public DbSet<ServiceItem> ServiceItems { get; set; }
         public DbSet<Payment> Payments { get; set; }
 
@@ -39,24 +42,43 @@ namespace VoxCrm.Infrastructure.Data
         {
             base.OnModelCreating(builder); // Identity tablolarının (Kullanıcı, Rol) düzgün oluşması için şart!
 
-            // Geliştirici veya Migration anında servis yoksa filtreyi atla, aksi halde filtreyi uygula
-            if (_tenantService != null)
-            {
-                
-                // Sisteme her veritabanı sorgusu atıldığında, arka planda EF Core otomatik olarak
-                // "WHERE ClinicID = Aktif_Kullanıcının_Kliniği" filtresini ekleyecektir.
-                
-                builder.Entity<PetOwner>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
-                builder.Entity<Patient>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
-                builder.Entity<Appointment>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
-                builder.Entity<Muayene>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
-                builder.Entity<Debt>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
-                builder.Entity<PatientOwner>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
-                
-                builder.Entity<WhatsAppNotification>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
-                builder.Entity<ServiceItem>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
-                builder.Entity<Payment>().HasQueryFilter(e => e.ClinicID == _tenantService.GetClinicId());
-            }
+            // EF model cache ilk context'e göre paylaşıldığı için filtreler her zaman modele eklenir.
+            // Tenant servisi olmayan API/migration akışları tüm veriyi görür; Web tenant context'i klinik scope uygular.
+            builder.Entity<PetOwner>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<Patient>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<Appointment>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<Muayene>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<Debt>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<PatientOwner>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<WhatsAppNotification>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<WhatsAppTemplate>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<WhatsAppInboundMessage>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<ServiceItem>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<Payment>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+
+            builder.Entity<WhatsAppNotification>()
+                .HasIndex(n => new { n.ClinicID, n.NotificationType, n.Status, n.NextAttemptAt });
+
+            builder.Entity<WhatsAppNotification>()
+                .HasIndex(n => n.GatewayMessageId);
+
+            builder.Entity<WhatsAppTemplate>()
+                .HasIndex(t => new { t.ClinicID, t.NotificationType, t.IsActive });
+
+            builder.Entity<WhatsAppInboundMessage>()
+                .HasIndex(m => new { m.ClinicID, m.ReceivedAt });
+
+            builder.Entity<SystemAuditLog>()
+                .HasIndex(l => l.CreatedAt);
+
+            builder.Entity<SystemAuditLog>()
+                .HasIndex(l => new { l.DealerId, l.CreatedAt });
+
+            builder.Entity<SystemAuditLog>()
+                .HasIndex(l => new { l.ClinicId, l.CreatedAt });
+
+            builder.Entity<SystemAuditLog>()
+                .HasIndex(l => new { l.Level, l.CreatedAt });
         }
 
         public override int SaveChanges()
@@ -103,6 +125,8 @@ namespace VoxCrm.Infrastructure.Data
                 }
             }
         }
+
+        private Guid TenantClinicId => _tenantService?.GetClinicId() ?? Guid.Empty;
 
         private void NormalizeDateTimes()
         {

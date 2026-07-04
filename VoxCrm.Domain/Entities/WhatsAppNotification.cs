@@ -1,26 +1,33 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 using VoxCrm.Domain.Common;
 
 namespace VoxCrm.Domain.Entities
 {
-    //python tarafındaki wp botunun mesaj kuyruğu için kullanılacak entity. Bu entity, botun mesaj göndermesi gereken durumları temsil eder.
     public class WhatsAppNotification : BaseEntity, ITenantEntity       
     {
         public Guid ClinicID { get; set; }
 
-        public Guid PetOwnerId { get; set; } // Mesaj kime gidecek?
+        public Guid PetOwnerId { get; set; }
         public PetOwner PetOwner { get; set; } = null!;
-        public string PhoneNumber { get; set; } = string.Empty; // Gidecek numara
-        public string MessageContent { get; set; } = string.Empty; // "Sayın Ahmet Bey, Karabaş'ın kuduz aşısı gelmiştir."
+        public string PhoneNumber { get; set; } = string.Empty;
+        public string MessageContent { get; set; } = string.Empty;
+        public string NotificationType { get; set; } = WhatsAppNotificationTypes.VaccinationReminder;
+        public string Status { get; set; } = WhatsAppNotificationStatuses.Pending;
 
-        public string NotificationType { get; set; } = "Aşı"; // Aşı, Borç, Randevu, Doğum Günü
+        public DateTime? LockedAt { get; set; }
+        public string? LockedBy { get; set; }
+        public DateTime? LockExpiresAt { get; set; }
+        public int RetryCount { get; set; }
+        public DateTime? NextAttemptAt { get; set; }
+        public string? LastError { get; set; }
+        public string? GatewayMessageId { get; set; }
+        public DateTime? SentAt { get; set; }
 
-        // Bot bu statüye bakacak: "Pending" (Bekliyor), "Sent" (Gönderildi), "Failed" (Hata)
-        public string Status { get; set; } = "Pending";
-
-        public DateTime? SentAt { get; set; } // Bot mesajı başarıyla attığında bu tarihi dolduracak
-        public string? ErrorMessage { get; set; } // Eğer numara WhatsApp'ta yoksa bot buraya hata sebebini yazacak
+        [NotMapped]
+        public string? ErrorMessage
+        {
+            get => LastError;
+            set => LastError = value;
+        }
     }
 }

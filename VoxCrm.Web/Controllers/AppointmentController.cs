@@ -41,8 +41,16 @@ public class AppointmentController : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(Appointment model)
+    public async Task<IActionResult> Create(
+        [Bind("PatientId,ScheduledAt,AppointmentType,DurationMinutes,Reason,Status")] Appointment model)
     {
+        // Sistem alanları ve navigasyon özellikleri doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(Appointment.ClinicID));
+        ModelState.Remove(nameof(Appointment.CreatedAt));
+        ModelState.Remove(nameof(Appointment.IsActive));
+        ModelState.Remove(nameof(Appointment.Patient));
+        ModelState.Remove(nameof(Appointment.IsReminderSent));
+
         if (!ModelState.IsValid)
         {
             ViewBag.Patients = await _context.Patients
@@ -63,8 +71,8 @@ public class AppointmentController : Controller
         }
 
         _context.Appointments.Add(model);
-        await _context.SaveChangesAsync();
-        TempData["Success"] = "Randevu basariyla olusturuldu.";
+        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
+        TempData["Success"] = "Randevu başarıyla oluşturuldu.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -96,8 +104,16 @@ public class AppointmentController : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Appointment model)
+    public async Task<IActionResult> Edit(
+        [Bind("ID,PatientId,ScheduledAt,AppointmentType,DurationMinutes,Reason,Status")] Appointment model)
     {
+        // Sistem alanları ve navigasyon özellikleri doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(Appointment.ClinicID));
+        ModelState.Remove(nameof(Appointment.CreatedAt));
+        ModelState.Remove(nameof(Appointment.IsActive));
+        ModelState.Remove(nameof(Appointment.Patient));
+        ModelState.Remove(nameof(Appointment.IsReminderSent));
+
         if (!ModelState.IsValid)
         {
             ViewBag.Patients = await _context.Patients
@@ -107,7 +123,7 @@ public class AppointmentController : Controller
             return View(model);
         }
 
-        var existing = await _context.Appointments.FindAsync(model.ID);
+        var existing = await _context.Appointments.FindAsync(model.ID); // Global Query Filter: başka klinik = null
         if (existing == null) return NotFound();
 
         var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
@@ -121,11 +137,12 @@ public class AppointmentController : Controller
             return View(model);
         }
 
-        existing.PatientId = model.PatientId;
-        existing.ScheduledAt = model.ScheduledAt;
+        existing.PatientId       = model.PatientId;
+        existing.ScheduledAt     = model.ScheduledAt;
         existing.AppointmentType = model.AppointmentType;
         existing.DurationMinutes = model.DurationMinutes;
-        existing.Reason = model.Reason;
+        existing.Reason          = model.Reason;
+        // IsReminderSent, ClinicID, CreatedAt, IsActive → hiç dokunulmaz ✅
 
         await _context.SaveChangesAsync();
         TempData["Success"] = "Randevu başarıyla güncellendi.";

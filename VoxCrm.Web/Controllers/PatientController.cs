@@ -22,16 +22,16 @@ public class PatientController : Controller
         {
             var term = search.Trim();
             query = query.Where(p =>
-                p.Name.Contains(term) ||
-                p.Species.Contains(term) ||
+                (p.Name != null && p.Name.Contains(term)) ||
+                (p.Species != null && p.Species.Contains(term)) ||
                 (p.Breed != null && p.Breed.Contains(term)) ||
                 (p.MicrochipNumber != null && p.MicrochipNumber.Contains(term)) ||
                 (p.pasaportNumarasi != null && p.pasaportNumarasi.Contains(term)) ||
                 (p.Notes != null && p.Notes.Contains(term)) ||
                 p.Owners.Any(o =>
-                    o.PetOwner.FirstName.Contains(term) ||
-                    o.PetOwner.LastName.Contains(term) ||
-                    o.PetOwner.Phone.Contains(term) ||
+                    (o.PetOwner.FirstName != null && o.PetOwner.FirstName.Contains(term)) ||
+                    (o.PetOwner.LastName != null && o.PetOwner.LastName.Contains(term)) ||
+                    (o.PetOwner.Phone != null && o.PetOwner.Phone.Contains(term)) ||
                     (o.PetOwner.Email != null && o.PetOwner.Email.Contains(term))));
         }
 
@@ -52,19 +52,19 @@ public class PatientController : Controller
         {
             var term = q.Trim();
             query = query.Where(p =>
-                p.Name.Contains(term) ||
-                p.Species.Contains(term) ||
+                (p.Name != null && p.Name.Contains(term)) ||
+                (p.Species != null && p.Species.Contains(term)) ||
                 (p.Breed != null && p.Breed.Contains(term)) ||
                 (p.MicrochipNumber != null && p.MicrochipNumber.Contains(term)) ||
                 (p.pasaportNumarasi != null && p.pasaportNumarasi.Contains(term)) ||
                 (p.Notes != null && p.Notes.Contains(term)) ||
                 p.Owners.Any(o =>
-                    o.PetOwner.FirstName.Contains(term) ||
-                    o.PetOwner.LastName.Contains(term) ||
-                    o.PetOwner.Phone.Contains(term) ||
+                    (o.PetOwner.FirstName != null && o.PetOwner.FirstName.Contains(term)) ||
+                    (o.PetOwner.LastName != null && o.PetOwner.LastName.Contains(term)) ||
+                    (o.PetOwner.Phone != null && o.PetOwner.Phone.Contains(term)) ||
                     (o.PetOwner.Email != null && o.PetOwner.Email.Contains(term)) ||
-                    o.PetOwner.Address.Contains(term) ||
-                    o.PetOwner.Notes.Contains(term)));
+                    (o.PetOwner.Address != null && o.PetOwner.Address.Contains(term)) ||
+                    (o.PetOwner.Notes != null && o.PetOwner.Notes.Contains(term))));
         }
 
         var patients = await query
@@ -116,8 +116,16 @@ public class PatientController : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(Patient model, Guid? ownerId)
+    public async Task<IActionResult> Create(
+        [Bind("Name,Species,Breed,cinsiyet,DateOfBirth,MicrochipNumber,pasaportNumarasi,Notes")] Patient model,
+        Guid? ownerId)
     {
+        // Sistem alanları ve navigasyon özellikleri doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(Patient.ClinicID));
+        ModelState.Remove(nameof(Patient.CreatedAt));
+        ModelState.Remove(nameof(Patient.IsActive));
+        ModelState.Remove(nameof(Patient.Owners));
+
         if (!ModelState.IsValid)
         {
             ViewBag.Owners = await _context.PetOwners.OrderBy(o => o.FirstName).ToListAsync();
@@ -125,7 +133,7 @@ public class PatientController : Controller
         }
 
         _context.Patients.Add(model);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
 
         if (ownerId.HasValue && ownerId.Value != Guid.Empty)
         {
@@ -155,25 +163,34 @@ public class PatientController : Controller
 
     // POST: /Patient/Edit/{id}
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Guid id, Patient model)
+    public async Task<IActionResult> Edit(Guid id,
+        [Bind("ID,Name,Species,Breed,cinsiyet,DateOfBirth,MicrochipNumber,pasaportNumarasi,Notes")] Patient model)
     {
         if (id != model.ID) return BadRequest();
+
+        // Sistem alanları ve navigasyon özellikleri doğrulama dışı bırakılıyor
+        ModelState.Remove(nameof(Patient.ClinicID));
+        ModelState.Remove(nameof(Patient.CreatedAt));
+        ModelState.Remove(nameof(Patient.IsActive));
+        ModelState.Remove(nameof(Patient.Owners));
+
         if (!ModelState.IsValid) return View(model);
 
-        var existing = await _context.Patients.FindAsync(id);
+        var existing = await _context.Patients.FindAsync(id); // Global Query Filter: başka klinik = null
         if (existing == null) return NotFound();
 
-        existing.Name = model.Name;
-        existing.Species = model.Species;
-        existing.Breed = model.Breed;
-        existing.cinsiyet = model.cinsiyet;
-        existing.DateOfBirth = model.DateOfBirth;
-        existing.MicrochipNumber = model.MicrochipNumber;
+        existing.Name             = model.Name;
+        existing.Species          = model.Species;
+        existing.Breed            = model.Breed;
+        existing.cinsiyet         = model.cinsiyet;
+        existing.DateOfBirth      = model.DateOfBirth;
+        existing.MicrochipNumber  = model.MicrochipNumber;
         existing.pasaportNumarasi = model.pasaportNumarasi;
-        existing.Notes = model.Notes;
+        existing.Notes            = model.Notes;
+        // ClinicID, CreatedAt, IsActive → hiç dokunulmaz ✅
 
         await _context.SaveChangesAsync();
-        TempData["Success"] = $"{model.Name} başarıyla güncellendi.";
+        TempData["Success"] = $"{model.Name ?? "Hasta"} başarıyla güncellendi.";
         return RedirectToAction(nameof(Details), new { id = model.ID });
     }
 

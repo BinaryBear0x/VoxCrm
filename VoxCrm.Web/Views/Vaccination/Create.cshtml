@@ -1,12 +1,12 @@
 @{
-    ViewData["Title"] = "Asi Kaydi Ekle";
+    ViewData["Title"] = "Aşı Kaydı Ekle";
     ViewData["ActiveMenu"] = "vaccines";
 }
 
-<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
-    <div>
-        <a href="/Vaccination" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Asi Takvimi</a>
-        <h1 class="h3 fw-bold mb-0 mt-1">Asi Kaydi Ekle</h1>
+<div class="card shadow-sm mb-4">
+    <div class="card-body pb-0">
+        <a href="/Vaccination" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Aşı Takvimi</a>
+        <h1 class="h3 fw-bold mb-0 mt-1">Aşı Kaydı Ekle</h1>
     </div>
 </div>
 
@@ -19,27 +19,29 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Hasta *</label>
                         <select name="PatientId" class="form-select" required data-search-select="patient" data-required="true" data-placeholder="Hasta adı, tür, ırk, çip, sahip telefonu...">
-                            <option value="">-- Hasta Sec --</option>
+                            <option value="">-- Hasta Seç --</option>
                             @foreach (var p in (ViewBag.Patients as List<VoxCrm.Domain.Entities.Patient> ?? new()))
                             {
                                 <option value="@p.ID">@p.Name (@p.Species)</option>
                             }
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Asi Turu *</label>
-                        <select name="VaccineTypeId" class="form-select" required>
-                            <option value="">-- Asi Turu Sec --</option>
-                            @foreach (var vt in (ViewBag.VaccineTypes as List<VoxCrm.Domain.Entities.VaccineType> ?? new()))
-                            {
-                                <option value="@vt.ID">@vt.Name (@vt.ValidityDays gun gecerli)</option>
-                            }
-                        </select>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Aşı Türü *</label>
+                            <select name="VaccineTypeId" class="form-select" required>
+                                <option value="">-- Aşı Türü Seç --</option>
+                                @foreach (var vt in (ViewBag.VaccineTypes as List<VoxCrm.Domain.Entities.VaccineType> ?? new()))
+                                {
+                                    <option value="@vt.ID">@vt.Name (@vt.ValidityDays gün geçerli)</option>
+                                }
+                            </select>
+                        </div>
                     </div>
                     <div class="mb-4">
-                        <label class="form-label fw-semibold">Yapilma Tarihi *</label>
+                        <label class="form-label fw-semibold">Yapılma Tarihi *</label>
                         <input type="date" name="AdministeredDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required>
-                        <div class="form-text">Sonraki asi tarihi, secilen asi turune gore otomatik hesaplanir.</div>
+                        <div class="form-text">Sonraki aşı tarihi, seçilen aşı türüne göre otomatik hesaplanır.</div>
                     </div>
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary">Kaydet</button>

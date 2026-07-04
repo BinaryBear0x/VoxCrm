@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using VoxCrm.Domain.Entities;
 using VoxCrm.Infrastructure.Data;
+using VoxCrm.Web.Models;
+using VoxCrm.Web.Services;
 
 namespace VoxCrm.Web.Controllers;
 
@@ -15,7 +17,13 @@ namespace VoxCrm.Web.Controllers;
 public class DealerController : Controller
 {
     private readonly VoxCrmDbContext _context;
-    public DealerController(VoxCrmDbContext context) => _context = context;
+    private readonly SystemHealthService _healthService;
+
+    public DealerController(VoxCrmDbContext context, SystemHealthService healthService)
+    {
+        _context = context;
+        _healthService = healthService;
+    }
 
     // GET: /Dealer — Tüm klinikler
     public async Task<IActionResult> Index()
@@ -58,7 +66,7 @@ public class DealerController : Controller
             .Replace("ğ", "g").Replace("ü", "u").Replace("ö", "o").Replace("ç", "c");
         _context.Clinics.Add(model);
         await _context.SaveChangesAsync();
-        TempData["Success"] = $"{model.Name} kliniği basariyla eklendi.";
+        TempData["Success"] = $"{model.Name} kliniği başarıyla eklendi.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -91,7 +99,7 @@ public class DealerController : Controller
         clinic.WhatsAppPhoneNumberId = model.WhatsAppPhoneNumberId;
 
         await _context.SaveChangesAsync();
-        TempData["Success"] = "Klinik bilgileri guncellendi.";
+        TempData["Success"] = "Klinik bilgileri güncellendi.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -107,6 +115,68 @@ public class DealerController : Controller
         await _context.SaveChangesAsync();
         TempData["Success"] = "Klinik sistemden kaldirildi.";
         return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Logs(string? level, Guid? clinicId, CancellationToken cancellationToken)
+    {
+        if (!TryGetDealerId(out var dealerId)) return Forbid();
+
+        var clinics = await _context.Clinics
+            .Where(c => c.DealerId == dealerId)
+            .OrderBy(c => c.Name)
+            .ToListAsync(cancellationToken);
+        var clinicIds = clinics.Select(c => c.ID).ToList();
+
+        if (clinicId.HasValue && !clinicIds.Contains(clinicId.Value))
+            return Forbid();
+
+        var auditQuery = _context.SystemAuditLogs.AsNoTracking()
+            .Where(l => l.DealerId == dealerId || (l.ClinicId != null && clinicIds.Contains(l.ClinicId.Value)));
+
+        if (!string.IsNullOrWhiteSpace(level))
+            auditQuery = auditQuery.Where(l => l.Level == level);
+
+        if (clinicId.HasValue)
+            auditQuery = auditQuery.Where(l => l.ClinicId == clinicId.Value);
+
+        var notificationQuery = _context.WhatsAppNotifications
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Include(n => n.PetOwner)
+            .Where(n => clinicIds.Contains(n.ClinicID)
+                        && (n.LastError != null
+                            || n.Status == WhatsAppNotificationStatuses.Failed
+                            || n.Status == WhatsAppNotificationStatuses.NeedsReview));
+
+        if (clinicId.HasValue)
+            notificationQuery = notificationQuery.Where(n => n.ClinicID == clinicId.Value);
+
+        var model = new DealerLogsViewModel
+        {
+            AuditLogs = await auditQuery
+                .OrderByDescending(l => l.CreatedAt)
+                .Take(200)
+                .ToListAsync(cancellationToken),
+            WhatsAppErrors = await notificationQuery
+                .OrderByDescending(n => n.CreatedAt)
+                .Take(100)
+                .ToListAsync(cancellationToken),
+            Clinics = clinics,
+            Level = level,
+            ClinicId = clinicId
+        };
+
+        ViewData["ActiveMenu"] = "dealer-logs";
+        return View(model);
+    }
+
+    public async Task<IActionResult> Health(CancellationToken cancellationToken)
+    {
+        if (!TryGetDealerId(out var dealerId)) return Forbid();
+
+        var model = await _healthService.BuildDealerHealthAsync(dealerId, cancellationToken);
+        ViewData["ActiveMenu"] = "dealer-health";
+        return View(model);
     }
 
     private bool TryGetDealerId(out Guid dealerId)

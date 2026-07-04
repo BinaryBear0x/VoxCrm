@@ -1,8 +1,22 @@
 @model IEnumerable<VoxCrm.Domain.Entities.Appointment>
+@using System.Text.Json
 @{
     ViewData["Title"] = "Randevular";
     ViewData["ActiveMenu"] = "appointments";
     var today = DateTime.Today;
+    var calendarEvents = Model.Select(a =>
+    {
+        var color = a.Status == "Tamamlandı" ? "#198754" : a.Status == "İptal" ? "#dc3545" : a.Status == "Gelmedi" ? "#ffc107" : "#0d6efd";
+        return new
+        {
+            title = $"{a.Patient?.Name} - {a.AppointmentType}",
+            start = a.ScheduledAt.ToString("yyyy-MM-ddTHH:mm:ss"),
+            end = a.ScheduledAt.AddMinutes(a.DurationMinutes).ToString("yyyy-MM-ddTHH:mm:ss"),
+            url = $"/Appointment/Edit/{a.ID}",
+            backgroundColor = color,
+            borderColor = color
+        };
+    });
 }
 
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
@@ -178,21 +192,7 @@
                     week: 'Hafta',
                     day: 'Gün'
                 },
-                events: [
-                    @foreach (var a in Model)
-                    {
-                        <text>
-                        {
-                            title: '@Html.Raw(a.Patient?.Name) - @Html.Raw(a.AppointmentType)',
-                            start: '@a.ScheduledAt.ToString("yyyy-MM-ddTHH:mm:ss")',
-                            end: '@a.ScheduledAt.AddMinutes(a.DurationMinutes).ToString("yyyy-MM-ddTHH:mm:ss")',
-                            url: '/Appointment/Edit/@a.ID',
-                            backgroundColor: '@(a.Status == "Tamamlandı" ? "#198754" : a.Status == "İptal" ? "#dc3545" : a.Status == "Gelmedi" ? "#ffc107" : "#0d6efd")',
-                            borderColor: '@(a.Status == "Tamamlandı" ? "#198754" : a.Status == "İptal" ? "#dc3545" : a.Status == "Gelmedi" ? "#ffc107" : "#0d6efd")'
-                        },
-                        </text>
-                    }
-                ]
+                events: @Html.Raw(JsonSerializer.Serialize(calendarEvents))
             });
             
             var calendarTab = document.getElementById('calendar-tab');
