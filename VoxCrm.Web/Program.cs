@@ -4,12 +4,20 @@ using Hangfire.PostgreSql;
 using Hangfire.Dashboard;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authentication;
+using VoxCrm.Application.Audit;
+using VoxCrm.Application.WhatsApp;
 using VoxCrm.Domain.Entities;
+using VoxCrm.Infrastructure.Audit;
+using VoxCrm.Infrastructure.Configuration;
 using VoxCrm.Web.Services;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
+var repoRoot = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, ".."));
+builder.Configuration
+    .AddVoxCrmEnvFile(repoRoot)
+    .AddEnvironmentVariables();
 
 const string DevOnlyWhatsAppSecret = "dev-only-change-this-very-long-whatsapp-gateway-secret";
 var configuredWhatsAppSecret = builder.Configuration["WhatsAppGateway:JwtSecret"];
@@ -32,11 +40,13 @@ builder.Services.AddHttpContextAccessor();
 // BOLA koruması için aktif kliniği bulan servis
 builder.Services.AddScoped<VoxCrm.Domain.Common.ITenantService, VoxCrm.Web.Services.TenantService>();
 builder.Services.AddScoped<IClaimsTransformation, TenantClaimsTransformation>();
+builder.Services.AddSingleton<IClinicSendWindowCalculator, ClinicSendWindowCalculator>();
 
 // Veritabanı bağlantısı
 builder.Services.AddDbContext<VoxCrm.Infrastructure.Data.VoxCrmDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
         b => b.MigrationsAssembly("VoxCrm.Infrastructure")));
+builder.Services.AddScoped<IAuditLogger, DbAuditLogger>();
 
 // ─── GÜVENLİK AÇIĞI #7 DÜZELTİLDİ: Şifre kuralları güçlendirildi ───────────
 // Neden? "123456" veya "aaaaaa" gibi tahmin edilmesi çok kolay şifreler

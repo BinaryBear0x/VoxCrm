@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using VoxCrm.Application.WhatsApp;
 using VoxCrm.Domain.Entities;
 using VoxCrm.Infrastructure.Data;
 using VoxCrm.Web.Models;
@@ -13,11 +14,16 @@ public class WhatsAppController : Controller
 {
     private readonly VoxCrmDbContext _context;
     private readonly WhatsAppGatewayClient _gatewayClient;
+    private readonly IClinicSendWindowCalculator _sendWindowCalculator;
 
-    public WhatsAppController(VoxCrmDbContext context, WhatsAppGatewayClient gatewayClient)
+    public WhatsAppController(
+        VoxCrmDbContext context,
+        WhatsAppGatewayClient gatewayClient,
+        IClinicSendWindowCalculator sendWindowCalculator)
     {
         _context = context;
         _gatewayClient = gatewayClient;
+        _sendWindowCalculator = sendWindowCalculator;
     }
 
     public async Task<IActionResult> Index(Guid? clinicId, CancellationToken cancellationToken)
@@ -76,7 +82,8 @@ public class WhatsAppController : Controller
                 .Take(50)
                 .ToListAsync(cancellationToken),
             IsDealer = User.IsInRole("Dealer"),
-            GatewayWarning = gatewayWarning
+            GatewayWarning = gatewayWarning,
+            NextAllowedSendAtUtc = _sendWindowCalculator.GetNextAllowedSendUtc(clinic, DateTime.UtcNow)
         };
 
         ViewData["ActiveMenu"] = "whatsapp";
@@ -244,6 +251,7 @@ public class WhatsAppController : Controller
         }
 
         var testMsg = $"VoxCRM test mesaji - {clinic.Name} - {DateTime.Now:dd.MM.yyyy HH:mm:ss}";
+        var nextAttemptAt = GetNextAttemptAtWithToast(clinic);
 
         // Test mesajı göndermek için anonim bir PetOwner kullan/oluştur
         var owner = await GetOrCreateAnonymousOwnerAsync(clinic.ID, targetPhone, cancellationToken);
@@ -256,13 +264,13 @@ public class WhatsAppController : Controller
             MessageContent = testMsg,
             NotificationType = WhatsAppNotificationTypes.ManualMessage,
             Status = WhatsAppNotificationStatuses.Pending,
-            NextAttemptAt = DateTime.UtcNow
+            NextAttemptAt = nextAttemptAt
         };
 
         _context.WhatsAppNotifications.Add(notification);
         await _context.SaveChangesAsync(cancellationToken);
 
-        TempData["Success"] = $"Test mesajı sıraya alındı ({targetPhone}). Gateway tarafından birazdan gönderilecektir.";
+        TempData["Success"] = $"Test mesajı sıraya alındı ({targetPhone}).";
         return RedirectToAction(nameof(Index), new { clinicId });
     }
 
@@ -303,6 +311,7 @@ public class WhatsAppController : Controller
         }
 
         var owner = await GetOrCreateAnonymousOwnerAsync(clinic.ID, normalizedPhone, cancellationToken);
+        var nextAttemptAt = GetNextAttemptAtWithToast(clinic);
 
         var notification = new WhatsAppNotification
         {
@@ -312,14 +321,31 @@ public class WhatsAppController : Controller
             MessageContent = message.Trim(),
             NotificationType = WhatsAppNotificationTypes.ManualMessage,
             Status = WhatsAppNotificationStatuses.Pending,
-            NextAttemptAt = DateTime.UtcNow
+            NextAttemptAt = nextAttemptAt
         };
 
         _context.WhatsAppNotifications.Add(notification);
         await _context.SaveChangesAsync(cancellationToken);
 
-        TempData["Success"] = $"Mesaj sıraya alındı ({normalizedPhone}). Gateway tarafından birazdan gönderilecektir.";
+        TempData["Success"] = $"Mesaj sıraya alındı ({normalizedPhone}).";
         return RedirectToAction(nameof(Index), new { clinicId });
+    }
+
+    private DateTime GetNextAttemptAtWithToast(Clinic clinic)
+    {
+        var now = DateTime.UtcNow;
+        var nextAttemptAt = _sendWindowCalculator.GetNextAllowedSendUtc(clinic, now);
+        if (nextAttemptAt > now.AddSeconds(30))
+        {
+            TempData["Warning"] =
+                $"Klinik gönderim penceresi dışında. Mesaj {nextAttemptAt.ToLocalTime():dd.MM.yyyy HH:mm} için kuyruklandı.";
+        }
+        else
+        {
+            TempData["Info"] = "Mesaj gönderim penceresi içinde, gateway tarafından birazdan gönderilecek.";
+        }
+
+        return nextAttemptAt;
     }
 
     private async Task EnsureWhatsAppEnabledAsync(Clinic clinic, CancellationToken cancellationToken)

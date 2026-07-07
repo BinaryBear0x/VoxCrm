@@ -97,6 +97,12 @@ public class DealerController : Controller
         clinic.Address               = model.Address;
         clinic.IsWhatsAppEnabled     = model.IsWhatsAppEnabled;
         clinic.WhatsAppPhoneNumberId = model.WhatsAppPhoneNumberId;
+        clinic.WhatsAppSendWindowEnabled = model.WhatsAppSendWindowEnabled;
+        clinic.WhatsAppSendWindowStart = model.WhatsAppSendWindowStart;
+        clinic.WhatsAppSendWindowEnd = model.WhatsAppSendWindowEnd;
+        clinic.WhatsAppTimeZoneId = string.IsNullOrWhiteSpace(model.WhatsAppTimeZoneId)
+            ? "Europe/Istanbul"
+            : model.WhatsAppTimeZoneId.Trim();
 
         await _context.SaveChangesAsync();
         TempData["Success"] = "Klinik bilgileri güncellendi.";
@@ -117,7 +123,15 @@ public class DealerController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    public async Task<IActionResult> Logs(string? level, Guid? clinicId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Logs(
+        string? level,
+        string? source,
+        string? category,
+        string? search,
+        DateTime? from,
+        DateTime? to,
+        Guid? clinicId,
+        CancellationToken cancellationToken)
     {
         if (!TryGetDealerId(out var dealerId)) return Forbid();
 
@@ -135,6 +149,29 @@ public class DealerController : Controller
 
         if (!string.IsNullOrWhiteSpace(level))
             auditQuery = auditQuery.Where(l => l.Level == level);
+
+        if (!string.IsNullOrWhiteSpace(source))
+            auditQuery = auditQuery.Where(l => l.Source == source);
+
+        if (!string.IsNullOrWhiteSpace(category))
+            auditQuery = auditQuery.Where(l => l.Category == category);
+
+        if (from.HasValue)
+            auditQuery = auditQuery.Where(l => l.CreatedAt >= DateTime.SpecifyKind(from.Value.Date, DateTimeKind.Utc));
+
+        if (to.HasValue)
+            auditQuery = auditQuery.Where(l => l.CreatedAt < DateTime.SpecifyKind(to.Value.Date.AddDays(1), DateTimeKind.Utc));
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            auditQuery = auditQuery.Where(l =>
+                l.Action.Contains(term)
+                || l.Message.Contains(term)
+                || (l.ActorUserName != null && l.ActorUserName.Contains(term))
+                || (l.ErrorCode != null && l.ErrorCode.Contains(term))
+                || (l.TraceId != null && l.TraceId.Contains(term)));
+        }
 
         if (clinicId.HasValue)
             auditQuery = auditQuery.Where(l => l.ClinicId == clinicId.Value);
@@ -163,6 +200,11 @@ public class DealerController : Controller
                 .ToListAsync(cancellationToken),
             Clinics = clinics,
             Level = level,
+            Source = source,
+            Category = category,
+            Search = search,
+            From = from,
+            To = to,
             ClinicId = clinicId
         };
 

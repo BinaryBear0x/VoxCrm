@@ -25,6 +25,7 @@ public static class TestData
             DealerId = dealer.ID,
             IsActive = true,
             IsWhatsAppEnabled = whatsAppEnabled,
+            WhatsAppSendWindowEnabled = false,
         };
         var owner = new PetOwner
         {
@@ -76,6 +77,7 @@ public static class TestData
         await db.WhatsAppInboundMessages.ExecuteDeleteAsync();
         await db.WhatsAppTemplates.ExecuteDeleteAsync();
         await db.WhatsAppNotifications.ExecuteDeleteAsync();
+        await db.SystemAuditLogs.ExecuteDeleteAsync();
         await db.PetOwners.ExecuteDeleteAsync();
         await db.Clinics.ExecuteDeleteAsync();
         await db.Dealers.ExecuteDeleteAsync();

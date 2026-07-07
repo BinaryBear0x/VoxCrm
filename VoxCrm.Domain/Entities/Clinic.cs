@@ -22,6 +22,10 @@ namespace VoxCrm.Domain.Entities
 
         public bool IsWhatsAppEnabled { get; set; } = false;
         public string? WhatsAppPhoneNumberId { get; set; } // Meta API üzerinden alınacak ID :D yersen meta api 
+        public bool WhatsAppSendWindowEnabled { get; set; } = true;
+        public TimeOnly WhatsAppSendWindowStart { get; set; } = new(9, 0);
+        public TimeOnly WhatsAppSendWindowEnd { get; set; } = new(19, 0);
+        public string WhatsAppTimeZoneId { get; set; } = "Europe/Istanbul";
 
     }
 }

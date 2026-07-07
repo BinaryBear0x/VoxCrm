@@ -4,7 +4,7 @@
     ViewData["ActiveMenu"] = "dealer-logs";
     var clinicNames = Model.Clinics.ToDictionary(c => c.ID, c => c.Name);
     string ClinicName(Guid? id) => id.HasValue && clinicNames.TryGetValue(id.Value, out var name) ? name : "-";
-    string BadgeClass(string level) => level == "Error" ? "danger" : level == "Warning" ? "warning text-dark" : "secondary";
+    string BadgeClass(string level) => level == "Critical" ? "dark" : level == "Error" ? "danger" : level == "Warning" ? "warning text-dark" : level == "Info" ? "primary" : "secondary";
 }
 
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
@@ -18,16 +18,41 @@
 </div>
 
 <form method="get" class="row g-2 align-items-end mb-4">
-    <div class="col-12 col-md-3">
+    <div class="col-6 col-md-2">
         <label class="form-label small fw-semibold">Seviye</label>
         <select name="level" class="form-select form-select-sm">
             <option value="">Tümü</option>
+            <option value="Debug" selected="@(Model.Level == "Debug")">Debug</option>
             <option value="Info" selected="@(Model.Level == "Info")">Info</option>
             <option value="Warning" selected="@(Model.Level == "Warning")">Warning</option>
             <option value="Error" selected="@(Model.Level == "Error")">Error</option>
+            <option value="Critical" selected="@(Model.Level == "Critical")">Critical</option>
         </select>
     </div>
-    <div class="col-12 col-md-4">
+    <div class="col-6 col-md-2">
+        <label class="form-label small fw-semibold">Kaynak</label>
+        <select name="source" class="form-select form-select-sm">
+            <option value="">Tümü</option>
+            <option value="Web" selected="@(Model.Source == "Web")">Web</option>
+            <option value="Api" selected="@(Model.Source == "Api")">Api</option>
+            <option value="Gateway" selected="@(Model.Source == "Gateway")">Gateway</option>
+            <option value="Worker" selected="@(Model.Source == "Worker")">Worker</option>
+            <option value="Hangfire" selected="@(Model.Source == "Hangfire")">Hangfire</option>
+        </select>
+    </div>
+    <div class="col-6 col-md-2">
+        <label class="form-label small fw-semibold">Kategori</label>
+        <select name="category" class="form-select form-select-sm">
+            <option value="">Tümü</option>
+            <option value="Security" selected="@(Model.Category == "Security")">Security</option>
+            <option value="Operation" selected="@(Model.Category == "Operation")">Operation</option>
+            <option value="WhatsApp" selected="@(Model.Category == "WhatsApp")">WhatsApp</option>
+            <option value="Validation" selected="@(Model.Category == "Validation")">Validation</option>
+            <option value="Exception" selected="@(Model.Category == "Exception")">Exception</option>
+            <option value="System" selected="@(Model.Category == "System")">System</option>
+        </select>
+    </div>
+    <div class="col-6 col-md-2">
         <label class="form-label small fw-semibold">Klinik</label>
         <select name="clinicId" class="form-select form-select-sm">
             <option value="">Tüm kapsam</option>
@@ -36,6 +61,18 @@
                 <option value="@clinic.ID" selected="@(Model.ClinicId == clinic.ID)">@clinic.Name</option>
             }
         </select>
+    </div>
+    <div class="col-6 col-md-2">
+        <label class="form-label small fw-semibold">Başlangıç</label>
+        <input type="date" name="from" class="form-control form-control-sm" value="@Model.From?.ToString("yyyy-MM-dd")">
+    </div>
+    <div class="col-6 col-md-2">
+        <label class="form-label small fw-semibold">Bitiş</label>
+        <input type="date" name="to" class="form-control form-control-sm" value="@Model.To?.ToString("yyyy-MM-dd")">
+    </div>
+    <div class="col-12 col-md-4">
+        <label class="form-label small fw-semibold">Arama</label>
+        <input type="search" name="search" class="form-control form-control-sm" value="@Model.Search" placeholder="İşlem, mesaj, kullanıcı, trace...">
     </div>
     <div class="col-12 col-md-auto">
         <button type="submit" class="btn btn-primary btn-sm">
@@ -57,30 +94,63 @@
                             <tr>
                                 <th>Zaman</th>
                                 <th>Seviye</th>
+                                <th>Kaynak</th>
+                                <th>Kategori</th>
                                 <th>Kapsam</th>
                                 <th>İşlem</th>
+                                <th>Sonuç</th>
                                 <th>Kullanıcı</th>
                                 <th>Mesaj</th>
-                                <th>Trace</th>
+                                <th>Detay</th>
                             </tr>
                         </thead>
                         <tbody>
                         @if (!Model.AuditLogs.Any())
                         {
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">Log bulunamadı.</td>
+                                <td colspan="10" class="text-center text-muted py-4">Log bulunamadı.</td>
                             </tr>
                         }
-                        @foreach (var log in Model.AuditLogs)
+                        @for (var i = 0; i < Model.AuditLogs.Count; i++)
                         {
+                            var log = Model.AuditLogs[i];
                             <tr>
                                 <td class="small text-nowrap">@log.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</td>
                                 <td><span class="badge bg-@BadgeClass(log.Level)">@log.Level</span></td>
+                                <td class="small">@log.Source</td>
+                                <td class="small">@log.Category</td>
                                 <td class="small">@ClinicName(log.ClinicId)</td>
                                 <td class="small fw-semibold">@log.Action</td>
+                                <td class="small">@log.Outcome</td>
                                 <td class="small">@(log.ActorUserName ?? "-")</td>
                                 <td class="small">@log.Message</td>
-                                <td class="small text-muted">@log.TraceId</td>
+                                <td>
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#logDetail@(i)">
+                                        <i class="bi bi-search"></i>
+                                    </button>
+                                    <div class="modal fade" id="logDetail@(i)" tabindex="-1" aria-hidden="true">
+                                        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h3 class="modal-title h6">@log.Action</h3>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <dl class="row small">
+                                                        <dt class="col-3">Trace</dt><dd class="col-9">@log.TraceId</dd>
+                                                        <dt class="col-3">Correlation</dt><dd class="col-9">@log.CorrelationId</dd>
+                                                        <dt class="col-3">Request</dt><dd class="col-9">@log.RequestId</dd>
+                                                        <dt class="col-3">HTTP</dt><dd class="col-9">@log.HttpMethod @log.Path (@log.StatusCode)</dd>
+                                                        <dt class="col-3">Süre</dt><dd class="col-9">@(log.DurationMs?.ToString() ?? "-") ms</dd>
+                                                        <dt class="col-3">Hata kodu</dt><dd class="col-9">@(log.ErrorCode ?? "-")</dd>
+                                                        <dt class="col-3">Metadata</dt>
+                                                        <dd class="col-9"><pre class="small bg-light rounded p-2 mb-0">@log.MetadataJson</pre></dd>
+                                                    </dl>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
                             </tr>
                         }
                         </tbody>

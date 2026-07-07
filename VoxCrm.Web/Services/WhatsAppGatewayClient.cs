@@ -90,8 +90,12 @@ public class WhatsAppGatewayClient
         var header = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(new { alg = "HS256", typ = "JWT" }));
         var payload = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(new
         {
-            iss = _configuration["WhatsAppGateway:Issuer"] ?? "voxcrm",
-            aud = _configuration["WhatsAppGateway:Audience"] ?? "voxcrm-whatsapp-gateway",
+            iss = _configuration["WhatsAppGateway:GatewayIssuer"]
+                ?? _configuration["WhatsAppGateway:ClientIssuer"]
+                ?? "voxcrm",
+            aud = _configuration["WhatsAppGateway:GatewayAudience"]
+                ?? _configuration["WhatsAppGateway:ClientAudience"]
+                ?? "voxcrm-whatsapp-gateway",
             sub = "voxcrm-web",
             scope,
             iat = now.ToUnixTimeSeconds(),

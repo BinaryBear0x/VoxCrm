@@ -9,6 +9,11 @@ public class DealerLogsViewModel
     public IReadOnlyList<WhatsAppNotification> WhatsAppErrors { get; set; } = Array.Empty<WhatsAppNotification>();
     public IReadOnlyList<Clinic> Clinics { get; set; } = Array.Empty<Clinic>();
     public string? Level { get; set; }
+    public string? Source { get; set; }
+    public string? Category { get; set; }
+    public string? Search { get; set; }
+    public DateTime? From { get; set; }
+    public DateTime? To { get; set; }
     public Guid? ClinicId { get; set; }
 }
 
