@@ -59,6 +59,27 @@ else
                             <label class="form-label fw-semibold">WhatsApp Phone Number ID</label>
                             <input type="text" name="WhatsAppPhoneNumberId" class="form-control" value="@Model.WhatsAppPhoneNumberId" placeholder="Meta API'dan alinan numara ID">
                         </div>
+                        <div class="border rounded p-3 mb-4">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" name="WhatsAppSendWindowEnabled" value="true"
+                                       id="waWindowEnabled" @(Model.WhatsAppSendWindowEnabled ? "checked" : "")>
+                                <label class="form-check-label fw-semibold" for="waWindowEnabled">Gönderim penceresi aktif</label>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Başlangıç</label>
+                                    <input type="time" name="WhatsAppSendWindowStart" class="form-control" value="@Model.WhatsAppSendWindowStart.ToString("HH:mm")">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small fw-semibold">Bitiş</label>
+                                    <input type="time" name="WhatsAppSendWindowEnd" class="form-control" value="@Model.WhatsAppSendWindowEnd.ToString("HH:mm")">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small fw-semibold">Zaman dilimi</label>
+                                    <input type="text" name="WhatsAppTimeZoneId" class="form-control" value="@Model.WhatsAppTimeZoneId">
+                                </div>
+                            </div>
+                        </div>
 
                         <div class="d-grid">
                             <button type="submit" class="btn btn-primary">Kaydet</button>

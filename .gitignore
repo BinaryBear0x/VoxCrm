@@ -509,3 +509,11 @@ backups/monthly/*
 # Yedek dosya uzantilari (herhangi bir yerde olusursa)
 *.dump
 *.sql.gz
+
+# =============================================================
+# Temporary prompt and AI files
+# =============================================================
+prompt.txt
+promot.txt
+prompt*.txt
+archprompt*.txt

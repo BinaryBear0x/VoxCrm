@@ -15,4 +15,5 @@ public class WhatsAppSettingsViewModel
     public IReadOnlyList<WhatsAppInboundMessage> InboundMessages { get; set; } = Array.Empty<WhatsAppInboundMessage>();
     public bool IsDealer { get; set; }
     public string? GatewayWarning { get; set; }
+    public DateTime? NextAllowedSendAtUtc { get; set; }
 }

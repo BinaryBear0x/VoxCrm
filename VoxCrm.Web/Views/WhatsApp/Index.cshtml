@@ -91,6 +91,14 @@
                     <dd class="col-7">@(Model.SessionStatus?.NeedsReviewCount ?? 0)</dd>
                     <dt class="col-5">Failed</dt>
                     <dd class="col-7">@(Model.SessionStatus?.FailedCount ?? 0)</dd>
+                    <dt class="col-5">Gönderim penceresi</dt>
+                    <dd class="col-7">
+                        @(Model.Clinic.WhatsAppSendWindowEnabled
+                            ? $"{Model.Clinic.WhatsAppSendWindowStart:HH\\:mm}-{Model.Clinic.WhatsAppSendWindowEnd:HH\\:mm} {Model.Clinic.WhatsAppTimeZoneId}"
+                            : "24 saat açık")
+                    </dd>
+                    <dt class="col-5">Sıradaki izin</dt>
+                    <dd class="col-7">@(Model.NextAllowedSendAtUtc?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "-")</dd>
                 </dl>
 
                 <div class="text-center border rounded p-3 @(shouldPollQr ? "" : "d-none")"

@@ -79,6 +79,9 @@ namespace VoxCrm.Infrastructure.Data
 
             builder.Entity<SystemAuditLog>()
                 .HasIndex(l => new { l.Level, l.CreatedAt });
+
+            builder.Entity<SystemAuditLog>()
+                .HasIndex(l => new { l.Source, l.Category, l.CreatedAt });
         }
 
         public override int SaveChanges()

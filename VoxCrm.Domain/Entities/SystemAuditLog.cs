@@ -5,7 +5,9 @@ namespace VoxCrm.Domain.Entities;
 public class SystemAuditLog : BaseEntity
 {
     public string Level { get; set; } = "Info";
+    public string Source { get; set; } = "Web";
     public string Category { get; set; } = "Operation";
+    public string Outcome { get; set; } = "Success";
     public string Action { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public string? EntityType { get; set; }
@@ -22,4 +24,9 @@ public class SystemAuditLog : BaseEntity
     public string? UserAgent { get; set; }
     public string? ExceptionType { get; set; }
     public string? TraceId { get; set; }
+    public string? CorrelationId { get; set; }
+    public long? DurationMs { get; set; }
+    public string? ErrorCode { get; set; }
+    public string? MetadataJson { get; set; }
+    public string? RequestId { get; set; }
 }

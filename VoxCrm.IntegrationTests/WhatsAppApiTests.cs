@@ -203,6 +203,71 @@ public sealed class WhatsAppApiTests
     }
 
     [Fact]
+    public async Task Claim_defers_messages_outside_clinic_send_window()
+    {
+        Guid clinicId;
+        Guid notificationId;
+        await using (var db = _database.CreateDbContext())
+        {
+            await TestData.ClearWhatsAppDataAsync(db);
+            var (clinic, owner) = await TestData.CreateClinicWithOwnerAsync(db, "Window Clinic");
+            var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul"));
+            var start = TimeOnly.FromDateTime(localNow.AddHours(2));
+            var end = TimeOnly.FromDateTime(localNow.AddHours(3));
+            clinic.WhatsAppSendWindowEnabled = true;
+            clinic.WhatsAppSendWindowStart = start;
+            clinic.WhatsAppSendWindowEnd = end;
+            clinic.WhatsAppTimeZoneId = "Europe/Istanbul";
+
+            var notification = new WhatsAppNotification
+            {
+                ClinicID = clinic.ID,
+                PetOwnerId = owner.ID,
+                PhoneNumber = "+905551112233",
+                MessageContent = "Window deferred message",
+                NotificationType = WhatsAppNotificationTypes.ManualMessage,
+                Status = WhatsAppNotificationStatuses.Pending,
+                NextAttemptAt = DateTime.UtcNow.AddMinutes(-1),
+            };
+            db.WhatsAppNotifications.Add(notification);
+            await db.SaveChangesAsync();
+            clinicId = clinic.ID;
+            notificationId = notification.ID;
+        }
+
+        await using var factory = new ApiApplicationFactory(_database.ConnectionString);
+        var client = CreateAuthorizedClient(factory, "whatsapp.notifications.claim");
+        var response = await client.PostAsJsonAsync(
+            "/api/whatsapp/notifications/claim",
+            new
+            {
+                clinicIds = new[] { clinicId },
+                batchSize = 10,
+                gatewayId = "gateway-window",
+                lockSeconds = 180,
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var claimedIds = await ReadNotificationIdsAsync(response);
+        Assert.Empty(claimedIds);
+
+        await using var verifyDb = _database.CreateDbContext();
+        var deferred = await verifyDb.WhatsAppNotifications.FindAsync(notificationId);
+        Assert.NotNull(deferred);
+        Assert.Equal(WhatsAppNotificationStatuses.Pending, deferred.Status);
+        Assert.Null(deferred.LockedBy);
+        Assert.NotNull(deferred.NextAttemptAt);
+        Assert.True(deferred.NextAttemptAt > DateTime.UtcNow);
+
+        var audit = await verifyDb.SystemAuditLogs
+            .AsNoTracking()
+            .SingleOrDefaultAsync(l => l.Action == "WhatsAppNotifications.DeferOutsideSendWindow");
+        Assert.NotNull(audit);
+        Assert.Equal("Warning", audit.Level);
+        Assert.Equal("Deferred", audit.Outcome);
+    }
+
+    [Fact]
     public async Task Jwt_replay_and_invalid_gateway_tokens_are_rejected()
     {
         await using (var db = _database.CreateDbContext())

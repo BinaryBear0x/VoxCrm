@@ -42,6 +42,12 @@ public class ClinicSettingsController : Controller
         clinic.Address               = model.Address;
         clinic.IsWhatsAppEnabled     = model.IsWhatsAppEnabled;
         clinic.WhatsAppPhoneNumberId = model.WhatsAppPhoneNumberId;
+        clinic.WhatsAppSendWindowEnabled = model.WhatsAppSendWindowEnabled;
+        clinic.WhatsAppSendWindowStart = model.WhatsAppSendWindowStart;
+        clinic.WhatsAppSendWindowEnd = model.WhatsAppSendWindowEnd;
+        clinic.WhatsAppTimeZoneId = string.IsNullOrWhiteSpace(model.WhatsAppTimeZoneId)
+            ? "Europe/Istanbul"
+            : model.WhatsAppTimeZoneId.Trim();
 
         await _context.SaveChangesAsync();
         TempData["Success"] = "Klinik ayarlari kaydedildi.";
