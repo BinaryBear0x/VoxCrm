@@ -5,8 +5,6 @@ umask 077
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VERSION="${1:-$(date -u +%Y%m%dT%H%M%SZ)}"
 OUT="${RELEASE_OUT:-$ROOT/artifacts/releases}"
-STAGE="$(mktemp -d /private/tmp/voxcrm-release.XXXXXX)"
-trap 'rm -rf "$STAGE"' EXIT
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -23,9 +21,12 @@ if ! git -C "$ROOT" diff --quiet || ! git -C "$ROOT" diff --cached --quiet \
 fi
 
 "$ROOT/whatsapp-gateway/scripts/test-all.sh"
-mkdir -p "$OUT" "$STAGE/VoxCrm"
-git -C "$ROOT" archive --format=tar HEAD | tar -xf - -C "$STAGE/VoxCrm"
-COPYFILE_DISABLE=1 tar -czf "$OUT/voxcrm-$VERSION.tar.gz" -C "$STAGE" VoxCrm
+mkdir -p "$OUT"
+git -C "$ROOT" archive \
+  --format=tar.gz \
+  --prefix=VoxCrm/ \
+  --output="$OUT/voxcrm-$VERSION.tar.gz" \
+  HEAD
 (
   cd "$OUT"
   sha256_file "voxcrm-$VERSION.tar.gz" > "voxcrm-$VERSION.tar.gz.sha256"
