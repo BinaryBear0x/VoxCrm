@@ -78,6 +78,15 @@ public static class TestData
         await db.WhatsAppTemplates.ExecuteDeleteAsync();
         await db.WhatsAppNotifications.ExecuteDeleteAsync();
         await db.SystemAuditLogs.ExecuteDeleteAsync();
+        await db.Payments.ExecuteDeleteAsync();
+        await db.Borçlar.ExecuteDeleteAsync();
+        await db.VaccinationRecords.ExecuteDeleteAsync();
+        await db.Muayeneler.ExecuteDeleteAsync();
+        await db.Appointments.ExecuteDeleteAsync();
+        await db.PatientOwners.ExecuteDeleteAsync();
+        await db.Patients.ExecuteDeleteAsync();
+        await db.VaccineTypes.ExecuteDeleteAsync();
+        await db.ServiceItems.ExecuteDeleteAsync();
         await db.PetOwners.ExecuteDeleteAsync();
         await db.Clinics.ExecuteDeleteAsync();
         await db.Dealers.ExecuteDeleteAsync();

@@ -93,7 +93,7 @@
                                 </td>
                                 <td class="text-end">
                                     <a href="/Vaccination/Edit/@v.ID" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></a>
-                                    <form method="post" action="/Vaccination/Delete" class="d-inline ms-1" onsubmit="return confirm('Bu aşı kaydını silmek istediğinize emin misiniz?');">
+                                    <form method="post" action="/Vaccination/Delete" class="d-inline ms-1" data-confirm="Bu aşı kaydını silmek istediğinize emin misiniz?">
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="id" value="@v.ID">
                                         <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>
@@ -119,7 +119,7 @@
                         <div class="text-muted small mb-2">@v.VaccineType?.Name · Sonraki: @v.NextDueDate.ToString("dd.MM.yyyy")</div>
                         <div class="d-flex justify-content-end gap-1">
                             <a href="/Vaccination/Edit/@v.ID" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></a>
-                            <form method="post" action="/Vaccination/Delete" class="d-inline" onsubmit="return confirm('Bu aşı kaydını silmek istediğinize emin misiniz?');">
+                            <form method="post" action="/Vaccination/Delete" class="d-inline" data-confirm="Bu aşı kaydını silmek istediğinize emin misiniz?">
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="id" value="@v.ID">
                                 <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>

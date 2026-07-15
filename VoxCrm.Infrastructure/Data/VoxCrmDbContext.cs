@@ -41,20 +41,42 @@ namespace VoxCrm.Infrastructure.Data
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder); // Identity tablolarının (Kullanıcı, Rol) düzgün oluşması için şart!
+            builder.ApplyConfigurationsFromAssembly(typeof(VoxCrmDbContext).Assembly);
 
-            // EF model cache ilk context'e göre paylaşıldığı için filtreler her zaman modele eklenir.
-            // Tenant servisi olmayan API/migration akışları tüm veriyi görür; Web tenant context'i klinik scope uygular.
-            builder.Entity<PetOwner>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
-            builder.Entity<Patient>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
-            builder.Entity<Appointment>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
-            builder.Entity<Muayene>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
-            builder.Entity<Debt>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
-            builder.Entity<PatientOwner>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
-            builder.Entity<WhatsAppNotification>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
-            builder.Entity<WhatsAppTemplate>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
-            builder.Entity<WhatsAppInboundMessage>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
-            builder.Entity<ServiceItem>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
-            builder.Entity<Payment>().HasQueryFilter(e => TenantClinicId == Guid.Empty || e.ClinicID == TenantClinicId);
+            builder.Entity<PetOwner>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<Patient>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<Appointment>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<Muayene>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<Debt>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<PatientOwner>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<VaccineType>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<VaccinationRecord>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<WhatsAppNotification>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<WhatsAppTemplate>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<WhatsAppInboundMessage>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<ServiceItem>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<Payment>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+
+            foreach (var entityType in builder.Model.GetEntityTypes()
+                         .Where(entityType => typeof(ITenantEntity).IsAssignableFrom(entityType.ClrType)))
+            {
+                builder.Entity(entityType.ClrType)
+                    .HasOne(typeof(Clinic))
+                    .WithMany()
+                    .HasForeignKey(nameof(ITenantEntity.ClinicID))
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                builder.Entity(entityType.ClrType)
+                    .HasIndex(nameof(ITenantEntity.ClinicID));
+            }
+
+            foreach (var foreignKey in builder.Model.GetEntityTypes()
+                         .Where(entityType => typeof(BaseEntity).IsAssignableFrom(entityType.ClrType))
+                         .SelectMany(entityType => entityType.GetForeignKeys())
+                         .Where(foreignKey => typeof(BaseEntity).IsAssignableFrom(foreignKey.PrincipalEntityType.ClrType)))
+            {
+                foreignKey.DeleteBehavior = DeleteBehavior.Restrict;
+            }
 
             builder.Entity<WhatsAppNotification>()
                 .HasIndex(n => new { n.ClinicID, n.NotificationType, n.Status, n.NextAttemptAt });
@@ -67,6 +89,14 @@ namespace VoxCrm.Infrastructure.Data
 
             builder.Entity<WhatsAppInboundMessage>()
                 .HasIndex(m => new { m.ClinicID, m.ReceivedAt });
+
+            builder.Entity<WhatsAppInboundMessage>()
+                .HasIndex(m => new { m.ClinicID, m.ProviderMessageId })
+                .IsUnique();
+
+            builder.Entity<WhatsAppInboundMessage>()
+                .Property(m => m.ProviderMessageId)
+                .HasMaxLength(256);
 
             builder.Entity<SystemAuditLog>()
                 .HasIndex(l => l.CreatedAt);
@@ -114,22 +144,36 @@ namespace VoxCrm.Infrastructure.Data
 
             if (_tenantService == null) return;
             var clinicId = _tenantService.GetClinicId();
-            if (clinicId == Guid.Empty) return;
+            if (clinicId == Guid.Empty)
+            {
+                if (!_tenantService.IsSystemContext && ChangeTracker.Entries<ITenantEntity>()
+                        .Any(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+                {
+                    throw new InvalidOperationException("Tenant context is required for tenant data mutations.");
+                }
+
+                return;
+            }
 
             foreach (var entry in ChangeTracker.Entries<ITenantEntity>())
             {
                 if (entry.State == EntityState.Added)
                 {
-                    // Eğer ClinicID atanmamışsa veya boş Guid ise mevcut kliniği ata
-                    if (entry.Entity.ClinicID == Guid.Empty)
-                    {
-                        entry.Entity.ClinicID = clinicId;
-                    }
+                    entry.Entity.ClinicID = clinicId;
+                    continue;
+                }
+
+                if (entry.State is EntityState.Modified or EntityState.Deleted)
+                {
+                    var originalClinicId = entry.OriginalValues.GetValue<Guid>(nameof(ITenantEntity.ClinicID));
+                    if (entry.Entity.ClinicID != clinicId || originalClinicId != clinicId)
+                        throw new InvalidOperationException("Tenant boundary violation.");
                 }
             }
         }
 
         private Guid TenantClinicId => _tenantService?.GetClinicId() ?? Guid.Empty;
+        private bool IsSystemContext => _tenantService == null || _tenantService.IsSystemContext;
 
         private void NormalizeDateTimes()
         {

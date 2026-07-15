@@ -105,7 +105,7 @@
                                         <a href="/PetOwner/Details/@o.PetOwner.ID" class="btn btn-sm btn-outline-secondary" title="Profile Git">
                                             <i class="bi bi-person"></i>
                                         </a>
-                                        <form method="post" action="/Patient/RemoveOwner" class="d-inline" onsubmit="return confirm('Bu sahibi hastadan koparmak istediğinize emin misiniz?');">
+                                        <form method="post" action="/Patient/RemoveOwner" class="d-inline" data-confirm="Bu sahibi hastadan koparmak istediğinize emin misiniz?">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="patientId" value="@Model.ID" />
                                             <input type="hidden" name="ownerId" value="@o.PetOwnerId" />
@@ -174,7 +174,7 @@
                         {
                             <tr>
                                 <td>@m.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                                <td><span class="text-truncate d-inline-block" style="max-width: 250px;">@(string.IsNullOrEmpty(m.Assessment) ? "-" : m.Assessment)</span></td>
+                                <td><span class="text-truncate d-inline-block truncate-250">@(string.IsNullOrEmpty(m.Assessment) ? "-" : m.Assessment)</span></td>
                                 <td>@(m.Temperature?.ToString() ?? "-") °C / @(m.WeightAtVisit?.ToString() ?? "-") kg</td>
                                 <td class="text-end">
                                     <a href="/Muayene/Details/@m.ID" class="btn btn-sm btn-outline-info"><i class="bi bi-eye"></i> Detay</a>

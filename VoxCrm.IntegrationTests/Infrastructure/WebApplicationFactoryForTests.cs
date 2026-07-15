@@ -33,6 +33,7 @@ public sealed class WebApplicationFactoryForTests : WebApplicationFactory<WebPro
                 ["WhatsAppGateway:Issuer"] = "voxcrm-web",
                 ["WhatsAppGateway:Audience"] = "voxcrm-whatsapp-gateway",
                 ["WhatsAppGateway:JwtSecret"] = TestJwt.Secret,
+                ["DataSeeding:SeedDemoData"] = "false",
             });
         });
         builder.ConfigureServices(services =>

@@ -1,23 +1,21 @@
 @model IEnumerable<VoxCrm.Domain.Entities.ServiceItem>
 @{
     ViewData["Title"] = "Hizmetler ve Ürünler";
-    ViewData["ActiveMenu"] = "settings"; 
+    ViewData["ActiveMenu"] = "settings";
+    var includeArchived = ViewBag.IncludeArchived is true;
 }
 
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
     <h1 class="h3 fw-bold mb-0">Hizmet ve Ürün Listesi</h1>
-    <a href="/ServiceItem/Create" class="btn btn-primary btn-sm">
-        <i class="bi bi-plus-lg me-1"></i> Yeni Ekle
-    </a>
-</div>
-
-@if (TempData["Success"] != null)
-{
-    <div class="alert alert-success alert-dismissible fade show">
-        @TempData["Success"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <div class="d-flex gap-2">
+        <a href="/ServiceItem?includeArchived=@((!includeArchived).ToString().ToLowerInvariant())" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-archive me-1"></i> @(includeArchived ? "Arşivi Gizle" : "Arşivi Göster")
+        </a>
+        <a href="/ServiceItem/Create" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg me-1"></i> Yeni Ekle
+        </a>
     </div>
-}
+</div>
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
@@ -50,12 +48,23 @@
                                 }
                             </td>
                             <td class="text-end">
-                                <a href="/ServiceItem/Edit/@item.ID" class="btn btn-sm btn-outline-primary">Düzenle</a>
-                                <form action="/ServiceItem/Delete" method="post" class="d-inline" onsubmit="return confirm('Bu hizmeti silmek istediğinize emin misiniz?');">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="id" value="@item.ID" />
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Sil</button>
-                                </form>
+                                @if (item.IsActive)
+                                {
+                                    <a href="/ServiceItem/Edit/@item.ID" class="btn btn-sm btn-outline-primary">Düzenle</a>
+                                    <form action="/ServiceItem/Delete" method="post" class="d-inline" data-confirm="Bu hizmeti arşivlemek istediğinize emin misiniz?">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@item.ID" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Arşivle</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <form action="/ServiceItem/Restore" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@item.ID" />
+                                        <button type="submit" class="btn btn-sm btn-outline-success">Geri Al</button>
+                                    </form>
+                                }
                             </td>
                         </tr>
                     }

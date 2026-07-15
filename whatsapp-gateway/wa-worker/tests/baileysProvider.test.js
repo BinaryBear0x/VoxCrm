@@ -52,6 +52,10 @@ describe("BaileysProvider", () => {
     expect(result.statusCode).toBe(200);
     expect(result.body).toEqual({ ok: true, messageId: "msg-1" });
     expect(sockets[0].sendMessage).toHaveBeenCalledWith("905551111111@s.whatsapp.net", { text: "hello" });
+
+    const duplicate = await provider.send(clinicA, "+90 555 111 11 11", "hello", "notif-1");
+    expect(duplicate.body).toEqual({ ok: true, messageId: "msg-1" });
+    expect(sockets[0].sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("returns permanent validation errors without retryable worker failures", async () => {
@@ -117,6 +121,43 @@ describe("BaileysProvider", () => {
     expect(httpClient.post).toHaveBeenCalledTimes(2);
     expect(httpClient.post.mock.calls[0][1].message).toBe("Merhaba");
     expect(httpClient.post.mock.calls[1][1].message).toBe("[media:image]");
+  });
+
+  it("persists failed inbound delivery and retries it after provider restart", async () => {
+    const queued = [];
+    const sessionStore = {
+      encryptionStatus: () => "enabled",
+      listClinicIds: vi.fn(async () => []),
+      listPendingClinicIds: vi.fn(async () => [clinicA]),
+      listPendingInbound: vi.fn(async () => queued.map((payload, index) => ({ file: `${index}.json`, payload }))),
+      savePendingInbound: vi.fn(async (_clinicId, payload) => queued.push(payload)),
+      removePendingInbound: vi.fn(async () => queued.shift()),
+      useAuthState: vi.fn(async () => ({
+        state: { creds: {}, keys: { get: vi.fn(), set: vi.fn() } },
+        saveCreds: vi.fn(), getMessage: vi.fn(), saveMessage: vi.fn()
+      })),
+      removeClinic: vi.fn()
+    };
+    const failingHttp = { post: vi.fn().mockRejectedValue(new Error("gateway offline")) };
+    const first = createProvider({ sessionStore, httpClient: failingHttp });
+    await first.provider.connect(clinicA);
+    first.sockets[0].emitMessages({
+      type: "notify",
+      messages: [{
+        key: { id: "inbound-1", fromMe: false, remoteJid: "905551111111@s.whatsapp.net" },
+        message: { conversation: "Kalıcı mesaj" },
+        messageTimestamp: 1
+      }]
+    });
+    await waitFor(() => queued.length === 1);
+
+    const succeedingHttp = { post: vi.fn().mockResolvedValue({}) };
+    const restarted = createProvider({ sessionStore, httpClient: succeedingHttp });
+    await restarted.provider.retryPendingInbound();
+
+    expect(succeedingHttp.post).toHaveBeenCalledTimes(1);
+    expect(succeedingHttp.post.mock.calls[0][1].provider_message_id).toBe("inbound-1");
+    expect(queued).toHaveLength(0);
   });
 });
 

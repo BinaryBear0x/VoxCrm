@@ -396,6 +396,24 @@ h6 {
   color: #7c3aed !important;
 }
 
+.avatar-lg { width: 72px; height: 72px; }
+.avatar-md { width: 48px; height: 48px; font-size: 1.5rem; color: var(--secondary-color); }
+.pre-wrap { white-space: pre-wrap; }
+.qr-image { max-width: 260px; }
+.truncate-250 { max-width: 250px; }
+.lock-icon { font-size: 4rem; }
+.brand-accent { color: var(--secondary-color) !important; }
+.navbar-dealer { background-color: var(--secondary-color) !important; }
+.navbar-clinic { background-color: var(--primary-color) !important; }
+.radius-sm { border-radius: var(--radius-sm) !important; }
+.toast-layer { z-index: 1090; }
+.dashboard-blue { background: #e8f4fd; }
+.dashboard-green { background: #eaf7ea; }
+.dashboard-yellow { background: #fff8e8; }
+.dashboard-purple { background: #fdf0ff; }
+.text-whatsapp-purple { color: #6f42c1 !important; }
+.account-security-card { max-width: 520px; }
+
 .bg-light,
 .table-light {
   background-color: var(--surface-soft) !important;

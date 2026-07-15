@@ -55,11 +55,14 @@ export function createApp({ provider, workerInternalToken }) {
   app.post("/clinics/:clinicId/send", async (req, res, next) => {
     try {
       const clinicId = requireClinicId(req.params.clinicId);
+      const phoneNumber = requiredString(req.body.phoneNumber, "phoneNumber", 32);
+      const message = requiredString(req.body.message, "message", 4096);
+      const notificationId = requiredString(req.body.notificationId, "notificationId", 128);
       const result = await provider.send(
         clinicId,
-        String(req.body.phoneNumber || ""),
-        String(req.body.message || ""),
-        String(req.body.notificationId || "")
+        phoneNumber,
+        message,
+        notificationId
       );
       res.status(result.statusCode || 200).json(result.body || result);
     } catch (error) {
@@ -76,4 +79,14 @@ export function createApp({ provider, workerInternalToken }) {
   });
 
   return app;
+}
+
+function requiredString(value, field, maxLength) {
+  if (typeof value !== "string" || !value.trim() || value.length > maxLength) {
+    const error = new Error(`${field} is required and must be at most ${maxLength} characters.`);
+    error.status = 400;
+    error.errorCode = "INVALID_PAYLOAD";
+    throw error;
+  }
+  return value.trim();
 }

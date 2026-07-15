@@ -1,0 +1,11 @@
+[Unit]
+Description=VoxCrm health and disk monitor
+
+[Service]
+Type=oneshot
+User=voxcrm
+Group=voxcrm
+EnvironmentFile=/etc/voxcrm/secrets/production.env
+ExecStart=/opt/voxcrm/current/deploy/scripts/monitor.sh
+NoNewPrivileges=true
+PrivateTmp=true

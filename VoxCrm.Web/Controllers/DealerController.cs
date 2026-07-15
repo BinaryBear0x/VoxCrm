@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
+using System.Text;
+using Microsoft.AspNetCore.WebUtilities;
+using VoxCrm.Application.Clinics;
+using VoxCrm.Application.DealerOperations;
 using VoxCrm.Domain.Entities;
-using VoxCrm.Infrastructure.Data;
 using VoxCrm.Web.Models;
 using VoxCrm.Web.Services;
 
@@ -16,13 +17,18 @@ namespace VoxCrm.Web.Controllers;
 [Authorize(Roles = "Dealer")]
 public class DealerController : Controller
 {
-    private readonly VoxCrmDbContext _context;
     private readonly SystemHealthService _healthService;
+    private readonly IClinicManagementService _clinicManagementService;
+    private readonly IDealerLogService _dealerLogService;
 
-    public DealerController(VoxCrmDbContext context, SystemHealthService healthService)
+    public DealerController(
+        SystemHealthService healthService,
+        IClinicManagementService clinicManagementService,
+        IDealerLogService dealerLogService)
     {
-        _context = context;
         _healthService = healthService;
+        _clinicManagementService = clinicManagementService;
+        _dealerLogService = dealerLogService;
     }
 
     // GET: /Dealer — Tüm klinikler
@@ -32,42 +38,58 @@ public class DealerController : Controller
         // Bu yüzden tüm klinikleri görebilir — bu doğru davranış.
         if (!TryGetDealerId(out var dealerId)) return Forbid();
 
-        var clinics = await _context.Clinics
-            .Include(c => c.Dealer)
-            .Where(c => c.DealerId == dealerId)
-            .OrderBy(c => c.Name)
-            .ToListAsync();
+        var clinics = await _clinicManagementService.ListOwnedAsync(dealerId, HttpContext.RequestAborted);
         return View(clinics);
     }
 
     // GET: /Dealer/Create
-    public async Task<IActionResult> Create()
+    public IActionResult Create()
     {
-        if (!TryGetDealerId(out var dealerId)) return Forbid();
-
-        ViewBag.Dealers = await _context.Dealers.Where(d => d.ID == dealerId).ToListAsync();
-        return View();
+        return TryGetDealerId(out _) ? View(new CreateClinicViewModel()) : Forbid();
     }
 
     // POST: /Dealer/Create
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(Clinic model)
+    public async Task<IActionResult> Create(CreateClinicViewModel model)
     {
         if (!TryGetDealerId(out var dealerId)) return Forbid();
 
-        model.DealerId = dealerId;
         if (!ModelState.IsValid)
+            return View(model);
+
+        var result = await _clinicManagementService.CreateAsync(
+            new CreateClinicCommand(
+                dealerId,
+                model.Name,
+                model.Phone,
+                model.Email,
+                model.Address,
+                model.IsWhatsAppEnabled,
+                model.InitialUserFirstName,
+                model.InitialUserLastName,
+                model.InitialUserEmail),
+            HttpContext.RequestAborted);
+        if (!result.Succeeded || result.Provisioned == null)
         {
-            ViewBag.Dealers = await _context.Dealers.Where(d => d.ID == dealerId).ToListAsync();
+            foreach (var error in result.Errors)
+                ModelState.AddModelError(string.Empty, error);
             return View(model);
         }
-        model.Slug = model.Name.ToLower()
-            .Replace(" ", "-").Replace("ı", "i").Replace("ş", "s")
-            .Replace("ğ", "g").Replace("ü", "u").Replace("ö", "o").Replace("ç", "c");
-        _context.Clinics.Add(model);
-        await _context.SaveChangesAsync();
-        TempData["Success"] = $"{model.Name} kliniği başarıyla eklendi.";
-        return RedirectToAction(nameof(Index));
+
+        var encodedToken = WebEncoders.Base64UrlEncode(
+            Encoding.UTF8.GetBytes(result.Provisioned.ActivationToken));
+        var activationUrl = Url.Action(
+            "Activate",
+            "Auth",
+            new { userId = result.Provisioned.UserId, token = encodedToken },
+            Request.Scheme);
+
+        return View("Provisioned", new ProvisionedClinicViewModel
+        {
+            ClinicName = result.Provisioned.ClinicName,
+            UserEmail = result.Provisioned.UserEmail,
+            ActivationUrl = activationUrl ?? string.Empty,
+        });
     }
 
     // GET: /Dealer/Edit/{id}
@@ -75,51 +97,92 @@ public class DealerController : Controller
     {
         if (!TryGetDealerId(out var dealerId)) return Forbid();
 
-        var clinic = await _context.Clinics.FirstOrDefaultAsync(c => c.ID == id && c.DealerId == dealerId);
+        var clinic = await _clinicManagementService.FindOwnedAsync(
+            dealerId,
+            id,
+            HttpContext.RequestAborted);
         if (clinic == null) return NotFound();
-        ViewBag.Dealers = await _context.Dealers.Where(d => d.ID == dealerId).ToListAsync();
-        return View(clinic);
+        return View(new EditClinicViewModel
+        {
+            ClinicId = clinic.ID,
+            Name = clinic.Name,
+            Phone = clinic.phone,
+            Email = clinic.Email,
+            Address = clinic.Address,
+            IsWhatsAppEnabled = clinic.IsWhatsAppEnabled,
+            WhatsAppPhoneNumberId = clinic.WhatsAppPhoneNumberId,
+            WhatsAppSendWindowEnabled = clinic.WhatsAppSendWindowEnabled,
+            WhatsAppSendWindowStart = clinic.WhatsAppSendWindowStart,
+            WhatsAppSendWindowEnd = clinic.WhatsAppSendWindowEnd,
+            WhatsAppTimeZoneId = clinic.WhatsAppTimeZoneId,
+        });
     }
 
     // POST: /Dealer/Edit/{id}
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Guid id, Clinic model)
+    public async Task<IActionResult> Edit(Guid id, EditClinicViewModel model)
     {
         if (!TryGetDealerId(out var dealerId)) return Forbid();
+        model.ClinicId = id;
+        if (!ModelState.IsValid)
+            return View(model);
 
-        // ID URL'den alınıyor, form'dan değil — ID manipülasyonu önlendi
-        var clinic = await _context.Clinics.FirstOrDefaultAsync(c => c.ID == id && c.DealerId == dealerId);
-        if (clinic == null) return NotFound();
+        var result = await _clinicManagementService.UpdateAsync(
+            new UpdateClinicCommand(
+                dealerId,
+                id,
+                model.Name,
+                model.Phone,
+                model.Email,
+                model.Address,
+                model.IsWhatsAppEnabled,
+                model.WhatsAppPhoneNumberId,
+                model.WhatsAppSendWindowEnabled,
+                model.WhatsAppSendWindowStart,
+                model.WhatsAppSendWindowEnd,
+                model.WhatsAppTimeZoneId),
+            HttpContext.RequestAborted);
+        if (!result.Succeeded)
+            return NotFound();
 
-        clinic.Name                  = model.Name;
-        clinic.phone                 = model.phone;
-        clinic.Email                 = model.Email;
-        clinic.Address               = model.Address;
-        clinic.IsWhatsAppEnabled     = model.IsWhatsAppEnabled;
-        clinic.WhatsAppPhoneNumberId = model.WhatsAppPhoneNumberId;
-        clinic.WhatsAppSendWindowEnabled = model.WhatsAppSendWindowEnabled;
-        clinic.WhatsAppSendWindowStart = model.WhatsAppSendWindowStart;
-        clinic.WhatsAppSendWindowEnd = model.WhatsAppSendWindowEnd;
-        clinic.WhatsAppTimeZoneId = string.IsNullOrWhiteSpace(model.WhatsAppTimeZoneId)
-            ? "Europe/Istanbul"
-            : model.WhatsAppTimeZoneId.Trim();
-
-        await _context.SaveChangesAsync();
         TempData["Success"] = "Klinik bilgileri güncellendi.";
         return RedirectToAction(nameof(Index));
     }
 
-    // POST: /Dealer/Delete/{id}
+    // Eski URL korunuyor; işlem fiziksel silme değil pasifleştirmedir.
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(Guid id)
     {
+        return await Deactivate(id);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Deactivate(Guid id)
+    {
         if (!TryGetDealerId(out var dealerId)) return Forbid();
 
-        var clinic = await _context.Clinics.FirstOrDefaultAsync(c => c.ID == id && c.DealerId == dealerId);
-        if (clinic == null) return NotFound();
-        clinic.IsActive = false; // Soft delete — veriyi korur
-        await _context.SaveChangesAsync();
-        TempData["Success"] = "Klinik sistemden kaldirildi.";
+        var result = await _clinicManagementService.DeactivateAsync(
+            dealerId,
+            id,
+            HttpContext.RequestAborted);
+        if (!result.Succeeded) return NotFound();
+
+        TempData["Success"] = "Klinik pasifleştirildi ve kullanıcı oturumları kapatıldı.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Reactivate(Guid id)
+    {
+        if (!TryGetDealerId(out var dealerId)) return Forbid();
+
+        var result = await _clinicManagementService.ReactivateAsync(
+            dealerId,
+            id,
+            HttpContext.RequestAborted);
+        if (!result.Succeeded) return NotFound();
+
+        TempData["Success"] = "Klinik ve kullanıcı hesapları yeniden aktifleştirildi.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -135,70 +198,16 @@ public class DealerController : Controller
     {
         if (!TryGetDealerId(out var dealerId)) return Forbid();
 
-        var clinics = await _context.Clinics
-            .Where(c => c.DealerId == dealerId)
-            .OrderBy(c => c.Name)
-            .ToListAsync(cancellationToken);
-        var clinicIds = clinics.Select(c => c.ID).ToList();
-
-        if (clinicId.HasValue && !clinicIds.Contains(clinicId.Value))
-            return Forbid();
-
-        var auditQuery = _context.SystemAuditLogs.AsNoTracking()
-            .Where(l => l.DealerId == dealerId || (l.ClinicId != null && clinicIds.Contains(l.ClinicId.Value)));
-
-        if (!string.IsNullOrWhiteSpace(level))
-            auditQuery = auditQuery.Where(l => l.Level == level);
-
-        if (!string.IsNullOrWhiteSpace(source))
-            auditQuery = auditQuery.Where(l => l.Source == source);
-
-        if (!string.IsNullOrWhiteSpace(category))
-            auditQuery = auditQuery.Where(l => l.Category == category);
-
-        if (from.HasValue)
-            auditQuery = auditQuery.Where(l => l.CreatedAt >= DateTime.SpecifyKind(from.Value.Date, DateTimeKind.Utc));
-
-        if (to.HasValue)
-            auditQuery = auditQuery.Where(l => l.CreatedAt < DateTime.SpecifyKind(to.Value.Date.AddDays(1), DateTimeKind.Utc));
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var term = search.Trim();
-            auditQuery = auditQuery.Where(l =>
-                l.Action.Contains(term)
-                || l.Message.Contains(term)
-                || (l.ActorUserName != null && l.ActorUserName.Contains(term))
-                || (l.ErrorCode != null && l.ErrorCode.Contains(term))
-                || (l.TraceId != null && l.TraceId.Contains(term)));
-        }
-
-        if (clinicId.HasValue)
-            auditQuery = auditQuery.Where(l => l.ClinicId == clinicId.Value);
-
-        var notificationQuery = _context.WhatsAppNotifications
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Include(n => n.PetOwner)
-            .Where(n => clinicIds.Contains(n.ClinicID)
-                        && (n.LastError != null
-                            || n.Status == WhatsAppNotificationStatuses.Failed
-                            || n.Status == WhatsAppNotificationStatuses.NeedsReview));
-
-        if (clinicId.HasValue)
-            notificationQuery = notificationQuery.Where(n => n.ClinicID == clinicId.Value);
+        var result = await _dealerLogService.GetAsync(
+            new DealerLogQuery(dealerId, level, source, category, search, from, to, clinicId),
+            cancellationToken);
+        if (!result.Succeeded) return Forbid();
 
         var model = new DealerLogsViewModel
         {
-            AuditLogs = await auditQuery
-                .OrderByDescending(l => l.CreatedAt)
-                .Take(200)
-                .ToListAsync(cancellationToken),
-            WhatsAppErrors = await notificationQuery
-                .OrderByDescending(n => n.CreatedAt)
-                .Take(100)
-                .ToListAsync(cancellationToken),
-            Clinics = clinics,
+            AuditLogs = result.AuditLogs,
+            WhatsAppErrors = result.WhatsAppErrors,
+            Clinics = result.Clinics,
             Level = level,
             Source = source,
             Category = category,

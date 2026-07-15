@@ -1,0 +1,22 @@
+@model VoxCrm.Web.Models.ResetMfaViewModel
+@{
+    ViewData["Title"] = "MFA Sıfırla";
+}
+
+<div class="container py-5">
+    <div class="card account-security-card mx-auto shadow-sm">
+        <div class="card-body p-4">
+            <h1 class="h4">MFA sıfırlama</h1>
+            <p class="text-muted">Mevcut doğrulayıcı ve kullanılmamış kurtarma kodları geçersiz olur. Sonraki girişte MFA yeniden kurulmalıdır.</p>
+            <form method="post">
+                @Html.AntiForgeryToken()
+                <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                <div class="mb-3">
+                    <label asp-for="CurrentPassword" class="form-label">Mevcut parola</label>
+                    <input asp-for="CurrentPassword" class="form-control" autocomplete="current-password" />
+                </div>
+                <button class="btn btn-danger" type="submit">MFA’yı sıfırla ve çıkış yap</button>
+            </form>
+        </div>
+    </div>
+</div>

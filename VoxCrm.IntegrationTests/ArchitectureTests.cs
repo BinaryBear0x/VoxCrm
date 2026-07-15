@@ -15,6 +15,23 @@ public sealed class ArchitectureTests
         Assert.Contains("AddVoxCrmApi", program, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Crm_controllers_do_not_access_db_context_directly()
+    {
+        var repoRoot = FindRepoRoot();
+        var controllersDirectory = Path.Combine(repoRoot, "VoxCrm.Web", "Controllers");
+        var crmControllers = Directory
+            .EnumerateFiles(controllersDirectory, "*Controller.cs")
+            .Where(path => !path.EndsWith("WhatsAppController.cs", StringComparison.Ordinal));
+
+        foreach (var controllerPath in crmControllers)
+        {
+            var source = File.ReadAllText(controllerPath);
+            Assert.DoesNotContain("VoxCrmDbContext", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("_context", source, StringComparison.Ordinal);
+        }
+    }
+
     private static string FindRepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

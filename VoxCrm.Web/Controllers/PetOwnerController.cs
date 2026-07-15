@@ -1,250 +1,140 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using VoxCrm.Application.PetOwners;
 using VoxCrm.Domain.Entities;
-using VoxCrm.Infrastructure.Data;
 
 namespace VoxCrm.Web.Controllers;
 
-
 [Authorize(Roles = "Clinic")]
-public class PetOwnerController : Controller
+public sealed class PetOwnerController : Controller
 {
-    private readonly VoxCrmDbContext _context;
+    private readonly IPetOwnerService _service;
 
-    public PetOwnerController(VoxCrmDbContext context) => _context = context;
+    public PetOwnerController(IPetOwnerService service) => _service = service;
 
-    // GET: /PetOwner
-    public async Task<IActionResult> Index(string? search)
+    public async Task<IActionResult> Index(string? search, bool partial = false, CancellationToken cancellationToken = default)
     {
-        var query = _context.PetOwners
-            .Include(o => o.OwnedPatients)
-                .ThenInclude(po => po.Patient)
-            .AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var term = search.Trim();
-            query = query.Where(p =>
-                (p.FirstName != null && p.FirstName.Contains(term)) ||
-                (p.LastName != null && p.LastName.Contains(term)) ||
-                (p.Phone != null && p.Phone.Contains(term)) ||
-                (p.Email != null && p.Email.Contains(term)) ||
-                (p.Address != null && p.Address.Contains(term)) ||
-                (p.Notes != null && p.Notes.Contains(term)) ||
-                p.OwnedPatients.Any(op =>
-                    (op.Patient.Name != null && op.Patient.Name.Contains(term)) ||
-                    (op.Patient.Species != null && op.Patient.Species.Contains(term)) ||
-                    (op.Patient.Breed != null && op.Patient.Breed.Contains(term)) ||
-                    (op.Patient.MicrochipNumber != null && op.Patient.MicrochipNumber.Contains(term)) ||
-                    (op.Patient.pasaportNumarasi != null && op.Patient.pasaportNumarasi.Contains(term))));
-        }
-
-        var owners = await query.OrderBy(p => p.FirstName).ToListAsync();
         ViewBag.Search = search;
+        var owners = await _service.ListAsync(search, cancellationToken: cancellationToken);
+        if (partial || Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            return PartialView("_PetOwnerTablePartial", owners);
         return View(owners);
     }
 
     [HttpGet]
-    public async Task<IActionResult> Search(string? q)
+    public async Task<IActionResult> Search(string? q, CancellationToken cancellationToken)
     {
-        var query = _context.PetOwners
-            .Include(o => o.OwnedPatients)
-                .ThenInclude(po => po.Patient)
-            .AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(q))
+        var owners = await _service.SearchAsync(q, cancellationToken);
+        return Json(owners.Select(owner => new
         {
-            var term = q.Trim();
-            query = query.Where(o =>
-                (o.FirstName != null && o.FirstName.Contains(term)) ||
-                (o.LastName != null && o.LastName.Contains(term)) ||
-                (o.Phone != null && o.Phone.Contains(term)) ||
-                (o.Email != null && o.Email.Contains(term)) ||
-                (o.Address != null && o.Address.Contains(term)) ||
-                (o.Notes != null && o.Notes.Contains(term)) ||
-                o.OwnedPatients.Any(op =>
-                    (op.Patient.Name != null && op.Patient.Name.Contains(term)) ||
-                    (op.Patient.Species != null && op.Patient.Species.Contains(term)) ||
-                    (op.Patient.Breed != null && op.Patient.Breed.Contains(term)) ||
-                    (op.Patient.MicrochipNumber != null && op.Patient.MicrochipNumber.Contains(term)) ||
-                    (op.Patient.pasaportNumarasi != null && op.Patient.pasaportNumarasi.Contains(term))));
-        }
-
-        var owners = await query
-            .OrderBy(o => o.FirstName)
-            .ThenBy(o => o.LastName)
-            .Take(20)
-            .ToListAsync();
-
-        var results = owners.Select(o => new
-            {
-                id = o.ID,
-                label = o.FirstName + " " + o.LastName,
-                meta = o.Phone + (string.IsNullOrWhiteSpace(o.Email) ? "" : " · " + o.Email),
-                detail = string.Join(", ", o.OwnedPatients
-                    .Where(op => op.Patient != null)
-                    .Select(op => op.Patient.Name + " (" + op.Patient.Species + ")")
-                    .Take(3))
-            })
-            .ToList();
-
-        return Json(results);
+            id = owner.ID,
+            label = owner.FirstName + " " + owner.LastName,
+            meta = owner.Phone + (string.IsNullOrWhiteSpace(owner.Email) ? "" : " · " + owner.Email),
+            detail = string.Join(", ", owner.OwnedPatients
+                .Where(link => link.Patient != null)
+                .Select(link => link.Patient.Name + " (" + link.Patient.Species + ")")
+                .Take(3))
+        }));
     }
 
-    // GET: /PetOwner/Details/{id}
-    public async Task<IActionResult> Details(Guid id)
+    public async Task<IActionResult> Details(Guid id, CancellationToken cancellationToken)
     {
-        var owner = await _context.PetOwners
-            .Include(o => o.OwnedPatients)
-                .ThenInclude(po => po.Patient)
-            .FirstOrDefaultAsync(o => o.ID == id);
-
-        if (owner == null) return NotFound();
-
-        var existingPatientIds = owner.OwnedPatients.Select(op => op.PatientId).ToList();
-        ViewBag.AvailablePatients = await _context.Patients
-            .Where(p => !existingPatientIds.Contains(p.ID))
-            .OrderBy(p => p.Name)
-            .ToListAsync();
-
-        return View(owner);
+        var details = await _service.GetDetailsAsync(id, cancellationToken: cancellationToken);
+        if (details == null) return NotFound();
+        ViewBag.AvailablePatients = details.AvailablePatients;
+        return View(details.Owner);
     }
 
-    // GET: /PetOwner/Create
     public IActionResult Create() => View();
 
-    // POST: /PetOwner/Create
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("FirstName,LastName,Phone,Email,Address,WhatsAppConsent,Notes")] PetOwner model)
+        [Bind("FirstName,LastName,Phone,Email,Address,WhatsAppConsent,Notes")] PetOwner model,
+        CancellationToken cancellationToken)
     {
-        // Sistem alanları formda olmadığı için doğrulama dışı bırakılıyor
-        ModelState.Remove(nameof(PetOwner.ClinicID));
-        ModelState.Remove(nameof(PetOwner.CreatedAt));
-        ModelState.Remove(nameof(PetOwner.IsActive));
-
-        if (!ModelState.IsValid)
+        RemoveSystemValidation();
+        if (!ModelState.IsValid) return View(model);
+        var result = await _service.CreateAsync(model, cancellationToken);
+        if (!result.Succeeded)
         {
-            TempData["Error"] = "Müşteri bilgileri kaydedilemedi. Lütfen formdaki alanları kontrol edin.";
+            ModelState.AddModelError(string.Empty, result.Error ?? "Müşteri kaydedilemedi.");
             return View(model);
         }
 
-        // Telefon numarası zaten kayıtlı mı?
-        if (!string.IsNullOrWhiteSpace(model.Phone))
-        {
-            var duplicate = await _context.PetOwners
-                .AnyAsync(p => p.Phone == model.Phone);
-            if (duplicate)
-            {
-                TempData["Error"] = $"Bu telefon numarası ({model.Phone}) zaten kayıtlı.";
-                return View(model);
-            }
-        }
-
-        _context.PetOwners.Add(model);
-        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
-        var displayName = string.Join(" ", new[] { model.FirstName, model.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
-        TempData["Success"] = $"{(string.IsNullOrWhiteSpace(displayName) ? "Müşteri" : displayName)} başarıyla eklendi.";
-        return RedirectToAction(nameof(Details), new { id = model.ID });
+        TempData["Success"] = "Müşteri başarıyla eklendi.";
+        return RedirectToAction(nameof(Details), new { id = result.Owner!.ID });
     }
 
-    // GET: /PetOwner/Edit/{id}
-    public async Task<IActionResult> Edit(Guid id)
+    public async Task<IActionResult> Edit(Guid id, CancellationToken cancellationToken)
     {
-        var owner = await _context.PetOwners.FindAsync(id);
-        if (owner == null) return NotFound();
-        return View(owner);
+        var owner = await _service.GetAsync(id, cancellationToken: cancellationToken);
+        return owner == null ? NotFound() : View(owner);
     }
 
-    // POST: /PetOwner/Edit/{id}
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Guid id,
-        [Bind("ID,FirstName,LastName,Phone,Email,Address,WhatsAppConsent,Notes")] PetOwner model)
+    public async Task<IActionResult> Edit(
+        Guid id,
+        [Bind("ID,FirstName,LastName,Phone,Email,Address,WhatsAppConsent,Notes")] PetOwner model,
+        CancellationToken cancellationToken)
     {
         if (id != model.ID) return BadRequest();
+        RemoveSystemValidation();
+        if (!ModelState.IsValid) return View(model);
+        var result = await _service.UpdateAsync(model, cancellationToken);
+        if (result.NotFound) return NotFound();
+        if (!result.Succeeded)
+        {
+            ModelState.AddModelError(string.Empty, result.Error ?? "Müşteri güncellenemedi.");
+            return View(model);
+        }
 
-        // Sistem alanları formda olmadığı için doğrulama dışı bırakılıyor
+        TempData["Success"] = "Müşteri başarıyla güncellendi.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _service.ArchiveAsync(id, ActorUserId(), cancellationToken);
+        if (result.NotFound) return NotFound();
+        TempData["Success"] = "Müşteri arşivlendi; finansal geçmiş korundu.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _service.RestoreAsync(id, ActorUserId(), cancellationToken);
+        if (result.NotFound) return NotFound();
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddPatient(Guid ownerId, Guid patientId, CancellationToken cancellationToken)
+    {
+        var result = await _service.AddPatientAsync(ownerId, patientId, cancellationToken);
+        if (result.NotFound) return NotFound();
+        TempData["Success"] = "Hasta bağlantısı eklendi.";
+        return RedirectToAction(nameof(Details), new { id = ownerId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemovePatient(Guid ownerId, Guid patientId, CancellationToken cancellationToken)
+    {
+        var result = await _service.RemovePatientAsync(ownerId, patientId, ActorUserId(), cancellationToken);
+        if (result.NotFound) return NotFound();
+        TempData["Success"] = "Hasta bağlantısı arşivlendi.";
+        return RedirectToAction(nameof(Details), new { id = ownerId });
+    }
+
+    private void RemoveSystemValidation()
+    {
         ModelState.Remove(nameof(PetOwner.ClinicID));
         ModelState.Remove(nameof(PetOwner.CreatedAt));
         ModelState.Remove(nameof(PetOwner.IsActive));
-
-        if (!ModelState.IsValid) return View(model);
-
-        var existing = await _context.PetOwners.FindAsync(id); // Global Query Filter: başka klinik = null
-        if (existing == null) return NotFound();
-
-        if (!string.IsNullOrWhiteSpace(model.Phone))
-        {
-            var duplicate = await _context.PetOwners
-                .AnyAsync(p => p.ID != id && p.Phone == model.Phone);
-            if (duplicate)
-            {
-                TempData["Error"] = $"Bu telefon numarası ({model.Phone}) başka bir müşteride kayıtlı.";
-                return View(model);
-            }
-        }
-
-        existing.FirstName       = model.FirstName;
-        existing.LastName        = model.LastName;
-        existing.Phone           = model.Phone;
-        existing.Email           = model.Email;
-        existing.Address         = model.Address;
-        existing.WhatsAppConsent = model.WhatsAppConsent;
-        existing.Notes           = model.Notes;
-        // ClinicID, CreatedAt, IsActive → hiç dokunulmaz ✅
-
-        await _context.SaveChangesAsync();
-        var editName = string.Join(" ", new[] { model.FirstName, model.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
-        TempData["Success"] = $"{(string.IsNullOrWhiteSpace(editName) ? "Müşteri" : editName)} başarıyla güncellendi.";
-        return RedirectToAction(nameof(Index));
     }
 
-    // POST: /PetOwner/Delete/{id}
-    [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(Guid id)
-    {
-        var owner = await _context.PetOwners.FindAsync(id);
-        if (owner != null)
-        {
-            _context.PetOwners.Remove(owner);
-            await _context.SaveChangesAsync();
-            TempData["Success"] = $"{owner.FirstName} {owner.LastName} silindi.";
-        }
-        return RedirectToAction(nameof(Index));
-    }
-
-    // POST: /PetOwner/AddPatient
-    [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddPatient(Guid ownerId, Guid patientId)
-    {
-        if (ownerId == Guid.Empty || patientId == Guid.Empty) return BadRequest();
-
-        var ownerExists = await _context.PetOwners.AnyAsync(o => o.ID == ownerId);
-        var patientExists = await _context.Patients.AnyAsync(p => p.ID == patientId);
-        if (!ownerExists || !patientExists) return NotFound();
-
-        var exists = await _context.PatientOwners.AnyAsync(po => po.PetOwnerId == ownerId && po.PatientId == patientId);
-        if (!exists)
-        {
-            _context.PatientOwners.Add(new PatientOwner { PetOwnerId = ownerId, PatientId = patientId, IsPrimaryOwner = true });
-            await _context.SaveChangesAsync();
-            TempData["Success"] = "Hasta başarıyla eklendi.";
-        }
-        return RedirectToAction(nameof(Details), new { id = ownerId });
-    }
-
-    // POST: /PetOwner/RemovePatient
-    [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> RemovePatient(Guid ownerId, Guid patientId)
-    {
-        var po = await _context.PatientOwners.FirstOrDefaultAsync(x => x.PetOwnerId == ownerId && x.PatientId == patientId);
-        if (po != null)
-        {
-            _context.PatientOwners.Remove(po);
-            await _context.SaveChangesAsync();
-            TempData["Success"] = "Hasta bağlantısı kaldırıldı.";
-        }
-        return RedirectToAction(nameof(Details), new { id = ownerId });
-    }
+    private Guid ActorUserId() =>
+        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

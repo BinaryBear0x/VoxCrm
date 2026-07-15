@@ -1,6 +1,11 @@
+@model VoxCrm.Application.Appointments.AppointmentCommand
+@using VoxCrm.Application.Appointments
 @{
     ViewData["Title"] = "Yeni Randevu";
     ViewData["ActiveMenu"] = "appointments";
+    var patients = ViewBag.Patients as IReadOnlyList<AppointmentPatientOption> ?? [];
+    var types = ViewBag.AppointmentTypes as IReadOnlyList<string> ?? AppointmentRules.AllowedTypes;
+    var hasConflict = ViewBag.ConflictWarning != null;
 }
 
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
@@ -14,73 +19,55 @@
     <div class="col-12 col-md-8 col-lg-6">
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
+                @if (hasConflict)
+                {
+                    <div class="alert alert-warning" role="alert">
+                        <strong>Zaman çakışması</strong>
+                        <div>@ViewBag.ConflictWarning</div>
+                    </div>
+                }
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
                 <form method="post" action="/Appointment/Create">
                     @Html.AntiForgeryToken()
+                    <input type="hidden" name="confirmConflict" value="@(hasConflict ? "true" : "false")">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Hasta / Sahip *</label>
-                        <select name="PatientId" class="form-select" required data-search-select="patient" data-required="true" data-placeholder="Hasta, sahip, telefon, çip veya pasaport ara...">
-                            <option value="">-- Sahip - Hasta Seç --</option>
-                            @{
-                                var patients = ViewBag.Patients as List<VoxCrm.Domain.Entities.Patient> ?? new();
-                                
-                                var ownedPatients = patients.Where(p => p.Owners.Any()).ToList();
-                                var unownedPatients = patients.Where(p => !p.Owners.Any()).ToList();
-
-                                var ownerGroups = ownedPatients
-                                    .SelectMany(p => p.Owners.Select(o => new { Patient = p, Owner = o.PetOwner }))
-                                    .Where(x => x.Owner != null)
-                                    .GroupBy(x => x.Owner)
-                                    .OrderBy(g => g.Key!.FirstName)
-                                    .ToList();
-
-                                foreach (var group in ownerGroups)
-                                {
-                                    <optgroup label="@group.Key!.FirstName @group.Key!.LastName (@group.Key!.Phone)">
-                                        @foreach (var item in group)
-                                        {
-                                            <option value="@item.Patient.ID">@item.Patient.Name (@item.Patient.Species)</option>
-                                        }
-                                    </optgroup>
-                                }
-
-                                if (unownedPatients.Any())
-                                {
-                                    <optgroup label="Sahipsiz Hastalar">
-                                        @foreach (var p in unownedPatients)
-                                        {
-                                            <option value="@p.ID">@p.Name (@p.Species)</option>
-                                        }
-                                    </optgroup>
-                                }
+                        <select name="PatientId" class="form-select" required data-search-select="patient" data-required="true" data-placeholder="Hasta, sahip veya telefon ara...">
+                            <option value="">-- Hasta Seç --</option>
+                            @foreach (var patient in patients)
+                            {
+                                var details = string.Join(" · ", new[] { patient.Species, patient.OwnerName, patient.OwnerPhone }.Where(value => !string.IsNullOrWhiteSpace(value)));
+                                <!option value="@patient.Id" @(Model.PatientId == patient.Id ? "selected" : "")>@patient.Name @(!string.IsNullOrEmpty(details) ? $"({details})" : "")</!option>
                             }
                         </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Randevu Tarihi ve Saati *</label>
-                        <input type="datetime-local" name="ScheduledAt" class="form-control" required>
+                        <input type="datetime-local" name="ScheduledAtLocal" class="form-control" value="@Model.ScheduledAtLocal.ToString("yyyy-MM-ddTHH:mm")" required>
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-8">
                             <label class="form-label fw-semibold">Randevu Türü *</label>
                             <select name="AppointmentType" class="form-select" required>
-                                <option value="Muayene">Muayene</option>
-                                <option value="Aşı">Aşı</option>
-                                <option value="Ameliyat">Ameliyat</option>
-                                <option value="Tıraş">Tıraş</option>
-                                <option value="Kontrol">Kontrol</option>
+                                @foreach (var type in types)
+                                {
+                                    <!option value="@type" @(Model.AppointmentType == type ? "selected" : "")>@type</!option>
+                                }
                             </select>
                         </div>
                         <div class="col-4">
                             <label class="form-label fw-semibold">Süre (dk)</label>
-                            <input type="number" name="DurationMinutes" class="form-control" value="30" min="10" max="240">
+                            <input type="number" name="DurationMinutes" class="form-control" value="@Model.DurationMinutes" min="10" max="240" required>
                         </div>
                     </div>
                     <div class="mb-4">
                         <label class="form-label fw-semibold">Geliş Sebebi / Şikayet</label>
-                        <textarea name="Reason" class="form-control" rows="3" placeholder="Hasta sahibinin ifadesiyle şikayet..."></textarea>
+                        <textarea name="Reason" class="form-control" rows="3" placeholder="Hasta sahibinin ifadesiyle şikayet...">@Model.Reason</textarea>
                     </div>
                     <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                        <button type="submit" class="btn @(hasConflict ? "btn-warning" : "btn-primary")">
+                            @(hasConflict ? "Çakışmaya Rağmen Kaydet" : "Kaydet")
+                        </button>
                         <a href="/Appointment" class="btn btn-outline-secondary">İptal</a>
                     </div>
                 </form>

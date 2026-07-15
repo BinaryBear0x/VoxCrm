@@ -2,22 +2,20 @@
 @{
     ViewData["Title"] = "Muayeneler";
     ViewData["ActiveMenu"] = "muayeneler";
+    var includeArchived = ViewBag.IncludeArchived is true;
 }
 
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
     <h1 class="h3 fw-bold mb-0">Tıbbi Kayıtlar</h1>
-    <a href="/Muayene/Create" class="btn btn-primary">
-        <i class="bi bi-plus-lg me-1"></i> Yeni Kayıt Ekle
-    </a>
-</div>
-
-@if (TempData["Success"] != null)
-{
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    <div class="d-flex gap-2">
+        <a href="/Muayene?includeArchived=@((!includeArchived).ToString().ToLowerInvariant())" class="btn btn-outline-secondary">
+            <i class="bi bi-archive me-1"></i> @(includeArchived ? "Arşivi Gizle" : "Arşivi Göster")
+        </a>
+        <a href="/Muayene/Create" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i> Yeni Kayıt Ekle
+        </a>
     </div>
-}
+</div>
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
@@ -45,7 +43,7 @@
                     <tbody>
                         @foreach (var m in Model)
                         {
-                            <tr>
+                            <tr class="@(!m.IsActive ? "table-secondary" : "")">
                                 <td>@m.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
                                 <td class="fw-semibold">
                                     <a href="/Patient/Details/@m.PatientId" class="text-decoration-none">@m.Patient?.Name</a>
@@ -57,7 +55,7 @@
                                 <td>
                                     @if (!string.IsNullOrEmpty(m.Assessment))
                                     {
-                                        <span class="text-truncate d-inline-block" style="max-width: 250px;">@m.Assessment</span>
+                                        <span class="text-truncate d-inline-block truncate-250">@m.Assessment</span>
                                     }
                                     else
                                     {
@@ -66,18 +64,30 @@
                                 </td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end gap-1">
-                                        <a href="/Muayene/Details/@m.ID" class="btn btn-sm btn-outline-info" title="Detay">
-                                            <i class="bi bi-eye"></i>
-                                        </a>
-                                        <a href="/Muayene/Edit/@m.ID" class="btn btn-sm btn-outline-primary" title="Düzenle">
-                                            <i class="bi bi-pencil"></i>
-                                        </a>
-                                        <form method="post" action="/Muayene/Delete/@m.ID" class="d-inline" onsubmit="return confirm('Bu kaydı silmek istediğinize emin misiniz?');">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Sil">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </form>
+                                        @if (m.IsActive)
+                                        {
+                                            <a href="/Muayene/Details/@m.ID" class="btn btn-sm btn-outline-info" title="Detay">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                            <a href="/Muayene/Edit/@m.ID" class="btn btn-sm btn-outline-primary" title="Düzenle">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <form method="post" action="/Muayene/Delete/@m.ID" class="d-inline" data-confirm="Bu kaydı arşivlemek istediğinize emin misiniz?">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Arşivle">
+                                                    <i class="bi bi-archive"></i>
+                                                </button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <form method="post" action="/Muayene/Restore/@m.ID" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Geri Al">
+                                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                                </button>
+                                            </form>
+                                        }
                                     </div>
                                 </td>
                             </tr>

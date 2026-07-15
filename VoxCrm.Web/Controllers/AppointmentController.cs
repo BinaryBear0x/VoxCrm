@@ -1,164 +1,163 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using VoxCrm.Domain.Entities;
-using VoxCrm.Infrastructure.Data;
+using VoxCrm.Application.Appointments;
 
 namespace VoxCrm.Web.Controllers;
 
 [Authorize(Roles = "Clinic")]
 public class AppointmentController : Controller
 {
-    private readonly VoxCrmDbContext _context;
-    public AppointmentController(VoxCrmDbContext context) => _context = context;
+    private readonly IAppointmentService _appointments;
 
-    // İzin verilen randevu durumları — başka değer kabul edilmez
-    private static readonly HashSet<string> AllowedStatuses =
-        new() { "Planlandı", "Tamamlandı", "İptal", "Gelmedi" };
-
-    public async Task<IActionResult> Index(string? status)
+    public AppointmentController(IAppointmentService appointments)
     {
-        if (status != null && !AllowedStatuses.Contains(status))
-            status = null;
-
-        var query = _context.Appointments.Include(a => a.Patient).AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(status))
-            query = query.Where(a => a.Status == status);
-
-        var list = await query.OrderByDescending(a => a.ScheduledAt).ToListAsync();
-        ViewBag.Status = status;
-        return View(list);
+        _appointments = appointments;
     }
 
-    public async Task<IActionResult> Create()
+    public async Task<IActionResult> Index(
+        string? status,
+        bool includeArchived,
+        CancellationToken cancellationToken)
     {
-        ViewBag.Patients = await _context.Patients
-            .Include(p => p.Owners).ThenInclude(po => po.PetOwner)
-            .OrderBy(p => p.Name)
-            .ToListAsync();
-        return View();
+        if (status != null && !AppointmentRules.IsAllowedStatus(status))
+            status = null;
+
+        ViewBag.Status = status;
+        ViewBag.IncludeArchived = includeArchived;
+        return View(await _appointments.ListAsync(status, includeArchived, cancellationToken));
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Create(CancellationToken cancellationToken)
+    {
+        await PopulatePatientsAsync(cancellationToken);
+        return View(new AppointmentCommand(
+            Guid.Empty,
+            DateTime.Today.AddDays(1).AddHours(9),
+            AppointmentRules.AllowedTypes[0],
+            30,
+            null));
     }
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("PatientId,ScheduledAt,AppointmentType,DurationMinutes,Reason,Status")] Appointment model)
+        AppointmentCommand command,
+        bool confirmConflict,
+        CancellationToken cancellationToken)
     {
-        // Sistem alanları ve navigasyon özellikleri doğrulama dışı bırakılıyor
-        ModelState.Remove(nameof(Appointment.ClinicID));
-        ModelState.Remove(nameof(Appointment.CreatedAt));
-        ModelState.Remove(nameof(Appointment.IsActive));
-        ModelState.Remove(nameof(Appointment.Patient));
-        ModelState.Remove(nameof(Appointment.IsReminderSent));
-
-        if (!ModelState.IsValid)
+        var result = await _appointments.CreateAsync(command, confirmConflict, cancellationToken);
+        if (result.Succeeded)
         {
-            ViewBag.Patients = await _context.Patients
-                .Include(p => p.Owners).ThenInclude(po => po.PetOwner)
-                .OrderBy(p => p.Name)
-                .ToListAsync();
-            return View(model);
-        }
-        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
-        if (!patientExists)
-        {
-            ModelState.AddModelError(nameof(model.PatientId), "Geçerli bir hasta seçin.");
-            ViewBag.Patients = await _context.Patients
-                .Include(p => p.Owners).ThenInclude(po => po.PetOwner)
-                .OrderBy(p => p.Name)
-                .ToListAsync();
-            return View(model);
+            TempData["Success"] = "Randevu başarıyla oluşturuldu.";
+            return RedirectToAction(nameof(Index));
         }
 
-        _context.Appointments.Add(model);
-        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
-        TempData["Success"] = "Randevu başarıyla oluşturuldu.";
-        return RedirectToAction(nameof(Index));
+        if (result.Outcome == AppointmentCommandOutcome.ConflictWarning)
+            ViewBag.ConflictWarning = result.Error;
+        else
+            ModelState.AddModelError(string.Empty, result.Error ?? "Randevu oluşturulamadı.");
+
+        await PopulatePatientsAsync(cancellationToken);
+        return View(command);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> UpdateStatus(Guid id, string status)
+    public async Task<IActionResult> UpdateStatus(
+        Guid id,
+        string status,
+        CancellationToken cancellationToken)
     {
-        if (!AllowedStatuses.Contains(status))
-            return BadRequest("Geçersiz durum değeri.");
+        var result = await _appointments.UpdateStatusAsync(id, status, cancellationToken);
+        if (result.Outcome == AppointmentCommandOutcome.ValidationFailed)
+            return BadRequest(result.Error);
+        if (result.Outcome == AppointmentCommandOutcome.NotFound)
+            return NotFound();
 
-        var appt = await _context.Appointments.FindAsync(id);
-        if (appt == null) return NotFound();
-        appt.Status = status;
-        await _context.SaveChangesAsync();
         TempData["Success"] = "Randevu durumu güncellendi.";
         return RedirectToAction(nameof(Index));
     }
 
     [HttpGet]
-    public async Task<IActionResult> Edit(Guid id)
+    public async Task<IActionResult> Edit(Guid id, CancellationToken cancellationToken)
     {
-        var appt = await _context.Appointments.FindAsync(id);
-        if (appt == null) return NotFound();
+        var appointment = await _appointments.GetAsync(id, cancellationToken);
+        if (appointment == null)
+            return NotFound();
 
-        ViewBag.Patients = await _context.Patients
-            .Include(p => p.Owners).ThenInclude(po => po.PetOwner)
-            .OrderBy(p => p.Name)
-            .ToListAsync();
-        return View(appt);
+        await PopulatePatientsAsync(cancellationToken);
+        return View(appointment);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(
-        [Bind("ID,PatientId,ScheduledAt,AppointmentType,DurationMinutes,Reason,Status")] Appointment model)
+        Guid id,
+        AppointmentCommand command,
+        bool confirmConflict,
+        CancellationToken cancellationToken)
     {
-        // Sistem alanları ve navigasyon özellikleri doğrulama dışı bırakılıyor
-        ModelState.Remove(nameof(Appointment.ClinicID));
-        ModelState.Remove(nameof(Appointment.CreatedAt));
-        ModelState.Remove(nameof(Appointment.IsActive));
-        ModelState.Remove(nameof(Appointment.Patient));
-        ModelState.Remove(nameof(Appointment.IsReminderSent));
-
-        if (!ModelState.IsValid)
+        var result = await _appointments.UpdateAsync(id, command, confirmConflict, cancellationToken);
+        if (result.Succeeded)
         {
-            ViewBag.Patients = await _context.Patients
-                .Include(p => p.Owners).ThenInclude(po => po.PetOwner)
-                .OrderBy(p => p.Name)
-                .ToListAsync();
-            return View(model);
+            TempData["Success"] = "Randevu başarıyla güncellendi.";
+            return RedirectToAction(nameof(Index));
         }
+        if (result.Outcome == AppointmentCommandOutcome.NotFound)
+            return NotFound();
 
-        var existing = await _context.Appointments.FindAsync(model.ID); // Global Query Filter: başka klinik = null
-        if (existing == null) return NotFound();
+        if (result.Outcome == AppointmentCommandOutcome.ConflictWarning)
+            ViewBag.ConflictWarning = result.Error;
+        else
+            ModelState.AddModelError(string.Empty, result.Error ?? "Randevu güncellenemedi.");
 
-        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
-        if (!patientExists)
-        {
-            ModelState.AddModelError(nameof(model.PatientId), "Geçerli bir hasta seçin.");
-            ViewBag.Patients = await _context.Patients
-                .Include(p => p.Owners).ThenInclude(po => po.PetOwner)
-                .OrderBy(p => p.Name)
-                .ToListAsync();
-            return View(model);
-        }
+        var existing = await _appointments.GetAsync(id, cancellationToken);
+        if (existing == null)
+            return NotFound();
 
-        existing.PatientId       = model.PatientId;
-        existing.ScheduledAt     = model.ScheduledAt;
-        existing.AppointmentType = model.AppointmentType;
-        existing.DurationMinutes = model.DurationMinutes;
-        existing.Reason          = model.Reason;
-        // IsReminderSent, ClinicID, CreatedAt, IsActive → hiç dokunulmaz ✅
+        await PopulatePatientsAsync(cancellationToken);
+        return View(new AppointmentEditModel(
+            id,
+            command.PatientId,
+            command.ScheduledAtLocal,
+            command.DurationMinutes,
+            command.AppointmentType,
+            existing.Status,
+            command.Reason));
+    }
 
-        await _context.SaveChangesAsync();
-        TempData["Success"] = "Randevu başarıyla güncellendi.";
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _appointments.ArchiveAsync(id, ActorUserId(), cancellationToken);
+        if (result.Outcome == AppointmentCommandOutcome.NotFound)
+            return NotFound();
+
+        TempData["Success"] = "Randevu arşivlendi.";
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
     {
-        var appt = await _context.Appointments.FindAsync(id);
-        if (appt != null)
+        var result = await _appointments.RestoreAsync(id, ActorUserId(), cancellationToken);
+        if (result.Outcome == AppointmentCommandOutcome.NotFound)
+            return NotFound();
+        if (!result.Succeeded)
         {
-            _context.Appointments.Remove(appt);
-            await _context.SaveChangesAsync();
-            TempData["Success"] = "Randevu başarıyla silindi.";
+            TempData["Error"] = result.Error ?? "Randevu geri alınamadı.";
+            return RedirectToAction(nameof(Index), new { includeArchived = true });
         }
-        return RedirectToAction(nameof(Index));
+
+        TempData["Success"] = "Randevu geri alındı.";
+        return RedirectToAction(nameof(Index), new { includeArchived = true });
     }
+
+    private async Task PopulatePatientsAsync(CancellationToken cancellationToken)
+    {
+        ViewBag.Patients = await _appointments.GetPatientOptionsAsync(cancellationToken);
+        ViewBag.AppointmentTypes = AppointmentRules.AllowedTypes;
+    }
+
+    private Guid ActorUserId() =>
+        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

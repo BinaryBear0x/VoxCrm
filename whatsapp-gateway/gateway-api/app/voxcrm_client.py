@@ -65,6 +65,7 @@ class VoxCrmClient:
         message: str,
         received_at: datetime | None,
         gateway_session_id: str,
+        provider_message_id: str,
     ) -> None:
         token = create_voxcrm_token("whatsapp.inbound.write")
         response = await self._client.post(
@@ -76,6 +77,41 @@ class VoxCrmClient:
                 "message": message,
                 "receivedAt": received_at.isoformat() if received_at else None,
                 "gatewaySessionId": gateway_session_id,
+                "providerMessageId": provider_message_id,
+            },
+        )
+        response.raise_for_status()
+
+    async def write_audit(
+        self,
+        *,
+        level: str,
+        category: str,
+        action: str,
+        message: str,
+        outcome: str,
+        clinic_id: uuid.UUID | None = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        error_code: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        token = create_voxcrm_token("system.audit.write")
+        response = await self._client.post(
+            "/api/system/audit-logs",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "level": level,
+                "source": "Gateway",
+                "category": category,
+                "action": action,
+                "message": message,
+                "outcome": outcome,
+                "clinicId": str(clinic_id) if clinic_id else None,
+                "entityType": entity_type,
+                "entityId": entity_id,
+                "errorCode": error_code,
+                "metadata": metadata or {},
             },
         )
         response.raise_for_status()

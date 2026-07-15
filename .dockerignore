@@ -1,0 +1,15 @@
+.git
+.github
+**/bin
+**/obj
+**/node_modules
+**/.pytest_cache
+**/__pycache__
+**/.venv
+backups
+artifacts
+whatsapp-gateway/sessions
+.env
+**/.env
+deploy/production.env
+crmprompt.txt

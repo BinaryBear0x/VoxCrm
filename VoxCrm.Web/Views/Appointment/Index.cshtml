@@ -1,18 +1,19 @@
-@model IEnumerable<VoxCrm.Domain.Entities.Appointment>
+@model IReadOnlyList<VoxCrm.Application.Appointments.AppointmentListItem>
 @using System.Text.Json
 @{
     ViewData["Title"] = "Randevular";
     ViewData["ActiveMenu"] = "appointments";
-    var today = DateTime.Today;
-    var calendarEvents = Model.Select(a =>
+    var includeArchived = ViewBag.IncludeArchived is true;
+    var archivedQuery = includeArchived ? "&includeArchived=true" : "";
+    var calendarEvents = Model.Where(a => a.IsActive).Select(a =>
     {
         var color = a.Status == "Tamamlandı" ? "#198754" : a.Status == "İptal" ? "#dc3545" : a.Status == "Gelmedi" ? "#ffc107" : "#0d6efd";
         return new
         {
-            title = $"{a.Patient?.Name} - {a.AppointmentType}",
-            start = a.ScheduledAt.ToString("yyyy-MM-ddTHH:mm:ss"),
-            end = a.ScheduledAt.AddMinutes(a.DurationMinutes).ToString("yyyy-MM-ddTHH:mm:ss"),
-            url = $"/Appointment/Edit/{a.ID}",
+            title = $"{a.PatientName} - {a.AppointmentType}",
+            start = a.ScheduledAtLocal.ToString("yyyy-MM-ddTHH:mm:ss"),
+            end = a.ScheduledAtLocal.AddMinutes(a.DurationMinutes).ToString("yyyy-MM-ddTHH:mm:ss"),
+            url = $"/Appointment/Edit/{a.Id}",
             backgroundColor = color,
             borderColor = color
         };
@@ -21,18 +22,15 @@
 
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
     <h1 class="h3 fw-bold mb-0">Randevular</h1>
-    <a href="/Appointment/Create" class="btn btn-primary btn-sm">
-        <i class="bi bi-plus-lg me-1"></i> Yeni Randevu
-    </a>
-</div>
-
-@if (TempData["Success"] != null)
-{
-    <div class="alert alert-success alert-dismissible fade show">
-        @TempData["Success"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <div class="d-flex gap-2">
+        <a href="/Appointment?includeArchived=@((!includeArchived).ToString().ToLowerInvariant())" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-archive me-1"></i> @(includeArchived ? "Arşivi Gizle" : "Arşivi Göster")
+        </a>
+        <a href="/Appointment/Create" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg me-1"></i> Yeni Randevu
+        </a>
     </div>
-}
+</div>
 
 <!-- Tab Navigasyonu -->
 <ul class="nav nav-tabs mb-4" id="appointmentTabs" role="tablist">
@@ -49,11 +47,11 @@
     <div class="tab-pane fade show active" id="list-view" role="tabpanel" aria-labelledby="list-tab">
         <!-- Filtreler -->
         <div class="d-flex gap-2 mb-3 flex-wrap">
-            <a href="/Appointment" class="btn btn-sm @(ViewBag.Status == null ? "btn-dark" : "btn-outline-secondary")">Tümü</a>
-            <a href="/Appointment?status=Planlandı" class="btn btn-sm @(ViewBag.Status == "Planlandı" ? "btn-primary" : "btn-outline-primary")">Planlanmış</a>
-            <a href="/Appointment?status=Tamamlandı" class="btn btn-sm @(ViewBag.Status == "Tamamlandı" ? "btn-success" : "btn-outline-success")">Tamamlandı</a>
-            <a href="/Appointment?status=İptal" class="btn btn-sm @(ViewBag.Status == "İptal" ? "btn-danger" : "btn-outline-danger")">İptal</a>
-            <a href="/Appointment?status=Gelmedi" class="btn btn-sm @(ViewBag.Status == "Gelmedi" ? "btn-warning" : "btn-outline-warning")">Gelmedi</a>
+            <a href="/Appointment?includeArchived=@includeArchived.ToString().ToLowerInvariant()" class="btn btn-sm @(ViewBag.Status == null ? "btn-dark" : "btn-outline-secondary")">Tümü</a>
+            <a href="/Appointment?status=Planlandı@archivedQuery" class="btn btn-sm @(ViewBag.Status == "Planlandı" ? "btn-primary" : "btn-outline-primary")">Planlanmış</a>
+            <a href="/Appointment?status=Tamamlandı@archivedQuery" class="btn btn-sm @(ViewBag.Status == "Tamamlandı" ? "btn-success" : "btn-outline-success")">Tamamlandı</a>
+            <a href="/Appointment?status=İptal@archivedQuery" class="btn btn-sm @(ViewBag.Status == "İptal" ? "btn-danger" : "btn-outline-danger")">İptal</a>
+            <a href="/Appointment?status=Gelmedi@archivedQuery" class="btn btn-sm @(ViewBag.Status == "Gelmedi" ? "btn-warning" : "btn-outline-warning")">Gelmedi</a>
         </div>
 
         <div class="card border-0 shadow-sm">
@@ -82,9 +80,9 @@
                             <tbody>
                                 @foreach (var a in Model)
                                 {
-                                    <tr class="@(a.ScheduledAt.Date == today ? "table-warning" : "")">
-                                        <td class="fw-semibold">@a.Patient?.Name</td>
-                                        <td>@a.ScheduledAt.ToString("dd.MM.yyyy HH:mm")</td>
+                                    <tr class="@(!a.IsActive ? "table-secondary" : a.IsToday ? "table-warning" : "")">
+                                        <td class="fw-semibold">@a.PatientName</td>
+                                        <td>@a.ScheduledAtLocal.ToString("dd.MM.yyyy HH:mm")</td>
                                         <td>@a.AppointmentType</td>
                                         <td>@a.DurationMinutes dk</td>
                                         <td>
@@ -99,27 +97,38 @@
                                             <span class="badge @badgeClass">@a.Status</span>
                                         </td>
                                         <td class="text-end">
-                                            @if (a.Status == "Planlandı")
+                                            @if (!a.IsActive)
                                             {
-                                                <form method="post" action="/Appointment/UpdateStatus" class="d-inline">
+                                                <form method="post" action="/Appointment/Restore" class="d-inline">
                                                     @Html.AntiForgeryToken()
-                                                    <input type="hidden" name="id" value="@a.ID">
-                                                    <input type="hidden" name="status" value="Tamamlandı">
-                                                    <button type="submit" class="btn btn-success btn-sm" title="Tamamlandı"><i class="bi bi-check-lg"></i></button>
-                                                </form>
-                                                <form method="post" action="/Appointment/UpdateStatus" class="d-inline ms-1 me-1">
-                                                    @Html.AntiForgeryToken()
-                                                    <input type="hidden" name="id" value="@a.ID">
-                                                    <input type="hidden" name="status" value="Gelmedi">
-                                                    <button type="submit" class="btn btn-warning btn-sm" title="Gelmedi"><i class="bi bi-person-x"></i></button>
+                                                    <input type="hidden" name="id" value="@a.Id">
+                                                    <button type="submit" class="btn btn-outline-success btn-sm" title="Geri Al"><i class="bi bi-arrow-counterclockwise"></i></button>
                                                 </form>
                                             }
-                                            <a href="/Appointment/Edit/@a.ID" class="btn btn-primary btn-sm ms-1"><i class="bi bi-pencil"></i></a>
-                                            <form method="post" action="/Appointment/Delete" class="d-inline ms-1" onsubmit="return confirm('Bu randevuyu silmek istediğinize emin misiniz?');">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="id" value="@a.ID">
-                                                <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>
-                                            </form>
+                                            else
+                                            {
+                                                @if (a.Status == "Planlandı")
+                                                {
+                                                    <form method="post" action="/Appointment/UpdateStatus" class="d-inline">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="id" value="@a.Id">
+                                                        <input type="hidden" name="status" value="Tamamlandı">
+                                                        <button type="submit" class="btn btn-success btn-sm" title="Tamamlandı"><i class="bi bi-check-lg"></i></button>
+                                                    </form>
+                                                    <form method="post" action="/Appointment/UpdateStatus" class="d-inline ms-1 me-1">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="id" value="@a.Id">
+                                                        <input type="hidden" name="status" value="Gelmedi">
+                                                        <button type="submit" class="btn btn-warning btn-sm" title="Gelmedi"><i class="bi bi-person-x"></i></button>
+                                                    </form>
+                                                }
+                                                <a href="/Appointment/Edit/@a.Id" class="btn btn-primary btn-sm ms-1"><i class="bi bi-pencil"></i></a>
+                                                <form method="post" action="/Appointment/Delete" class="d-inline ms-1" data-confirm="Bu randevuyu arşivlemek istediğinize emin misiniz?">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="id" value="@a.Id">
+                                                    <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-archive"></i></button>
+                                                </form>
+                                            }
                                         </td>
                                     </tr>
                                 }
@@ -131,29 +140,40 @@
                         {
                             <div class="border-bottom p-3">
                                 <div class="d-flex justify-content-between">
-                                    <div class="fw-semibold">@a.Patient?.Name</div>
+                                    <div class="fw-semibold">@a.PatientName</div>
                                     @{
                                         var bc = a.Status switch { "Tamamlandı" => "bg-success", "İptal" => "bg-danger", "Gelmedi" => "bg-warning text-dark", _ => "bg-primary" };
                                     }
                                     <span class="badge @bc">@a.Status</span>
                                 </div>
-                                <div class="text-muted small mb-2">@a.ScheduledAt.ToString("dd.MM.yyyy HH:mm") · @a.AppointmentType</div>
+                                <div class="text-muted small mb-2">@a.ScheduledAtLocal.ToString("dd.MM.yyyy HH:mm") · @a.AppointmentType</div>
                                 <div class="d-flex justify-content-end gap-1">
-                                    @if (a.Status == "Planlandı")
+                                    @if (!a.IsActive)
                                     {
-                                        <form method="post" action="/Appointment/UpdateStatus" class="d-inline">
+                                        <form method="post" action="/Appointment/Restore" class="d-inline">
                                             @Html.AntiForgeryToken()
-                                            <input type="hidden" name="id" value="@a.ID">
-                                            <input type="hidden" name="status" value="Tamamlandı">
-                                            <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i></button>
+                                            <input type="hidden" name="id" value="@a.Id">
+                                            <button type="submit" class="btn btn-outline-success btn-sm"><i class="bi bi-arrow-counterclockwise"></i></button>
                                         </form>
                                     }
-                                    <a href="/Appointment/Edit/@a.ID" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></a>
-                                    <form method="post" action="/Appointment/Delete" class="d-inline" onsubmit="return confirm('Bu randevuyu silmek istediğinize emin misiniz?');">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="id" value="@a.ID">
-                                        <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>
-                                    </form>
+                                    else
+                                    {
+                                        @if (a.Status == "Planlandı")
+                                        {
+                                            <form method="post" action="/Appointment/UpdateStatus" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@a.Id">
+                                                <input type="hidden" name="status" value="Tamamlandı">
+                                                <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i></button>
+                                            </form>
+                                        }
+                                        <a href="/Appointment/Edit/@a.Id" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></a>
+                                        <form method="post" action="/Appointment/Delete" class="d-inline" data-confirm="Bu randevuyu arşivlemek istediğinize emin misiniz?">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@a.Id">
+                                            <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-archive"></i></button>
+                                        </form>
+                                    }
                                 </div>
                             </div>
                         }
@@ -173,7 +193,7 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+<script src="~/lib/fullcalendar/index.global.min.js" asp-append-version="true"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         var calendarEl = document.getElementById('calendar');

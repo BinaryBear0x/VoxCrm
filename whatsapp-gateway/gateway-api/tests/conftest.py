@@ -73,7 +73,12 @@ def clear_rate_limit_state() -> None:
     _last_send_by_clinic.clear()
 
 
-def gateway_token(scope: str, jti: str | None = None, expires_delta: timedelta | None = None) -> str:
+def gateway_token(
+    scope: str,
+    jti: str | None = None,
+    expires_delta: timedelta | None = None,
+    clinic_id: uuid.UUID | None = None,
+) -> str:
     now = datetime.now(timezone.utc)
     expires_delta = expires_delta or timedelta(minutes=5)
     payload = {
@@ -85,6 +90,8 @@ def gateway_token(scope: str, jti: str | None = None, expires_delta: timedelta |
         "exp": int((now + expires_delta).timestamp()),
         "jti": jti or uuid.uuid4().hex,
     }
+    if clinic_id:
+        payload["clinic_id"] = str(clinic_id)
     return jwt.encode(payload, "dev-only-change-this-very-long-whatsapp-gateway-secret", algorithm="HS256")
 
 
