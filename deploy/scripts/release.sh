@@ -25,7 +25,7 @@ fi
 "$ROOT/whatsapp-gateway/scripts/test-all.sh"
 mkdir -p "$OUT" "$STAGE/VoxCrm"
 git -C "$ROOT" archive --format=tar HEAD | tar -xf - -C "$STAGE/VoxCrm"
-tar -czf "$OUT/voxcrm-$VERSION.tar.gz" -C "$STAGE" VoxCrm
+COPYFILE_DISABLE=1 tar -czf "$OUT/voxcrm-$VERSION.tar.gz" -C "$STAGE" VoxCrm
 (
   cd "$OUT"
   sha256_file "voxcrm-$VERSION.tar.gz" > "voxcrm-$VERSION.tar.gz.sha256"
