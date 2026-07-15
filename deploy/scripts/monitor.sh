@@ -36,7 +36,7 @@ if [ "$job_errors" -gt 0 ]; then
 fi
 
 if ! whatsapp_metrics="$(docker exec "$postgres_container" psql -U "${POSTGRES_USER:-voxcrm}" -d "${GATEWAY_DB:-voxcrm_gateway_prod}" -AtF ' ' -c \
-  'SELECT count(*) FILTER (WHERE state = '\''RetryScheduled'\''), count(*) FILTER (WHERE state = '\''NeedsReview'\''), COALESCE(EXTRACT(EPOCH FROM (now() - min(created_at) FILTER (WHERE state IN ('\''Claimed'\', '\''Sending'\', '\''RetryScheduled'\''))))::int, 0) FROM outbound_messages;')"; then
+  "SELECT count(*) FILTER (WHERE state = 'RetryScheduled'), count(*) FILTER (WHERE state = 'NeedsReview'), COALESCE(EXTRACT(EPOCH FROM (now() - min(created_at) FILTER (WHERE state IN ('Claimed', 'Sending', 'RetryScheduled'))))::int, 0) FROM outbound_messages;")"; then
   "$ROOT/notify.sh" "WhatsApp queue metrikleri okunamadi" critical
   exit 1
 fi
