@@ -540,12 +540,22 @@ sudo openssl rand -base64 32 | sudo tee /etc/voxcrm/secrets/pii.key >/dev/null
 sudo openssl rand -base64 48 | sudo tee /etc/voxcrm/secrets/backup.key >/dev/null
 sudo chmod 600 /etc/voxcrm/secrets/*
 sudoedit /etc/voxcrm/secrets/production.env
+
+# PII key yalnız sabit non-root container UID'si tarafından salt okunabilir.
+# Hostta UID 1654 başka bir kullanıcıya ait olmamalıdır. Bu komut çıktı verirse durun.
+getent passwd 1654
+sudo apt-get install -y --no-install-recommends acl
+sudo setfacl -m u:1654:r /etc/voxcrm/secrets/pii.key
+sudo getfacl -p /etc/voxcrm/secrets/pii.key
 ```
 
 `POSTGRES_PASSWORD`, JWT secret, worker token, session encryption key, bootstrap
 parolaları ve `ACME_EMAIL` placeholder olmamalıdır. PII ve backup anahtarları birbirinden
 ve DB parolasından farklı tutulur. Anahtar kaybı şifreli verinin geri döndürülememesi
-anlamına gelir; ayrı, erişim kontrollü bir recovery kopyası planlanmalıdır.
+anlamına gelir; ayrı, erişim kontrollü bir recovery kopyası planlanmalıdır. PII anahtarı
+ACL çıktısında yalnız owner `voxcrm`, `user:1654:r--` ve `other::---` göstermelidir;
+UID 1654 hem .NET hem gateway imajlarında sabitlenmiştir. Hostta bu UID sonradan başka
+bir kullanıcıya atanamaz.
 
 ### Release üretme ve sunucuya aktarma
 

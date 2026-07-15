@@ -4,7 +4,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
-RUN groupadd --system voxcrm && useradd --system --gid voxcrm --home-dir /app voxcrm
+RUN groupadd --system --gid 1654 voxcrm \
+    && useradd --uid 1654 --gid voxcrm --home-dir /app \
+       --shell /usr/sbin/nologin --no-create-home voxcrm
 COPY requirements.lock .
 RUN python -m pip install --no-cache-dir --upgrade pip==26.1.2 \
     && python -m pip install --no-cache-dir --require-hashes -r requirements.lock
