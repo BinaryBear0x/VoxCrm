@@ -33,7 +33,16 @@ public class WhatsAppController : Controller
     public async Task<IActionResult> Index(Guid? clinicId, CancellationToken cancellationToken)
     {
         var clinic = await ResolveClinicAsync(clinicId, cancellationToken);
-        if (clinic == null) return Forbid();
+        if (clinic == null)
+        {
+            if (User.IsInRole("Dealer"))
+            {
+                TempData["Warning"] = "WhatsApp ayarlarını kullanmak için önce bir klinik ekleyin.";
+                return RedirectToAction("Create", "Dealer");
+            }
+
+            return Forbid();
+        }
 
         var template = await _context.WhatsAppTemplates
             .IgnoreQueryFilters()
