@@ -22,7 +22,7 @@ fi
 
 "$ROOT/whatsapp-gateway/scripts/test-all.sh"
 mkdir -p "$OUT"
-git -C "$ROOT" archive \
+git -C "$ROOT" -c tar.umask=0022 archive \
   --format=tar.gz \
   --prefix=VoxCrm/ \
   --output="$OUT/voxcrm-$VERSION.tar.gz" \
