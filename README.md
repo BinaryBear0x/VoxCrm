@@ -557,6 +557,11 @@ ACL çıktısında yalnız owner `voxcrm`, `user:1654:r--` ve `other::---` göst
 UID 1654 hem .NET hem gateway imajlarında sabitlenmiştir. Hostta bu UID sonradan başka
 bir kullanıcıya atanamaz.
 
+`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` production env içinde zorunludur. Aksi halde
+Docker bridge üzerinden gelen Nginx `X-Forwarded-Proto: https` başlığı güvenilir sayılmaz
+ve login yönlendirmeleri yanlışlıkla `http://` üretilir. Doğrulama çıktısındaki `Location`
+mutlaka `https://petcrm.fenrirsoftware.com/...` olmalıdır.
+
 WhatsApp worker session dizinine yazdığı için hosttaki `voxcrm` kullanıcısıyla aynı
 UID/GID ile çalışır. Aşağıdaki değerleri okuyup `production.env` içindeki
 `VOXCRM_HOST_UID` ve `VOXCRM_HOST_GID` alanlarına yazın; örnek `995:986` her sunucuda
