@@ -26,6 +26,7 @@ namespace VoxCrm.Domain.Entities
         public TimeOnly WhatsAppSendWindowStart { get; set; } = new(9, 0);
         public TimeOnly WhatsAppSendWindowEnd { get; set; } = new(19, 0);
         public string WhatsAppTimeZoneId { get; set; } = "Europe/Istanbul";
+        public string TimeZoneId { get; set; } = "Europe/Istanbul";
 
     }
 }

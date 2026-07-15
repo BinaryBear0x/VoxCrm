@@ -9,5 +9,6 @@ namespace VoxCrm.Domain.Entities
         public string Message { get; set; } = string.Empty;
         public DateTime ReceivedAt { get; set; }
         public string GatewaySessionId { get; set; } = string.Empty;
+        public string ProviderMessageId { get; set; } = string.Empty;
     }
 }

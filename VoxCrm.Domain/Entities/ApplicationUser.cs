@@ -16,5 +16,6 @@ namespace VoxCrm.Domain.Entities
         // Veya kullanıcı bir Bayiye (Dealer) ait olabilir
         public Guid? DealerId { get; set; }
         public Dealer? Dealer { get; set; }
+        public bool MustChangePassword { get; set; }
     }
 }

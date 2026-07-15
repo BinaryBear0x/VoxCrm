@@ -1,98 +1,92 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using VoxCrm.Application.Vaccinations;
 using VoxCrm.Domain.Entities;
-using VoxCrm.Infrastructure.Data;
 
 namespace VoxCrm.Web.Controllers;
 
 [Authorize(Roles = "Clinic")]
-public class VaccineTypeController : Controller
+public sealed class VaccineTypeController : Controller
 {
-    private readonly VoxCrmDbContext _context;
+    private readonly IVaccineTypeService _service;
 
-    public VaccineTypeController(VoxCrmDbContext context)
-    {
-        _context = context;
-    }
+    public VaccineTypeController(IVaccineTypeService service) => _service = service;
 
-    // GET: /VaccineType
-    public async Task<IActionResult> Index()
-    {
-        var vaccines = await _context.VaccineTypes.OrderBy(v => v.Name).ToListAsync();
-        return View(vaccines);
-    }
+    public async Task<IActionResult> Index(CancellationToken cancellationToken) =>
+        View(await _service.ListAsync(cancellationToken: cancellationToken));
 
-    // GET: /VaccineType/Create
-    public IActionResult Create()
-    {
-        return View();
-    }
+    public IActionResult Create() => View();
 
-    // POST: /VaccineType/Create
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("Name,ValidityDays,ReminderDaysBefore")] VaccineType model)
+        [Bind("Name,ValidityDays,ReminderDaysBefore")] VaccineType model,
+        CancellationToken cancellationToken)
     {
-        // Sistem alanları doğrulama dışı bırakılıyor
-        ModelState.Remove(nameof(VaccineType.ClinicID));
-        ModelState.Remove(nameof(VaccineType.CreatedAt));
-        ModelState.Remove(nameof(VaccineType.IsActive));
-
+        RemoveSystemValidation();
         if (!ModelState.IsValid) return View(model);
+        var result = await _service.CreateAsync(model, cancellationToken);
+        if (!result.Succeeded)
+        {
+            ModelState.AddModelError(string.Empty, result.Error ?? "Aşı türü kaydedilemedi.");
+            return View(model);
+        }
 
-        _context.VaccineTypes.Add(model);
-        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
         TempData["Success"] = $"{model.Name} başarıyla eklendi.";
         return RedirectToAction(nameof(Index));
     }
 
-    // GET: /VaccineType/Edit/{id}
-    public async Task<IActionResult> Edit(Guid id)
+    public async Task<IActionResult> Edit(Guid id, CancellationToken cancellationToken)
     {
-        var vaccine = await _context.VaccineTypes.FindAsync(id);
-        if (vaccine == null) return NotFound();
-        return View(vaccine);
+        var item = await _service.GetAsync(id, cancellationToken: cancellationToken);
+        return item == null ? NotFound() : View(item);
     }
 
-    // POST: /VaccineType/Edit/{id}
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Guid id,
-        [Bind("ID,Name,ValidityDays,ReminderDaysBefore")] VaccineType model)
+    public async Task<IActionResult> Edit(
+        Guid id,
+        [Bind("ID,Name,ValidityDays,ReminderDaysBefore")] VaccineType model,
+        CancellationToken cancellationToken)
     {
         if (id != model.ID) return BadRequest();
-
-        // Sistem alanları doğrulama dışı bırakılıyor
-        ModelState.Remove(nameof(VaccineType.ClinicID));
-        ModelState.Remove(nameof(VaccineType.CreatedAt));
-        ModelState.Remove(nameof(VaccineType.IsActive));
-
+        RemoveSystemValidation();
         if (!ModelState.IsValid) return View(model);
+        var result = await _service.UpdateAsync(model, cancellationToken);
+        if (result.NotFound) return NotFound();
+        if (!result.Succeeded)
+        {
+            ModelState.AddModelError(string.Empty, result.Error ?? "Aşı türü güncellenemedi.");
+            return View(model);
+        }
 
-        var existing = await _context.VaccineTypes.FindAsync(id); // Global Query Filter: başka klinik = null
-        if (existing == null) return NotFound();
-
-        existing.Name                = model.Name;
-        existing.ValidityDays        = model.ValidityDays;
-        existing.ReminderDaysBefore  = model.ReminderDaysBefore;
-        // ClinicID, CreatedAt, IsActive → hiç dokunulmaz ✅
-
-        await _context.SaveChangesAsync();
         TempData["Success"] = $"{model.Name} başarıyla güncellendi.";
         return RedirectToAction(nameof(Index));
     }
 
-    // POST: /VaccineType/Delete/{id}
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var vaccine = await _context.VaccineTypes.FindAsync(id);
-        if (vaccine != null)
-        {
-            _context.VaccineTypes.Remove(vaccine);
-            await _context.SaveChangesAsync();
-            TempData["Success"] = $"{vaccine.Name} silindi.";
-        }
+        var result = await _service.ArchiveAsync(id, ActorUserId(), cancellationToken);
+        if (result.NotFound) return NotFound();
+        TempData["Success"] = "Aşı türü arşivlendi; geçmiş kayıtlar korundu.";
         return RedirectToAction(nameof(Index));
     }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _service.RestoreAsync(id, ActorUserId(), cancellationToken);
+        if (result.NotFound) return NotFound();
+        return RedirectToAction(nameof(Index));
+    }
+
+    private void RemoveSystemValidation()
+    {
+        ModelState.Remove(nameof(VaccineType.ClinicID));
+        ModelState.Remove(nameof(VaccineType.CreatedAt));
+        ModelState.Remove(nameof(VaccineType.IsActive));
+    }
+
+    private Guid ActorUserId() =>
+        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

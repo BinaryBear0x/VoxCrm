@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -8,13 +9,13 @@ import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_scope
+from app.auth import GatewayPrincipal, require_scope
 from app.config import settings
 from app.database import get_session, init_db
 from app.models import ClinicSession
 from app.models import OutboundMessage
 from app.schemas import InboundFromWorker, QrResponse, SessionStatus
-from app.sender import poll_loop
+from app.sender import poll_loop, write_gateway_audit
 from app.voxcrm_client import voxcrm_client
 from app.worker_client import worker_client
 
@@ -46,56 +47,90 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict:
 
     metrics = await global_metrics(session)
 
+    # This endpoint is intentionally safe for liveness probes. Tenant and
+    # operational details belong to the authenticated clinic endpoints.
     return {
         "status": "ok" if worker_ok and metrics["database"] == "ok" else "degraded",
         "service": "gateway-api",
-        **metrics,
-        "worker": worker,
     }
 
 
 @app.post(
     "/api/clinics/{clinic_id}/whatsapp/connect",
-    dependencies=[Depends(require_scope("whatsapp.session.write"))],
 )
-async def connect(clinic_id: uuid.UUID, session: AsyncSession = Depends(get_session)) -> dict:
+async def connect(
+    clinic_id: uuid.UUID,
+    principal: GatewayPrincipal = Depends(require_scope("whatsapp.session.write", clinic_bound=True)),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    ensure_clinic_scope(principal, clinic_id)
     try:
         response = await worker_client.connect(clinic_id)
     except httpx.HTTPError as exc:
         await mark_session_worker_error(session, clinic_id, exc)
+        await write_gateway_audit(
+            level="Error", category="WhatsAppSession", action="Gateway.SessionConnectFailed",
+            message="WhatsApp worker baglanti istegine hata dondu.", outcome="Failure",
+            clinic_id=clinic_id, error_code="WORKER_UNAVAILABLE",
+            metadata={"exceptionType": type(exc).__name__},
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="WhatsApp worker'a ulasilamadi. Lutfen birkac saniye sonra tekrar deneyin.",
         ) from exc
 
     await upsert_session_from_worker(session, clinic_id, response)
+    await write_gateway_audit(
+        level="Info", category="WhatsAppSession", action="Gateway.SessionConnectRequested",
+        message="WhatsApp baglanti istegi worker'a iletildi.", outcome="Success",
+        clinic_id=clinic_id, metadata={"workerStatus": response.get("status")},
+    )
     return {"ok": True}
 
 
 @app.post(
     "/api/clinics/{clinic_id}/whatsapp/disconnect",
-    dependencies=[Depends(require_scope("whatsapp.session.write"))],
 )
-async def disconnect(clinic_id: uuid.UUID, session: AsyncSession = Depends(get_session)) -> dict:
+async def disconnect(
+    clinic_id: uuid.UUID,
+    principal: GatewayPrincipal = Depends(require_scope("whatsapp.session.write", clinic_bound=True)),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    ensure_clinic_scope(principal, clinic_id)
     try:
         response = await worker_client.disconnect(clinic_id)
     except httpx.HTTPError as exc:
         await mark_session_worker_error(session, clinic_id, exc)
+        await write_gateway_audit(
+            level="Error", category="WhatsAppSession", action="Gateway.SessionDisconnectFailed",
+            message="WhatsApp worker disconnect istegine hata dondu.", outcome="Failure",
+            clinic_id=clinic_id, error_code="WORKER_UNAVAILABLE",
+            metadata={"exceptionType": type(exc).__name__},
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="WhatsApp worker'a ulasilamadi. Lutfen birkac saniye sonra tekrar deneyin.",
         ) from exc
 
     await upsert_session_from_worker(session, clinic_id, response)
+    await write_gateway_audit(
+        level="Info", category="WhatsAppSession", action="Gateway.SessionDisconnected",
+        message="WhatsApp session disconnect istegi basariyla isledi.", outcome="Success",
+        clinic_id=clinic_id, metadata={"workerStatus": response.get("status")},
+    )
     return {"ok": True}
 
 
 @app.get(
     "/api/clinics/{clinic_id}/whatsapp/status",
     response_model=SessionStatus,
-    dependencies=[Depends(require_scope("whatsapp.session.read"))],
 )
-async def get_status(clinic_id: uuid.UUID, session: AsyncSession = Depends(get_session)) -> SessionStatus:
+async def get_status(
+    clinic_id: uuid.UUID,
+    principal: GatewayPrincipal = Depends(require_scope("whatsapp.session.read", clinic_bound=True)),
+    session: AsyncSession = Depends(get_session),
+) -> SessionStatus:
+    ensure_clinic_scope(principal, clinic_id)
     try:
         worker_status = await worker_client.status(clinic_id)
         clinic_session = await upsert_session_from_worker(session, clinic_id, worker_status)
@@ -117,18 +152,24 @@ async def get_status(clinic_id: uuid.UUID, session: AsyncSession = Depends(get_s
 @app.get(
     "/api/clinics/{clinic_id}/whatsapp/qr",
     response_model=QrResponse,
-    dependencies=[Depends(require_scope("whatsapp.session.read"))],
 )
-async def get_qr(clinic_id: uuid.UUID, session: AsyncSession = Depends(get_session)) -> QrResponse:
+async def get_qr(
+    clinic_id: uuid.UUID,
+    principal: GatewayPrincipal = Depends(require_scope("whatsapp.session.read", clinic_bound=True)),
+    session: AsyncSession = Depends(get_session),
+) -> QrResponse:
+    ensure_clinic_scope(principal, clinic_id)
     try:
         worker_qr = await worker_client.qr(clinic_id)
         clinic_session = await upsert_session_from_worker(session, clinic_id, worker_qr)
+        live_qr = worker_qr.get("qr")
     except Exception:
         clinic_session = await get_or_create_session(session, clinic_id)
+        live_qr = None
 
     return QrResponse(
         clinic_id=clinic_id,
-        qr=clinic_session.qr,
+        qr=live_qr,
         updated_at=clinic_session.updated_at,
         status=clinic_session.status,
     )
@@ -139,7 +180,7 @@ async def worker_inbound(
     payload: InboundFromWorker,
     x_internal_token: str | None = Header(default=None),
 ) -> dict:
-    if x_internal_token != settings.worker_internal_token:
+    if not x_internal_token or not hmac.compare_digest(x_internal_token, settings.worker_internal_token):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     await voxcrm_client.write_inbound(
@@ -148,6 +189,14 @@ async def worker_inbound(
         payload.message,
         payload.received_at or datetime.now(timezone.utc),
         payload.gateway_session_id,
+        payload.provider_message_id,
+    )
+    await write_gateway_audit(
+        level="Info", category="WhatsAppInbound", action="Gateway.InboundReceived",
+        message="Hasta sahibinden gelen WhatsApp mesaji otomatik cevap verilmeden kaydedildi.",
+        outcome="Success", clinic_id=payload.clinic_id,
+        metadata={"gatewaySessionId": payload.gateway_session_id,
+                  "providerMessageId": payload.provider_message_id},
     )
     return {"ok": True}
 
@@ -168,7 +217,8 @@ async def get_or_create_session(session: AsyncSession, clinic_id: uuid.UUID) -> 
 async def upsert_session_from_worker(session: AsyncSession, clinic_id: uuid.UUID, payload: dict) -> ClinicSession:
     clinic_session = await get_or_create_session(session, clinic_id)
     clinic_session.status = payload.get("status", clinic_session.status)
-    clinic_session.qr = payload.get("qr", clinic_session.qr)
+    # QR codes are short-lived credentials. Never persist them in the database.
+    clinic_session.qr = None
     clinic_session.connected_phone = payload.get("connectedPhone", clinic_session.connected_phone)
     clinic_session.last_error = payload.get("lastError")
 
@@ -290,3 +340,8 @@ def lag_seconds(started_at: datetime | None) -> int:
     if started_at.tzinfo is None:
         started_at = started_at.replace(tzinfo=timezone.utc)
     return max(0, int((datetime.now(timezone.utc) - started_at).total_seconds()))
+
+
+def ensure_clinic_scope(principal: GatewayPrincipal, clinic_id: uuid.UUID) -> None:
+    if principal.clinic_id != str(clinic_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)

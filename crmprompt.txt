@@ -1,0 +1,131 @@
+# VoxCrm CRM Guvenlik ve Is Mantigi Saglamlastirma Plani
+
+## Calisma Kurallari
+- Bu dosya CRM hardening calismasinin tek plan kaynagidir.
+- Degisiklikler mevcut Clean Architecture yonune uygun, dikey dilimler halinde yapilir.
+- Controller'lar yalnizca HTTP/form mapping yapar; is kurallari Application katmaninda tutulur.
+- Generic repository, MediatR veya ihtiyac olmayan abstraction eklenmez.
+- Her dilimde once risk testle gorunur kilinir, sonra en dar degisiklik yapilir.
+- Her dilim sonunda build, ilgili testler, migration uyumu ve bu dosyayla kapsam kontrolu yapilir.
+- WhatsApp is akisi kapsam disidir; ortak tenant/klinik degisikliklerinden bozulmamasi test edilir.
+
+## 1. Tenant Guvenligi
+- VaccinationRecord ve VaccineType tenant query filter'a eklenir.
+- Guid.Empty tenant baglami artik tum tenant verisini gostermez; varsayilan davranis fail-closed olur.
+- API/background sistem sorgulari clinic siniri ile acikca IgnoreQueryFilters kullanir.
+- Klinik isteginde eklenen tenant entity'nin ClinicID degeri aktif klinige zorlanir.
+- Baska klinige ait entity modify/delete islemleri SaveChanges seviyesinde reddedilir.
+- Tenant tablolari icin ClinicID foreign key ve indexler eklenir.
+- Iliskili entity'lerin ayni klinige ait oldugu Application katmaninda dogrulanir.
+
+## 2. Klinik Yonetimi ve Identity
+- ClinicSettingsController icindeki IDOR ve tekrarli mutation akisi kaldirilir.
+- Klinik create/edit/deactivate/reactivate islemleri ClinicManagementService uzerinden yapilir.
+- DealerId + ClinicId sahiplik kontrolu her islemde zorunludur.
+- Klinik olusturma tek transaction icinde klinik ve ilk Clinic kullanicisini olusturur.
+- Ilk kullanici icin 24 saatlik, tek kullanimlik Identity aktivasyon linki uretilir.
+- Aktivasyon linki dealer'a yalnizca sonuc ekraninda gosterilir; raw token DB'ye yazilmaz.
+- Klinik pasiflestirilince kullanicilar kilitlenir, security stamp yenilenir ve aktif cookie'ler reddedilir.
+- Dealer kontrollu reactivation yapabilir.
+- Roller her ortamda idempotent olusturulabilir.
+- Demo data ve bilinen sifreli hesaplar yalnizca Development + SeedDemoData=true iken olusturulur.
+- Production ilk dealer hesabi environment secret kullanan acik bir bootstrap adimiyla olusturulur.
+
+## 3. Arsivleme ve Veri Butunlugu
+- Normal kullanici fiziksel silme yapmaz; kayitlar arsivlenir.
+- BaseEntity arsiv metadata'si tasir: IsActive, ArchivedAt, ArchivedByUserId.
+- Hasta, musteri, asi turu, asi kaydi, muayene, randevu, hizmet ve finans kayitlari arsivlenebilir.
+- Arsiv kayitlari normal listelerde gorunmez, gecmis ve audit icin korunur.
+- Cascade delete iliskileri Restrict/NoAction yapilir.
+- Hasta arsivi tibbi gecmisi, musteri arsivi borc/odeme gecmisini, asi turu arsivi asi gecmisini silmez.
+- Restore islemi tenant kontrolu ve audit log ile yapilir.
+
+## 4. Asi ve Hasta Akislari
+- Asi liste/create/edit/archive/restore VaccinationService uzerinden calisir.
+- Hasta ve asi turunun ayni clinic'e ait oldugu dogrulanir.
+- Arsivlenmis hasta veya asi turu yeni kayitta kullanilamaz.
+- Hasta ve sahip baglantisi tek transaction icinde olusturulur.
+- Gecersiz sahipte kismi hasta kaydi birakilmaz.
+- ValidityDays 1-3650; ReminderDaysBefore 0-ValidityDays araliginda olur.
+
+## 5. Finans
+- Borc ve odemeler append-only finans gecmisi olarak korunur.
+- Hatali borc iptal edilir; dogru borc yeni kayit olarak acilir.
+- Hatali odeme ayri reversal kaydiyla geri alinir.
+- Payment entry alanlari: EntryType (Payment/Reversal), ReversesPaymentId, Reason, actor ve zaman.
+- Bir odeme yalnizca bir kez reverse edilebilir.
+- Tahsilatta debt satiri PostgreSQL FOR UPDATE ile transaction icinde kilitlenir.
+- Kalan bakiye kilit altinda tekrar hesaplanir; paralel fazla odeme engellenir.
+- Borc ve tahsilat > 0, hizmet fiyati >= 0 olur.
+
+## 6. Randevu, Zaman ve Validasyon
+- datetime-local klinik timezone'unda yorumlanir, DB'ye UTC yazilir.
+- Tum ekranlar tarihi klinik timezone'unda gosterir; sunucu ToLocalTime kullanilmaz.
+- Cakisma zaman araligi uzerinden kontrol edilir.
+- Cakisma ilk istekte kaydi durdurup detayli uyari verir.
+- Kullanici acikca onaylarsa conflict tekrar kontrol edilir, kayit yapilir ve override audit'e yazilir.
+- Randevu suresi 10-240 dakika olur.
+- Kilo 0-2000 kg, sicaklik 20-45 C araliginda olur.
+- Metin alanlari makul maksimum uzunluklarla sinirlanir.
+- Durum ve odeme yontemi degerleri allow-list ile korunur.
+
+## 7. Unique ve Iliski Kurallari
+- Clinic Slug global unique olur.
+- Normalize telefon clinic icinde aktif kayitlar icin unique olur.
+- Mikrocip clinic icinde unique olur.
+- PatientOwner clinic/patient/owner kombinasyonu unique olur.
+- Hasta basina en fazla bir aktif primary owner olur.
+- Aktif asi turu ve hizmet adi clinic icinde unique olur.
+
+## 8. Mimari Uygulama Sirasi
+1. Tenant fail-closed, asi filtreleri ve cross-tenant testleri.
+2. Klinik IDOR, production seed ayrimi, aktivasyon ve deactivate/reactivate.
+3. Arsiv metadata'si, cascade migration'lari ve hasta/musteri/asi akislari.
+4. Finans ledger, reversal ve row-lock transaction'lari.
+5. Clinic timezone ve randevu conflict onayi.
+6. Kalan CRM controller'larini Application servislerine tasima.
+7. Constraint migration'lari, demo re-seed ve tam regresyon.
+
+## 9. Test ve Kabul Kriterleri
+- Her ITenantEntity modelinin tenant filter'i oldugu test edilir.
+- Guid.Empty tenant context sifir tenant kaydi gorur.
+- Clinic A, Clinic B asi turu/kaydi uzerinde read/edit/archive yapamaz.
+- Dealer A, Dealer B klinigini degistiremez.
+- Production environment demo hesap olusturmaz.
+- Aktivasyon token'i sureli, tek kullanimlik ve tekrar kullanilamazdir.
+- Pasif clinic login ve mevcut cookie ile erisemez.
+- Arsiv islemleri bagli tibbi/finansal gecmisi korur.
+- Gecersiz sahipli hasta isleminde kismi kayit olusmaz.
+- Paralel tahsilatlar borcu asamaz.
+- Reversal ikinci kez uygulanamaz.
+- Clinic local saat -> UTC -> local round-trip dogrudur.
+- Cakisma once uyari verir, acik onayla kaydedilebilir.
+- Application ve DB limit disi degerleri reddeder.
+- CRM controller'larinda dogrudan VoxCrmDbContext kullanimi kalmaz.
+- dotnet build 0 warning/0 error, tum testler basarili ve migration snapshot gunceldir.
+
+## 10. Varsayimlar ve V2 Notu
+- Mevcut veri demo/localdir; production backfill gerekmiyor.
+- Bu calismada ayrintili personel yetki matrisi uygulanmaz.
+- V2: ClinicAdmin, Veteriner, Resepsiyon ve Finans rolleri/policy tabanli personel yonetimi.
+- V1 ilk clinic kullanicisi mevcut Clinic roluyle olusturulur.
+
+## 11. Uygulama Durumu
+- [x] Plan dosyasi olusturuldu ve repo kokunde tek kaynak olarak dogrulandi.
+- [x] Tenant query filter'lari fail-closed yapildi.
+- [x] VaccineType ve VaccinationRecord tenant filter'a eklendi.
+- [x] Tenant write guard original/current ClinicID kontroluyle eklendi.
+- [x] Tum tenant tablolarina Clinic foreign key ve index migration'i uygulandi.
+- [x] Cross-tenant asi ve bos tenant testleri eklendi.
+- [x] Demo seed Development + acik config kosuluna baglandi.
+- [x] Production ilk dealer bootstrap'i varsayilan kapali ve environment-only olarak eklendi.
+- [x] Klinik IDOR ve Identity aktivasyon/deactivate/reactivate yasam dongusu tamamlandi.
+- [x] Arsiv metadata'si, servisleri ve cascade Restrict korumasi tamamlandi.
+- [x] Hasta, musteri ve asi Application servisleri tamamlandi.
+- [x] Finans ledger, borc iptali, odeme reversal ve PostgreSQL row lock tamamlandi.
+- [x] Klinik timezone, UTC donusumu ve randevu conflict/override akisi tamamlandi.
+- [x] Kalan CRM controller'lari Application servislerine tasindi; mimari regresyon testi eklendi.
+- [x] Telefon, mikrocip, slug, sahip iliskisi, asi/hizmet adi ve sayisal DB constraintleri eklendi.
+- [x] Migration'lar yerel PostgreSQL'e uygulandi ve snapshot guncelligi dogrulandi.
+- [x] Tam regresyon: CRM 29/29, gateway 10/10, worker 14/14 ve backup smoke basarili.
+- [x] Son build 0 warning / 0 error; NuGet dependency audit temiz.

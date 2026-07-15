@@ -1,0 +1,41 @@
+@model VoxCrm.Web.Models.ActivateClinicUserViewModel
+@{
+    ViewData["Title"] = "Hesap Aktivasyonu";
+    Layout = "_Layout";
+}
+
+<div class="row justify-content-center pt-5">
+    <div class="col-12 col-md-6 col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                @if (Model.IsCompleted)
+                {
+                    <h1 class="h4 fw-bold">Hesap aktif</h1>
+                    <p class="text-muted">@Model.Email hesabi icin sifre olusturuldu.</p>
+                    <a href="/Auth/Login" class="btn btn-primary">Giris Yap</a>
+                }
+                else
+                {
+                    <h1 class="h4 fw-bold mb-3">Klinik hesabi aktivasyonu</h1>
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                    <form method="post" action="/Auth/Activate">
+                        @Html.AntiForgeryToken()
+                        <input asp-for="UserId" type="hidden">
+                        <input asp-for="Token" type="hidden">
+                        <div class="mb-3">
+                            <label asp-for="Password" class="form-label fw-semibold">Sifre</label>
+                            <input asp-for="Password" class="form-control">
+                            <span asp-validation-for="Password" class="text-danger small"></span>
+                        </div>
+                        <div class="mb-4">
+                            <label asp-for="ConfirmPassword" class="form-label fw-semibold">Sifre Tekrari</label>
+                            <input asp-for="ConfirmPassword" class="form-control">
+                            <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Hesabi Aktiflestir</button>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+</div>

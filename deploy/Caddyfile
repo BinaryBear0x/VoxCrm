@@ -1,0 +1,21 @@
+{
+    email {$ACME_EMAIL}
+    admin off
+}
+
+petcrm.fenrirsoftware.com {
+    encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        -Server
+    }
+    reverse_proxy web:8080 {
+        health_uri /healthz
+        health_interval 30s
+        health_timeout 5s
+    }
+    log {
+        output stdout
+        format json
+    }
+}

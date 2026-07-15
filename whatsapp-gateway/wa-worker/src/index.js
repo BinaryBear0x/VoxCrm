@@ -20,6 +20,8 @@ const provider = new BaileysProvider({
 });
 const app = createApp({ provider, workerInternalToken: config.workerInternalToken });
 
+await provider.restoreSessions();
+provider.startInboundRetry();
 app.listen(config.port, () => {
   logger.info({ port: config.port, provider: "baileys" }, "wa-worker listening");
 });

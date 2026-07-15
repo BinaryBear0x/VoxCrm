@@ -23,6 +23,10 @@ namespace VoxCrm.Domain.Entities
         public DateTime? CollectedAt { get; set; } // Ne zaman tahsil edildi? (Eğer tahsil edildiyse)
         public string? PaymentMethod { get; set; } // Nakit, Kredi Kartı vb. (Eğer tahsil edildiyse)
 
+        public DateTime? CancelledAt { get; set; }
+        public Guid? CancelledByUserId { get; set; }
+        public string? CancellationReason { get; set; }
+
         // Tahsilatlar
         public ICollection<Payment> Payments { get; set; } = new List<Payment>();
     }

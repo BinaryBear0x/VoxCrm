@@ -25,6 +25,7 @@ export class FileSessionStore {
     await ensurePrivateDir(sessionPath);
     await ensurePrivateDir(path.join(sessionPath, "keys"));
     await ensurePrivateDir(path.join(sessionPath, "messages"));
+    await ensurePrivateDir(path.join(sessionPath, "receipts"));
 
     const creds = (await this.#readJson(path.join(sessionPath, AUTH_FILE))) || initAuthCreds();
 
@@ -72,9 +73,79 @@ export class FileSessionStore {
     await this.#writeJson(this.#messagePath(sessionPath, key), message);
   }
 
+  async getSentNotification(clinicId, notificationId) {
+    const sessionPath = resolveClinicSessionPath(this.sessionRoot, clinicId);
+    return await this.#readJson(path.join(sessionPath, "receipts", `${safeName(notificationId)}.json`));
+  }
+
+  async saveSentNotification(clinicId, notificationId, messageId) {
+    const sessionPath = resolveClinicSessionPath(this.sessionRoot, clinicId);
+    await ensurePrivateDir(path.join(sessionPath, "receipts"));
+    await this.#writeJson(
+      path.join(sessionPath, "receipts", `${safeName(notificationId)}.json`),
+      { messageId, sentAt: new Date().toISOString() }
+    );
+  }
+
+  async savePendingInbound(clinicId, payload) {
+    const directory = this.#pendingInboundPath(clinicId);
+    await ensurePrivateDir(directory);
+    await this.#writeJson(
+      path.join(directory, `${safeName(payload.provider_message_id)}.json`),
+      payload
+    );
+  }
+
+  async listPendingInbound(clinicId) {
+    const directory = this.#pendingInboundPath(clinicId);
+    try {
+      const files = await fs.readdir(directory);
+      return (await Promise.all(files.filter((file) => file.endsWith(".json")).map(async (file) => ({
+        file,
+        payload: await this.#readJson(path.join(directory, file))
+      })))).filter((item) => item.payload);
+    } catch (error) {
+      if (error?.code === "ENOENT") return [];
+      throw error;
+    }
+  }
+
+  async removePendingInbound(clinicId, file) {
+    const directory = this.#pendingInboundPath(clinicId);
+    await fs.rm(path.join(directory, safeName(file)), { force: true });
+  }
+
+  async listPendingClinicIds() {
+    const root = path.resolve(this.sessionRoot, "pending-inbound");
+    try {
+      const entries = await fs.readdir(root, { withFileTypes: true });
+      return entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .filter((clinicId) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clinicId));
+    } catch (error) {
+      if (error?.code === "ENOENT") return [];
+      throw error;
+    }
+  }
+
   async removeClinic(clinicId) {
     const sessionPath = resolveClinicSessionPath(this.sessionRoot, clinicId);
     await fs.rm(sessionPath, { recursive: true, force: true });
+  }
+
+  async listClinicIds() {
+    const root = path.resolve(this.sessionRoot, "baileys");
+    try {
+      const entries = await fs.readdir(root, { withFileTypes: true });
+      return entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .filter((clinicId) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clinicId));
+    } catch (error) {
+      if (error?.code === "ENOENT") return [];
+      throw error;
+    }
   }
 
   #keyPath(sessionPath, type, id) {
@@ -85,6 +156,11 @@ export class FileSessionStore {
     const id = key?.id || "unknown";
     const remoteJid = key?.remoteJid || "unknown";
     return path.join(sessionPath, "messages", `${safeName(remoteJid)}-${safeName(id)}.json`);
+  }
+
+  #pendingInboundPath(clinicId) {
+    const safeClinicId = resolveClinicSessionPath(this.sessionRoot, clinicId).split(path.sep).at(-1);
+    return path.resolve(this.sessionRoot, "pending-inbound", safeClinicId);
   }
 
   async #readJson(filePath) {

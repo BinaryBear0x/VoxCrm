@@ -35,6 +35,45 @@ export class BaileysProvider {
     this.makeSocket = makeSocket;
     this.httpClient = httpClient;
     this.sessions = new Map();
+    this.sentNotifications = new Map();
+  }
+
+  async restoreSessions() {
+    const clinicIds = await this.sessionStore.listClinicIds?.() || [];
+    await Promise.all(clinicIds.map(async (clinicId) => {
+      const session = await this.#getOrCreateSession(clinicId);
+      session.desiredConnected = true;
+      await this.#ensureSocket(clinicId, session);
+      await this.retryPendingInbound(clinicId);
+    }));
+  }
+
+  startInboundRetry(intervalMs = 30000) {
+    const timer = setInterval(() => this.retryPendingInbound().catch((error) =>
+      this.logger.warn({ error: error?.message || String(error) }, "Pending inbound retry failed")), intervalMs);
+    timer.unref?.();
+    return timer;
+  }
+
+  async retryPendingInbound(onlyClinicId = null) {
+    const clinicIds = onlyClinicId
+      ? [onlyClinicId]
+      : [...new Set([
+          ...(await this.sessionStore.listClinicIds?.() || []),
+          ...(await this.sessionStore.listPendingClinicIds?.() || [])
+        ])];
+    for (const clinicId of clinicIds) {
+      const pending = await this.sessionStore.listPendingInbound?.(clinicId) || [];
+      for (const item of pending) {
+        try {
+          await this.#postInbound(item.payload);
+          await this.sessionStore.removePendingInbound?.(clinicId, item.file);
+        } catch (error) {
+          this.logger.warn({ clinicId, error: error?.message || String(error) }, "Inbound message remains queued");
+          break;
+        }
+      }
+    }
   }
 
   health() {
@@ -53,17 +92,22 @@ export class BaileysProvider {
 
   async connect(clinicId) {
     const session = await this.#getOrCreateSession(clinicId);
-    if (!session.socket) {
-      await this.#startSocket(clinicId, session);
-    }
+    session.desiredConnected = true;
+    await this.#ensureSocket(clinicId, session);
     return this.#toPayload(clinicId, session);
   }
 
   async disconnect(clinicId) {
     const session = this.sessions.get(clinicId);
-    if (session?.socket) {
-      await session.socket.logout?.().catch(() => undefined);
-      await session.socket.end?.(undefined).catch(() => undefined);
+    const socket = session?.socket;
+    if (session) {
+      session.desiredConnected = false;
+      session.generation += 1;
+      session.socket = null;
+    }
+    if (socket) {
+      await socket.logout?.().catch(() => undefined);
+      await socket.end?.(undefined).catch(() => undefined);
     }
     this.sessions.delete(clinicId);
     await this.sessionStore.removeClinic(clinicId);
@@ -95,6 +139,14 @@ export class BaileysProvider {
       return { statusCode: 400, body: { ok: false, errorCode: "INVALID_PAYLOAD", error: "message is required." } };
     }
 
+    const idempotencyKey = `${clinicId}:${notificationId}`;
+    const persistedReceipt = await this.sessionStore.getSentNotification?.(clinicId, notificationId);
+    const prior = this.sentNotifications.get(idempotencyKey) || persistedReceipt?.messageId;
+    if (prior) {
+      this.sentNotifications.set(idempotencyKey, prior);
+      return { statusCode: 200, body: { ok: true, messageId: prior } };
+    }
+
     let jid;
     try {
       jid = await resolveRecipientJid(session.socket, phoneNumber);
@@ -114,7 +166,12 @@ export class BaileysProvider {
       await session.auth.saveMessage(sent?.key || { id: notificationId, remoteJid: jid }, sent?.message || { conversation: message });
       session.lastSeenAt = new Date().toISOString();
       session.lastError = null;
-      return { statusCode: 200, body: { ok: true, messageId: sent?.key?.id || null } };
+      const messageId = sent?.key?.id || null;
+      if (messageId) {
+        await this.sessionStore.saveSentNotification?.(clinicId, notificationId, messageId);
+        this.sentNotifications.set(idempotencyKey, messageId);
+      }
+      return { statusCode: 200, body: { ok: true, messageId } };
     } catch (error) {
       session.lastError = error?.message || "Baileys send failed.";
       this.logger.warn({ clinicId, phone: maskPhone(phoneNumber), error: session.lastError }, "Baileys send failed");
@@ -133,7 +190,10 @@ export class BaileysProvider {
       connectedPhone: null,
       lastSeenAt: null,
       lastError: null,
-      reconnecting: false
+      reconnecting: false,
+      desiredConnected: false,
+      generation: 0,
+      startPromise: null
     };
     this.sessions.set(clinicId, session);
     return session;
@@ -145,6 +205,7 @@ export class BaileysProvider {
     session.status = "connecting";
     session.lastError = null;
 
+    const generation = session.generation;
     const socket = this.makeSocket({
       auth: auth.state,
       logger: this.logger,
@@ -155,13 +216,23 @@ export class BaileysProvider {
     });
 
     session.socket = socket;
-    this.#wireSocketEvents(clinicId, session, socket, auth);
+    this.#wireSocketEvents(clinicId, session, socket, auth, generation);
   }
 
-  #wireSocketEvents(clinicId, session, socket, auth) {
+  async #ensureSocket(clinicId, session) {
+    if (session.socket) return;
+    if (!session.startPromise) {
+      session.startPromise = this.#startSocket(clinicId, session)
+        .finally(() => { session.startPromise = null; });
+    }
+    await session.startPromise;
+  }
+
+  #wireSocketEvents(clinicId, session, socket, auth, generation) {
     socket.ev.on("creds.update", auth.saveCreds);
 
     socket.ev.on("connection.update", async (update) => {
+      if (generation !== session.generation) return;
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
@@ -184,11 +255,12 @@ export class BaileysProvider {
       }
 
       if (connection === "close") {
-        await this.#handleClose(clinicId, session, lastDisconnect);
+        await this.#handleClose(clinicId, session, lastDisconnect, generation);
       }
     });
 
     socket.ev.on("messages.upsert", async ({ type, messages }) => {
+      if (generation !== session.generation || !session.desiredConnected) return;
       if (type !== "notify") return;
       for (const message of messages || []) {
         await this.#handleInbound(clinicId, session, message);
@@ -196,7 +268,8 @@ export class BaileysProvider {
     });
   }
 
-  async #handleClose(clinicId, session, lastDisconnect) {
+  async #handleClose(clinicId, session, lastDisconnect, generation) {
+    if (!session.desiredConnected || generation !== session.generation) return;
     const statusCode = disconnectStatusCode(lastDisconnect);
     if (statusCode === DisconnectReason.loggedOut) {
       session.status = "auth_failed";
@@ -213,7 +286,7 @@ export class BaileysProvider {
     if (!session.reconnecting && TRANSIENT_RECONNECT_CODES.has(statusCode)) {
       session.reconnecting = true;
       session.socket = null;
-      await this.#startSocket(clinicId, session).catch((error) => {
+      await this.#ensureSocket(clinicId, session).catch((error) => {
         session.reconnecting = false;
         session.lastError = error?.message || "Reconnect failed.";
       });
@@ -225,19 +298,25 @@ export class BaileysProvider {
     const text = extractInboundText(message);
     if (!text) return;
 
-    await this.httpClient.post(
-      `${this.gatewayInternalUrl}/internal/worker/inbound`,
-      {
+    const payload = {
         clinic_id: clinicId,
         from_phone: inboundFromPhone(message),
         message: text,
         received_at: messageTimestampToIso(message),
-        gateway_session_id: clinicId
-      },
-      { headers: { "x-internal-token": this.workerInternalToken } }
-    ).catch((error) => {
+        gateway_session_id: clinicId,
+        provider_message_id: message?.key?.id || `${message?.key?.remoteJid || "unknown"}:${message?.messageTimestamp || "unknown"}`
+    };
+    await this.#postInbound(payload).catch(async (error) => {
       session.lastError = error?.message || String(error);
+      await this.sessionStore.savePendingInbound?.(clinicId, payload);
     });
+  }
+
+  async #postInbound(payload) {
+    await this.httpClient.post(
+      `${this.gatewayInternalUrl}/internal/worker/inbound`, payload,
+      { headers: { "x-internal-token": this.workerInternalToken } }
+    );
   }
 
   #toPayload(clinicId, session) {

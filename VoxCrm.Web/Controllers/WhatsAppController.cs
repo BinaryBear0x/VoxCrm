@@ -6,6 +6,7 @@ using VoxCrm.Domain.Entities;
 using VoxCrm.Infrastructure.Data;
 using VoxCrm.Web.Models;
 using VoxCrm.Web.Services;
+using VoxCrm.Infrastructure.Security;
 
 namespace VoxCrm.Web.Controllers;
 
@@ -15,15 +16,18 @@ public class WhatsAppController : Controller
     private readonly VoxCrmDbContext _context;
     private readonly WhatsAppGatewayClient _gatewayClient;
     private readonly IClinicSendWindowCalculator _sendWindowCalculator;
+    private readonly IPiiProtector _protector;
 
     public WhatsAppController(
         VoxCrmDbContext context,
         WhatsAppGatewayClient gatewayClient,
-        IClinicSendWindowCalculator sendWindowCalculator)
+        IClinicSendWindowCalculator sendWindowCalculator,
+        IPiiProtector protector)
     {
         _context = context;
         _gatewayClient = gatewayClient;
         _sendWindowCalculator = sendWindowCalculator;
+        _protector = protector;
     }
 
     public async Task<IActionResult> Index(Guid? clinicId, CancellationToken cancellationToken)
@@ -381,9 +385,11 @@ public class WhatsAppController : Controller
 
     private async Task<PetOwner> GetOrCreateAnonymousOwnerAsync(Guid clinicId, string phone, CancellationToken cancellationToken)
     {
+        var phoneLookup = _protector.BlindIndex(clinicId, new string(phone.Where(char.IsDigit).ToArray()));
         var existing = await _context.PetOwners
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(p => p.ClinicID == clinicId && p.Phone == phone, cancellationToken);
+            .FirstOrDefaultAsync(p => p.ClinicID == clinicId
+                && p.NormalizedPhone == phoneLookup, cancellationToken);
 
         if (existing != null) return existing;
 
@@ -393,6 +399,7 @@ public class WhatsAppController : Controller
             FirstName = "Manuel",
             LastName = "Kayıt",
             Phone = phone,
+            NormalizedPhone = phoneLookup,
             WhatsAppConsent = true,
             Notes = "Manuel mesaj gönderimi için otomatik oluşturuldu."
         };

@@ -1,146 +1,122 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
+using VoxCrm.Application.Examinations;
 using VoxCrm.Domain.Entities;
-using VoxCrm.Infrastructure.Data;
 
 namespace VoxCrm.Web.Controllers;
 
 [Authorize(Roles = "Clinic")]
-public class MuayeneController : Controller
+public sealed class MuayeneController : Controller
 {
-    private readonly VoxCrmDbContext _context;
-    public MuayeneController(VoxCrmDbContext context) => _context = context;
+    private readonly IExaminationService _service;
 
-    public async Task<IActionResult> Index()
+    public MuayeneController(IExaminationService service) => _service = service;
+
+    public async Task<IActionResult> Index(bool includeArchived, CancellationToken cancellationToken)
     {
-        var list = await _context.Muayeneler
-            .Include(m => m.Patient)
-            .OrderByDescending(m => m.CreatedAt)
-            .ToListAsync();
-        return View(list);
+        ViewBag.IncludeArchived = includeArchived;
+        return View(await _service.ListAsync(includeArchived, cancellationToken));
     }
 
-    public async Task<IActionResult> Create(Guid? patientId)
+    public async Task<IActionResult> Create(Guid? patientId, CancellationToken cancellationToken)
     {
-        var patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-        ViewBag.Patients = new SelectList(patients, "ID", "Name", patientId);
-        
+        await SetPatientsAsync(patientId, cancellationToken);
         return View();
     }
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("PatientId,AppointmentId,Subjective,Objective,Assessment,Plan,WeightAtVisit,Temperature")] Muayene model)
+        [Bind("PatientId,AppointmentId,Subjective,Objective,Assessment,Plan,WeightAtVisit,Temperature")] Muayene model,
+        CancellationToken cancellationToken)
     {
-        // Sistem alanları ve navigasyon özellikleri doğrulama dışı bırakılıyor
-        ModelState.Remove(nameof(Muayene.ClinicID));
-        ModelState.Remove(nameof(Muayene.CreatedAt));
-        ModelState.Remove(nameof(Muayene.IsActive));
-        ModelState.Remove(nameof(Muayene.Patient));
-        ModelState.Remove(nameof(Muayene.Appointment));
-
+        RemoveSystemValidation();
         if (!ModelState.IsValid)
         {
-            var patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-            ViewBag.Patients = new SelectList(patients, "ID", "Name", model.PatientId);
+            await SetPatientsAsync(model.PatientId, cancellationToken);
             return View(model);
         }
-
-        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
-        if (!patientExists)
+        var result = await _service.CreateAsync(model, cancellationToken);
+        if (!result.Succeeded)
         {
-            ModelState.AddModelError(nameof(model.PatientId), "Geçerli bir hasta seçin.");
-            var patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-            ViewBag.Patients = new SelectList(patients, "ID", "Name", model.PatientId);
+            ModelState.AddModelError(string.Empty, result.Error ?? "Muayene kaydedilemedi.");
+            await SetPatientsAsync(model.PatientId, cancellationToken);
             return View(model);
         }
-
-        _context.Muayeneler.Add(model);
-        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
         TempData["Success"] = "Muayene kaydı başarıyla oluşturuldu.";
-        
         return RedirectToAction(nameof(Index));
     }
 
-    public async Task<IActionResult> Edit(Guid id)
+    public async Task<IActionResult> Edit(Guid id, CancellationToken cancellationToken)
     {
-        var muayene = await _context.Muayeneler.FindAsync(id);
-        if (muayene == null) return NotFound();
-
-        var patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-        ViewBag.Patients = new SelectList(patients, "ID", "Name", muayene.PatientId);
-
-        return View(muayene);
+        var item = await _service.GetAsync(id, cancellationToken);
+        if (item == null) return NotFound();
+        await SetPatientsAsync(item.PatientId, cancellationToken);
+        return View(item);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Guid id,
-        [Bind("ID,PatientId,AppointmentId,Subjective,Objective,Assessment,Plan,WeightAtVisit,Temperature")] Muayene model)
+    public async Task<IActionResult> Edit(
+        Guid id,
+        [Bind("ID,PatientId,AppointmentId,Subjective,Objective,Assessment,Plan,WeightAtVisit,Temperature")] Muayene model,
+        CancellationToken cancellationToken)
     {
         if (id != model.ID) return BadRequest();
-
-        // Sistem alanları ve navigasyon özellikleri doğrulama dışı bırakılıyor
-        ModelState.Remove(nameof(Muayene.ClinicID));
-        ModelState.Remove(nameof(Muayene.CreatedAt));
-        ModelState.Remove(nameof(Muayene.IsActive));
-        ModelState.Remove(nameof(Muayene.Patient));
-        ModelState.Remove(nameof(Muayene.Appointment));
-
+        RemoveSystemValidation();
         if (!ModelState.IsValid)
         {
-            var patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-            ViewBag.Patients = new SelectList(patients, "ID", "Name", model.PatientId);
+            await SetPatientsAsync(model.PatientId, cancellationToken);
             return View(model);
         }
-
-        var existing = await _context.Muayeneler.FindAsync(id); // Global Query Filter: başka klinik = null
-        if (existing == null) return NotFound();
-
-        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
-        if (!patientExists)
+        var result = await _service.UpdateAsync(model, cancellationToken);
+        if (result.NotFound) return NotFound();
+        if (!result.Succeeded)
         {
-            ModelState.AddModelError(nameof(model.PatientId), "Geçerli bir hasta seçin.");
-            var patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-            ViewBag.Patients = new SelectList(patients, "ID", "Name", model.PatientId);
+            ModelState.AddModelError(string.Empty, result.Error ?? "Muayene güncellenemedi.");
+            await SetPatientsAsync(model.PatientId, cancellationToken);
             return View(model);
         }
-
-        existing.PatientId     = model.PatientId;
-        existing.Subjective    = model.Subjective;
-        existing.Objective     = model.Objective;
-        existing.Assessment    = model.Assessment;
-        existing.Plan          = model.Plan;
-        existing.WeightAtVisit = model.WeightAtVisit;
-        existing.Temperature   = model.Temperature;
-        // ClinicID, CreatedAt, IsActive → hiç dokunulmaz ✅
-
-        await _context.SaveChangesAsync();
         TempData["Success"] = "Muayene kaydı güncellendi.";
         return RedirectToAction(nameof(Index));
     }
 
-    public async Task<IActionResult> Details(Guid id)
+    public async Task<IActionResult> Details(Guid id, CancellationToken cancellationToken)
     {
-        var muayene = await _context.Muayeneler
-            .Include(m => m.Patient)
-            .FirstOrDefaultAsync(m => m.ID == id);
-            
-        if (muayene == null) return NotFound();
-
-        return View(muayene);
+        var item = await _service.GetAsync(id, cancellationToken);
+        return item == null ? NotFound() : View(item);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var muayene = await _context.Muayeneler.FindAsync(id);
-        if (muayene == null) return NotFound();
-
-        _context.Muayeneler.Remove(muayene);
-        await _context.SaveChangesAsync();
-        TempData["Success"] = "Muayene kaydı silindi.";
+        var result = await _service.ArchiveAsync(id, ActorUserId(), cancellationToken);
+        if (result.NotFound) return NotFound();
+        TempData["Success"] = "Muayene kaydı arşivlendi.";
         return RedirectToAction(nameof(Index));
     }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _service.RestoreAsync(id, ActorUserId(), cancellationToken);
+        if (result.NotFound) return NotFound();
+        TempData["Success"] = "Muayene kaydı geri alındı.";
+        return RedirectToAction(nameof(Index), new { includeArchived = true });
+    }
+
+    private async Task SetPatientsAsync(Guid? selected, CancellationToken cancellationToken) =>
+        ViewBag.Patients = new SelectList(await _service.GetPatientOptionsAsync(cancellationToken), "ID", "Name", selected);
+
+    private void RemoveSystemValidation()
+    {
+        ModelState.Remove(nameof(Muayene.ClinicID));
+        ModelState.Remove(nameof(Muayene.CreatedAt));
+        ModelState.Remove(nameof(Muayene.IsActive));
+        ModelState.Remove(nameof(Muayene.Patient));
+        ModelState.Remove(nameof(Muayene.Appointment));
+    }
+
+    private Guid ActorUserId() =>
+        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

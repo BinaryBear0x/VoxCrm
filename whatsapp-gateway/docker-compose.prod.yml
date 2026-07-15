@@ -3,8 +3,22 @@ services:
     environment:
       APP_ENVIRONMENT: production
       AUTO_CREATE_DB: "false"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   wa-worker:
     environment:
       NODE_ENV: production
     ports: []
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

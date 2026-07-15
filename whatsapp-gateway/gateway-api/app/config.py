@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     worker_base_url: str = "http://127.0.0.1:8090"
     worker_internal_token: str = "dev-only-worker-token-change-me"
+    pii_encryption_key_file: str = ""
 
     poll_interval_seconds: int = 10
     default_batch_size: int = 10
@@ -37,6 +38,8 @@ class Settings(BaseSettings):
                 raise RuntimeError("WHATSAPP_JWT_SECRET must be changed in production.")
             if self.worker_internal_token == "dev-only-worker-token-change-me":
                 raise RuntimeError("WORKER_INTERNAL_TOKEN must be changed in production.")
+            if not self.pii_encryption_key_file:
+                raise RuntimeError("PII_ENCRYPTION_KEY_FILE must be configured in production.")
 
 
 settings = Settings()

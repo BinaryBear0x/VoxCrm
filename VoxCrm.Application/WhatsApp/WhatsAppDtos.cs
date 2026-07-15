@@ -27,7 +27,8 @@ public sealed record WhatsAppInboundRequest(
     string FromPhone,
     string Message,
     DateTime? ReceivedAt,
-    string GatewaySessionId);
+    string GatewaySessionId,
+    string ProviderMessageId);
 
 public sealed record ExternalAuditLogRequest
 {

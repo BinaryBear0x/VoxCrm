@@ -1,4 +1,5 @@
-@model IEnumerable<VoxCrm.Domain.Entities.Debt>
+@using VoxCrm.Domain.Entities
+@model VoxCrm.Application.Finance.FinanceIndexModel
 @{
     ViewData["Title"] = "Finans";
     ViewData["ActiveMenu"] = "finance";
@@ -7,7 +8,7 @@
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
     <h1 class="h3 fw-bold mb-0">Finans</h1>
     <a href="/Finance/Create" class="btn btn-primary btn-sm">
-        <i class="bi bi-plus-lg me-1"></i> Borc Ekle
+        <i class="bi bi-plus-lg me-1"></i> Borç Ekle
     </a>
 </div>
 
@@ -15,46 +16,47 @@
 {
     <div class="alert alert-success alert-dismissible fade show">@TempData["Success"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
 }
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show">@TempData["Error"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
 
-<!-- Ozet Kartlari -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-4">
         <div class="card border-0 shadow-sm text-center py-3">
-            <div class="text-danger fw-bold fs-5">@((ViewBag.TotalOutstanding as decimal? ?? 0).ToString("N2")) TL</div>
+            <div class="text-danger fw-bold fs-5">@Model.TotalOutstanding.ToString("N2") TL</div>
             <div class="text-muted small">Toplam Alacak</div>
         </div>
     </div>
     <div class="col-6 col-md-4">
         <div class="card border-0 shadow-sm text-center py-3">
-            <div class="text-success fw-bold fs-5">@((ViewBag.TotalCollected as decimal? ?? 0).ToString("N2")) TL</div>
+            <div class="text-success fw-bold fs-5">@Model.TotalCollected.ToString("N2") TL</div>
             <div class="text-muted small">Toplam Tahsil</div>
         </div>
     </div>
 </div>
 
-<!-- Filtreler -->
 <div class="d-flex gap-2 mb-3 flex-wrap">
-    <a href="/Finance" class="btn btn-sm @(ViewBag.FilterCollected == null ? "btn-dark" : "btn-outline-secondary")">Tumu</a>
-    <a href="/Finance?collected=false" class="btn btn-sm @(ViewBag.FilterCollected?.ToString() == "False" ? "btn-danger" : "btn-outline-danger")">Odenmemis</a>
-    <a href="/Finance?collected=true" class="btn btn-sm @(ViewBag.FilterCollected?.ToString() == "True" ? "btn-success" : "btn-outline-success")">Tahsil Edilmis</a>
+    <a href="/Finance" class="btn btn-sm @(Model.CollectedFilter == null ? "btn-dark" : "btn-outline-secondary")">Tümü</a>
+    <a href="/Finance?collected=false" class="btn btn-sm @(Model.CollectedFilter == false ? "btn-danger" : "btn-outline-danger")">Ödenmemiş</a>
+    <a href="/Finance?collected=true" class="btn btn-sm @(Model.CollectedFilter == true ? "btn-success" : "btn-outline-success")">Tahsil Edilmiş</a>
 </div>
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
-        @if (!Model.Any())
+        @if (Model.Debts.Count == 0)
         {
             <div class="text-center py-5 text-muted">
                 <i class="bi bi-cash-coin fs-1 d-block mb-2"></i>
-                <p>Bu filtrede kayit yok.</p>
+                <p>Bu filtrede kayıt yok.</p>
             </div>
         }
         else
         {
             <div class="table-responsive d-none d-md-block">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover mb-0 align-middle">
                     <thead class="table-light">
                         <tr>
-                            <th>Tarih</th>
                             <th>Müşteri</th>
                             <th>Açıklama</th>
                             <th>Tutar</th>
@@ -64,76 +66,134 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var d in Model)
+                        @foreach (var debt in Model.Debts)
                         {
-                            var totalPaid = d.Payments.Sum(p => p.Amount);
-                            var remainingAmount = d.Amount - totalPaid;
-                            var isOverdue = !d.IsCollected && d.DueDate.Date < DateTime.Today;
+                            var isOverdue = debt.CancelledAt == null && !debt.IsCollected && debt.DueDate.Date < DateTime.Today;
                             <tr class="@(isOverdue ? "table-danger" : "")">
-                                <td class="fw-semibold">@d.PetOwner?.FirstName @d.PetOwner?.LastName</td>
-                                <td class="text-muted small">@d.Description</td>
+                                <td class="fw-semibold">@debt.OwnerName</td>
+                                <td class="text-muted small">@debt.Description</td>
                                 <td class="fw-semibold">
-                                    @d.Amount.ToString("N2") TL<br/>
-                                    <small class="text-success">Ödenen: @totalPaid.ToString("N2") TL</small>
+                                    @debt.Amount.ToString("N2") TL<br />
+                                    <small class="text-success">Ödenen: @debt.PaidAmount.ToString("N2") TL</small>
                                 </td>
-                                <td class="@(isOverdue ? "text-danger fw-semibold" : "")">@d.DueDate.ToString("dd.MM.yyyy")</td>
+                                <td class="@(isOverdue ? "text-danger fw-semibold" : "")">@debt.DueDate.ToString("dd.MM.yyyy")</td>
                                 <td>
-                                    @if (d.IsCollected)
+                                    @if (debt.CancelledAt != null)
+                                    { <span class="badge bg-secondary">İptal</span> }
+                                    else if (debt.IsCollected)
                                     { <span class="badge bg-success">Tahsil Edildi</span> }
                                     else if (isOverdue)
-                                    { <span class="badge bg-danger">Vadesi Gecmis</span> }
+                                    { <span class="badge bg-danger">Vadesi Geçmiş</span> }
                                     else
                                     { <span class="badge bg-warning text-dark">Bekliyor</span> }
                                 </td>
                                 <td class="text-end">
-                                    @if (!d.IsCollected)
+                                    @if (debt.CancelledAt == null && debt.RemainingAmount > 0)
                                     {
                                         <button type="button" class="btn btn-success btn-sm"
                                                 data-bs-toggle="modal" data-bs-target="#collectModal"
-                                                data-id="@d.ID" data-name="@d.PetOwner?.FirstName @d.PetOwner?.LastName"
-                                                data-amount="@remainingAmount.ToString("0.00")">
+                                                data-id="@debt.Id" data-name="@debt.OwnerName"
+                                                data-amount="@debt.RemainingAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)">
                                             Tahsilat Ekle
                                         </button>
                                     }
-                                    else
+                                    @if (debt.CancelledAt == null && debt.PaidAmount == 0)
                                     {
-                                        <span class="text-muted small">@d.PaymentMethod · @d.CollectedAt?.ToString("dd.MM")</span>
+                                        <button type="button" class="btn btn-outline-danger btn-sm"
+                                                data-bs-toggle="modal" data-bs-target="#cancelModal" data-id="@debt.Id">
+                                            İptal Et
+                                        </button>
                                     }
                                 </td>
                             </tr>
+                            @if (debt.Ledger.Count > 0 || debt.CancelledAt != null)
+                            {
+                                <tr>
+                                    <td colspan="6" class="bg-light py-2 px-3">
+                                        @if (debt.CancelledAt != null)
+                                        {
+                                            <div class="small text-muted mb-1">İptal nedeni: @debt.CancellationReason</div>
+                                        }
+                                        @foreach (var entry in debt.Ledger)
+                                        {
+                                            <div class="d-flex align-items-center gap-2 small py-1">
+                                                <span class="badge @(entry.EntryType == PaymentEntryType.Payment ? "bg-success" : "bg-secondary")">
+                                                    @(entry.EntryType == PaymentEntryType.Payment ? "Tahsilat" : "Ters Kayıt")
+                                                </span>
+                                                <span>@entry.PaymentDate.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                                                <strong>@entry.Amount.ToString("N2") TL</strong>
+                                                <span class="text-muted">@entry.PaymentMethod</span>
+                                                @if (!string.IsNullOrWhiteSpace(entry.Reason))
+                                                { <span class="text-muted">@entry.Reason</span> }
+                                                @if (entry.EntryType == PaymentEntryType.Payment && !entry.IsReversed && debt.CancelledAt == null)
+                                                {
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-auto"
+                                                            data-bs-toggle="modal" data-bs-target="#reverseModal" data-id="@entry.Id">
+                                                        Ters Kaydet
+                                                    </button>
+                                                }
+                                                else if (entry.IsReversed)
+                                                { <span class="badge text-bg-light ms-auto">Ters kaydedildi</span> }
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
                         }
                     </tbody>
                 </table>
             </div>
+
             <div class="d-md-none">
-                @foreach (var d in Model)
+                @foreach (var debt in Model.Debts)
                 {
-                    var totalPaid = d.Payments.Sum(p => p.Amount);
-                    var remainingAmount = d.Amount - totalPaid;
                     <div class="border-bottom p-3">
-                        <div class="d-flex justify-content-between">
-                            <div class="fw-semibold">@d.PetOwner?.FirstName @d.PetOwner?.LastName</div>
-                            <div class="fw-bold text-danger">@d.Amount.ToString("N2") TL</div>
+                        <div class="d-flex justify-content-between gap-2">
+                            <div class="fw-semibold">@debt.OwnerName</div>
+                            <div class="fw-bold">@debt.Amount.ToString("N2") TL</div>
                         </div>
-                        <div class="text-muted small">@d.Description</div>
-                        <div class="text-success small">Ödenen: @totalPaid.ToString("N2") TL</div>
+                        <div class="text-muted small">@debt.Description</div>
+                        <div class="text-success small">Ödenen: @debt.PaidAmount.ToString("N2") TL</div>
                         <div class="d-flex justify-content-between align-items-center mt-1">
-                            <span class="text-muted small">Vade: @d.DueDate.ToString("dd.MM.yyyy")</span>
-                            @if (d.IsCollected)
+                            <span class="text-muted small">Vade: @debt.DueDate.ToString("dd.MM.yyyy")</span>
+                            @if (debt.CancelledAt != null)
+                            { <span class="badge bg-secondary">İptal</span> }
+                            else if (debt.IsCollected)
                             { <span class="badge bg-success">Tahsil</span> }
                             else
                             { <span class="badge bg-warning text-dark">Bekliyor</span> }
                         </div>
-                        @if (!d.IsCollected)
+                        @if (debt.CancelledAt == null)
                         {
-                            <div class="mt-2 text-end">
-                                <button type="button" class="btn btn-success btn-sm"
-                                        data-bs-toggle="modal" data-bs-target="#collectModal"
-                                        data-id="@d.ID" data-name="@d.PetOwner?.FirstName @d.PetOwner?.LastName"
-                                        data-amount="@remainingAmount.ToString("0.00")">
-                                    Tahsilat Ekle
-                                </button>
+                            <div class="d-flex justify-content-end gap-2 mt-2">
+                                @if (debt.PaidAmount == 0)
+                                {
+                                    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#cancelModal" data-id="@debt.Id">İptal Et</button>
+                                }
+                                @if (debt.RemainingAmount > 0)
+                                {
+                                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#collectModal"
+                                            data-id="@debt.Id" data-name="@debt.OwnerName"
+                                            data-amount="@debt.RemainingAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)">Tahsilat Ekle</button>
+                                }
                             </div>
+                        }
+                        @if (debt.Ledger.Count > 0)
+                        {
+                            <details class="mt-2 small">
+                                <summary>Hareketler (@debt.Ledger.Count)</summary>
+                                @foreach (var entry in debt.Ledger)
+                                {
+                                    <div class="d-flex align-items-center gap-2 border-top py-2 mt-1">
+                                        <span>@entry.PaymentDate.ToLocalTime().ToString("dd.MM HH:mm")</span>
+                                        <strong>@entry.Amount.ToString("N2") TL</strong>
+                                        @if (entry.EntryType == PaymentEntryType.Payment && !entry.IsReversed && debt.CancelledAt == null)
+                                        {
+                                            <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#reverseModal" data-id="@entry.Id">Ters Kaydet</button>
+                                        }
+                                    </div>
+                                }
+                            </details>
                         }
                     </div>
                 }
@@ -142,48 +202,64 @@
     </div>
 </div>
 
-<!-- Tahsil Et Modal -->
 <div class="modal fade" id="collectModal" tabindex="-1">
     <div class="modal-dialog modal-sm modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header">
-                <h6 class="modal-title">Odeme Tahsil Et</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
+            <div class="modal-header"><h6 class="modal-title">Ödeme Tahsil Et</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form method="post" action="/Finance/AddPayment">
                 @Html.AntiForgeryToken()
                 <div class="modal-body">
                     <input type="hidden" name="debtId" id="collectId">
                     <p class="small">Müşteri: <strong id="collectName"></strong><br>Kalan Tutar: <strong id="collectAmountText"></strong> TL</p>
-                    
                     <div class="mb-3">
                         <label class="form-label fw-semibold small">Tahsil Edilecek Tutar (TL)</label>
-                        <input type="number" step="0.01" name="amount" id="collectAmount" class="form-control form-control-sm" required>
+                        <input type="number" min="0.01" step="0.01" name="amount" id="collectAmount" class="form-control form-control-sm" required>
                     </div>
-
                     <label class="form-label fw-semibold small">Ödeme Yöntemi</label>
                     <select name="paymentMethod" class="form-select form-select-sm">
-                        <option value="Nakit">Nakit</option>
-                        <option value="Kredi Karti">Kredi Kartı</option>
-                        <option value="Havale/EFT">Havale / EFT</option>
+                        <option value="Nakit">Nakit</option><option value="Kredi Karti">Kredi Kartı</option><option value="Havale/EFT">Havale / EFT</option>
                     </select>
                 </div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-success btn-sm w-100">Tahsilat Ekle</button>
-                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-success btn-sm w-100">Tahsilat Ekle</button></div>
             </form>
         </div>
     </div>
 </div>
 
+<div class="modal fade" id="reverseModal" tabindex="-1">
+    <div class="modal-dialog modal-sm modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h6 class="modal-title">Tahsilatı Ters Kaydet</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <form method="post" action="/Finance/ReversePayment">@Html.AntiForgeryToken()
+            <div class="modal-body"><input type="hidden" name="paymentId" id="reversePaymentId"><label class="form-label fw-semibold small">Neden</label><textarea name="reason" class="form-control" maxlength="500" required></textarea></div>
+            <div class="modal-footer"><button type="submit" class="btn btn-secondary btn-sm w-100">Ters Kaydet</button></div>
+        </form>
+    </div></div>
+</div>
+
+<div class="modal fade" id="cancelModal" tabindex="-1">
+    <div class="modal-dialog modal-sm modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h6 class="modal-title">Borcu İptal Et</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <form method="post" action="/Finance/CancelDebt">@Html.AntiForgeryToken()
+            <div class="modal-body"><input type="hidden" name="debtId" id="cancelDebtId"><label class="form-label fw-semibold small">Neden</label><textarea name="reason" class="form-control" maxlength="500" required></textarea></div>
+            <div class="modal-footer"><button type="submit" class="btn btn-danger btn-sm w-100">Borcu İptal Et</button></div>
+        </form>
+    </div></div>
+</div>
+
 @section Scripts {
     <script>
-        document.getElementById('collectModal').addEventListener('show.bs.modal', function (e) {
-            var btn = e.relatedTarget;
-            document.getElementById('collectId').value = btn.dataset.id;
-            document.getElementById('collectName').textContent = btn.dataset.name;
-            document.getElementById('collectAmountText').textContent = btn.dataset.amount;
-            document.getElementById('collectAmount').value = btn.dataset.amount;
+        document.getElementById('collectModal').addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            document.getElementById('collectId').value = button.dataset.id;
+            document.getElementById('collectName').textContent = button.dataset.name;
+            document.getElementById('collectAmountText').textContent = button.dataset.amount;
+            document.getElementById('collectAmount').value = button.dataset.amount;
+        });
+        document.getElementById('reverseModal').addEventListener('show.bs.modal', function (event) {
+            document.getElementById('reversePaymentId').value = event.relatedTarget.dataset.id;
+        });
+        document.getElementById('cancelModal').addEventListener('show.bs.modal', function (event) {
+            document.getElementById('cancelDebtId').value = event.relatedTarget.dataset.id;
         });
     </script>
 }

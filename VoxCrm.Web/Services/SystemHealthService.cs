@@ -54,7 +54,9 @@ public class SystemHealthService
 
         model.DatabaseStatus = await _context.Database.CanConnectAsync(cancellationToken) ? "ok" : "error";
         await FillVoxCrmApiHealthAsync(model, cancellationToken);
-        await FillGatewayHealthAsync(model, cancellationToken);
+        // Gateway health is global operational data. Dealer screens must not
+        // disclose aggregate tenant/session information.
+        model.GatewayWorkerSummary = "Gateway ayrıntıları yalnız SystemAdmin tarafından görüntülenebilir.";
         await FillContainerStatusAsync(model, cancellationToken);
 
         return model;

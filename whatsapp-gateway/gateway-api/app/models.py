@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from app.encrypted_type import EncryptedText
 
 
 class Base(DeclarativeBase):
@@ -17,7 +18,7 @@ class ClinicSession(Base):
     clinic_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, index=True)
     status: Mapped[str] = mapped_column(String(32), default="disconnected", index=True)
     qr: Mapped[str | None] = mapped_column(Text)
-    connected_phone: Mapped[str | None] = mapped_column(String(64))
+    connected_phone: Mapped[str | None] = mapped_column(EncryptedText())
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -32,8 +33,8 @@ class OutboundMessage(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     voxcrm_notification_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     clinic_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
-    phone_number: Mapped[str] = mapped_column(String(64))
-    message_content: Mapped[str] = mapped_column(Text)
+    phone_number: Mapped[str] = mapped_column(EncryptedText())
+    message_content: Mapped[str] = mapped_column(EncryptedText())
     state: Mapped[str] = mapped_column(String(32), default="Claimed", index=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     gateway_message_id: Mapped[str | None] = mapped_column(String(256))

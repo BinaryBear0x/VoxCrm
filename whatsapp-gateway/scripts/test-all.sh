@@ -14,6 +14,10 @@ echo "== VoxCrm restore/build/test =="
 dotnet restore "$VOXCRM_ROOT/VoxCrm.slnx"
 dotnet build "$VOXCRM_ROOT/VoxCrm.slnx" --no-restore -m:1
 dotnet test "$VOXCRM_ROOT/VoxCrm.slnx" --no-build
+dotnet ef migrations has-pending-model-changes \
+  --project "$VOXCRM_ROOT/VoxCrm.Infrastructure" \
+  --startup-project "$VOXCRM_ROOT/VoxCrm.Web" \
+  --context VoxCrmDbContext --no-build
 
 echo "== VoxCrm dependency audit =="
 audit_output="$(dotnet list "$VOXCRM_ROOT/VoxCrm.slnx" package --vulnerable --include-transitive)"
@@ -25,6 +29,7 @@ fi
 
 echo "== Gateway Python syntax =="
 "$PYTHON_BIN" -m py_compile "$GATEWAY_API_ROOT"/app/*.py
+test -s "$GATEWAY_API_ROOT/requirements.lock"
 
 echo "== Gateway pytest =="
 (
@@ -39,6 +44,7 @@ echo "== Backup script syntax =="
 bash -n "$ROOT_DIR/scripts/backup.sh"
 bash -n "$ROOT_DIR/scripts/restore.sh"
 bash -n "$ROOT_DIR/scripts/test-backup-smoke.sh"
+bash -n "$VOXCRM_ROOT/deploy/scripts/"*.sh
 
 echo "== Backup smoke =="
 "$ROOT_DIR/scripts/test-backup-smoke.sh"

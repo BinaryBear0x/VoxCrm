@@ -33,6 +33,13 @@ async def mark_stale_sending_as_needs_review() -> None:
                 last_error=message.last_error,
                 retry_count=message.retry_count,
             )
+            await write_gateway_audit(
+                level="Warning", category="WhatsApp", action="Gateway.StaleSendingRecovered",
+                message="Gateway restart sonrasi Sending durumundaki mesaj NeedsReview durumuna alindi.",
+                outcome="NeedsReview", clinic_id=message.clinic_id,
+                entity_type="WhatsAppNotification", entity_id=str(message.voxcrm_notification_id),
+                error_code="STALE_SENDING",
+            )
         await session.commit()
 
 
@@ -113,6 +120,12 @@ async def process_notification(notification: dict) -> None:
             gateway_message_id=gateway_message_id,
             retry_count=response.get("retryCount"),
         )
+        await write_gateway_audit(
+            level="Info", category="WhatsApp", action="Gateway.MessageSent",
+            message="WhatsApp mesaji gateway tarafindan basariyla gonderildi.", outcome="Success",
+            clinic_id=clinic_id, entity_type="WhatsAppNotification", entity_id=str(notification_id),
+            metadata={"gatewayMessageId": gateway_message_id},
+        )
         async with SessionLocal() as session:
             outbound = await find_outbound(session, notification_id)
             if outbound:
@@ -185,6 +198,13 @@ async def handle_failure(notification_id: uuid.UUID, clinic_id: uuid.UUID, error
                 retry_count=next_retry_count,
                 next_attempt_at=next_attempt_at,
             )
+            await write_gateway_audit(
+                level="Warning", category="WhatsApp", action="Gateway.MessageRetryScheduled",
+                message="WhatsApp mesaji gecici hata nedeniyle tekrar denenecek.", outcome="RetryScheduled",
+                clinic_id=clinic_id, entity_type="WhatsAppNotification", entity_id=str(notification_id),
+                error_code=error_code,
+                metadata={"retryCount": next_retry_count, "nextAttemptAt": next_attempt_at.isoformat()},
+            )
             await update_session_error(clinic_id, error)
             return
 
@@ -199,6 +219,12 @@ async def handle_failure(notification_id: uuid.UUID, clinic_id: uuid.UUID, error
         last_error=error,
         retry_count=next_retry_count,
     )
+    await write_gateway_audit(
+        level="Error", category="WhatsApp", action="Gateway.MessageFailed",
+        message="WhatsApp mesaji kalici hata nedeniyle basarisiz oldu.", outcome="Failure",
+        clinic_id=clinic_id, entity_type="WhatsAppNotification", entity_id=str(notification_id),
+        error_code=error_code, metadata={"retryCount": next_retry_count},
+    )
     await update_session_error(clinic_id, error)
 
 
@@ -211,6 +237,22 @@ async def update_session_error(clinic_id: uuid.UUID, error: str) -> None:
         if clinic_session:
             clinic_session.last_error = error
             await session.commit()
+
+
+async def write_gateway_audit(
+    *, level: str, category: str, action: str, message: str, outcome: str,
+    clinic_id: uuid.UUID | None = None, entity_type: str | None = None,
+    entity_id: str | None = None, error_code: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    try:
+        await voxcrm_client.write_audit(
+            level=level, category=category, action=action, message=message, outcome=outcome,
+            clinic_id=clinic_id, entity_type=entity_type, entity_id=entity_id,
+            error_code=error_code, metadata=metadata,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"audit write failed: {exc}")
 
 
 def next_send_sort_key(notification: dict) -> datetime:
