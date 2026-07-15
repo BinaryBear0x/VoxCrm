@@ -145,6 +145,7 @@ services:
 
   wa-worker:
     <<: *security
+    user: "${VOXCRM_HOST_UID:-995}:${VOXCRM_HOST_GID:-986}"
     build:
       context: ../whatsapp-gateway/wa-worker
     image: voxcrm-worker:${VOXCRM_VERSION:-local}

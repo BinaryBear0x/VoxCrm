@@ -557,6 +557,17 @@ ACL çıktısında yalnız owner `voxcrm`, `user:1654:r--` ve `other::---` göst
 UID 1654 hem .NET hem gateway imajlarında sabitlenmiştir. Hostta bu UID sonradan başka
 bir kullanıcıya atanamaz.
 
+WhatsApp worker session dizinine yazdığı için hosttaki `voxcrm` kullanıcısıyla aynı
+UID/GID ile çalışır. Aşağıdaki değerleri okuyup `production.env` içindeki
+`VOXCRM_HOST_UID` ve `VOXCRM_HOST_GID` alanlarına yazın; örnek `995:986` her sunucuda
+aynı kabul edilmemelidir:
+
+```bash
+id -u voxcrm
+id -g voxcrm
+sudo install -d -o voxcrm -g voxcrm -m 700 /var/lib/voxcrm/whatsapp-sessions
+```
+
 ### Release üretme ve sunucuya aktarma
 
 Release yalnız testleri geçen temiz commit'ten üretilir:
