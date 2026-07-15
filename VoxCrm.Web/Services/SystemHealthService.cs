@@ -54,9 +54,7 @@ public class SystemHealthService
 
         model.DatabaseStatus = await _context.Database.CanConnectAsync(cancellationToken) ? "ok" : "error";
         await FillVoxCrmApiHealthAsync(model, cancellationToken);
-        // Gateway health is global operational data. Dealer screens must not
-        // disclose aggregate tenant/session information.
-        model.GatewayWorkerSummary = "Gateway ayrıntıları yalnız SystemAdmin tarafından görüntülenebilir.";
+        await FillGatewayHealthAsync(model, cancellationToken);
         await FillContainerStatusAsync(model, cancellationToken);
 
         return model;
@@ -109,7 +107,7 @@ public class SystemHealthService
             ?? _environment.IsDevelopment();
         if (!dockerEnabled)
         {
-            model.ContainerStatusError = "Container durumu bu ortamda kapalı.";
+            model.ContainerStatusError = "Güvenlik nedeniyle web uygulamasına Docker socket erişimi verilmemiştir. Servisler host monitor ve Telegram alarmlarıyla izlenir.";
             return;
         }
 
