@@ -568,8 +568,20 @@ scp artifacts/releases/voxcrm-<versiyon>.tar.gz \
 ssh <kullanici>@<sunucu> 'cd /opt/voxcrm/incoming && sha256sum -c voxcrm-<versiyon>.tar.gz.sha256'
 ```
 
-Checksum doğrulanmadan arşiv açılmaz. Sunucuda `/opt/voxcrm/releases/<versiyon>` dizinine
-açılır ve `current` symlink'i yalnız readiness/smoke sonrası değiştirilir. Sunucu mimarisi
+Checksum doğrulanmadan arşiv açılmaz. Release içeriği secret taşımaz ve container build
+kullanıcılarının dosyaları okuyabilmesi gerekir; secret oluştururken kullanılan `umask 077`
+ile arşiv açılmamalıdır. Sunucuda şu şekilde çıkarılır ve PostgreSQL init dosyası ayrıca
+doğrulanır:
+
+```bash
+install -d -o voxcrm -g voxcrm -m 755 /opt/voxcrm/releases/<versiyon>
+(umask 022; tar -xzf /opt/voxcrm/incoming/voxcrm-<versiyon>.tar.gz \
+  -C /opt/voxcrm/releases/<versiyon> --strip-components=1)
+test "$(stat -c '%a' /opt/voxcrm/releases/<versiyon>/deploy/postgres/init.sql)" = 644
+```
+
+Arşiv `/opt/voxcrm/releases/<versiyon>` dizinine açılır ve `current` symlink'i yalnız
+readiness/smoke sonrası değiştirilir. Sunucu mimarisi
 (amd64/arm64) envanterde doğrulanmadan yerel image aktarımı yapılmaz; gerekirse image'lar
 sunucuda yeniden build edilir.
 

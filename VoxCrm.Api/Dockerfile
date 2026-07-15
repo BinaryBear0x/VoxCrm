@@ -8,8 +8,10 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:1fa23fc4872d95fd71c2833ebe65d7e
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=build /out .
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /keys \
+    && chown app:app /keys
+COPY --from=build --chown=app:app /out .
 USER app
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "VoxCrm.Api.dll"]
