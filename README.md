@@ -575,6 +575,48 @@ sudo install -d -o voxcrm -g voxcrm -m 700 /var/lib/voxcrm/whatsapp-sessions
 
 ### Release üretme ve sunucuya aktarma
 
+#### GitHub'a kod gönderme ve sonraki güncellemeleri alma
+
+Kaynak kodun resmi uzak deposu `https://github.com/BinaryBear0x/VoxCrm`'dir. Secret,
+`.env`, PII/backup anahtarı, WhatsApp session veya production verisi GitHub'a gönderilmez.
+Değişiklik önce ayrı bir branch'e gönderilir:
+
+```bash
+cd /Users/ozhanyildirim/Documents/Projeler/VoxCrm
+git status --short
+git add -A
+git diff --cached --check
+git commit -m "fix: <kısa değişiklik açıklaması>"
+git push -u origin <branch-adı>
+```
+
+Branch GitHub üzerinde incelenip `main` branch'ine birleştirildikten sonra yeni release
+her zaman güncel ve temiz `main` checkout'undan üretilir:
+
+```bash
+git switch main
+git pull --ff-only origin main
+git status --short       # çıktı vermemeli
+git log -1 --oneline     # dağıtılacak commit'i kaydedin
+deploy/scripts/release.sh <versiyon>
+```
+
+Production sunucusunda `/opt/voxcrm/current` içinde `git pull` çalıştırılmaz. Bu dizin
+sürümlü ve geri alınabilir release paketini gösterir. GitHub'dan alınan güncelleme önce
+yerelde test edilip checksum'lı release paketine dönüştürülür, aşağıdaki `scp` adımıyla
+`/opt/voxcrm/incoming` dizinine aktarılır. Böylece yarım kalmış bir Git işlemi canlı kodu
+değiştiremez ve önceki release rollback için yerinde kalır.
+
+Normal güncellemede kalıcı veriler release paketinin dışında kalır:
+
+- PostgreSQL: `voxcrm-production_postgres-data` Docker volume'u;
+- WhatsApp oturumları: `/var/lib/voxcrm/whatsapp-sessions`;
+- secret ve şifreleme anahtarları: `/etc/voxcrm/secrets`;
+- yedekler: `/var/backups/voxcrm`.
+
+`docker compose down --volumes`, `docker volume rm` veya bu kalıcı dizinlere yönelik
+silme komutları güncelleme prosedürünün parçası değildir ve çalıştırılmamalıdır.
+
 Release yalnız testleri geçen temiz commit'ten üretilir:
 
 ```bash

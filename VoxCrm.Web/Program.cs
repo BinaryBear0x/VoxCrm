@@ -19,6 +19,7 @@ using VoxCrm.Infrastructure.Audit;
 using VoxCrm.Infrastructure.Configuration;
 using VoxCrm.Infrastructure.DependencyInjection;
 using VoxCrm.Web.Services;
+using VoxCrm.Web.ModelBinding;
 
 if (args.Contains("--healthcheck", StringComparer.Ordinal))
 {
@@ -68,6 +69,7 @@ builder.Services.AddScoped<AuditLogActionFilter>();
 builder.Services.AddControllersWithViews(options =>
 {
     options.Filters.AddService<AuditLogActionFilter>();
+    options.ModelBinderProviders.Insert(0, new FlexibleDecimalModelBinderProvider());
 });
 builder.Services.AddHttpClient<WhatsAppGatewayClient>();
 builder.Services.AddHttpClient<SystemHealthService>();

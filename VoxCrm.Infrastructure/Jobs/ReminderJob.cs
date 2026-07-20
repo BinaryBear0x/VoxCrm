@@ -35,12 +35,16 @@ namespace VoxCrm.Infrastructure.Jobs
                 .Where(c => clinicIds.Contains(c.ID))
                 .ToDictionaryAsync(c => c.ID);
 
-            var templates = await _context.WhatsAppTemplates
+            var templateRows = await _context.WhatsAppTemplates
                 .IgnoreQueryFilters()
                 .Where(t => clinicIds.Contains(t.ClinicID)
                             && t.NotificationType == WhatsAppNotificationTypes.VaccinationReminder
                             && t.IsActive)
-                .ToDictionaryAsync(t => t.ClinicID);
+                .OrderByDescending(t => t.CreatedAt)
+                .ToListAsync();
+            var templates = templateRows
+                .GroupBy(t => t.ClinicID)
+                .ToDictionary(group => group.Key, group => group.First());
 
             foreach (var record in dueVaccines)
             {
