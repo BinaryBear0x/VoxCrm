@@ -22,7 +22,7 @@ if [ -z "$BACKUP_ENCRYPTION_KEY_FILE" ] || [ ! -s "$BACKUP_ENCRYPTION_KEY_FILE" 
   echo "BACKUP_ENCRYPTION_KEY_FILE must point to a non-empty, protected key file." >&2
   exit 2
 fi
-key_mode="$(stat -f '%Lp' "$BACKUP_ENCRYPTION_KEY_FILE" 2>/dev/null || stat -c '%a' "$BACKUP_ENCRYPTION_KEY_FILE")"
+key_mode="$(stat -c '%a' "$BACKUP_ENCRYPTION_KEY_FILE" 2>/dev/null || stat -f '%Lp' "$BACKUP_ENCRYPTION_KEY_FILE")"
 if [ $((8#$key_mode & 8#077)) -ne 0 ]; then
   echo "Backup key file must not be readable or writable by group/others (use chmod 600)." >&2
   exit 2
