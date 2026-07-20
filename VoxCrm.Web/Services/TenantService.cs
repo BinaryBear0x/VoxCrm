@@ -25,5 +25,7 @@ namespace VoxCrm.Web.Services
             // Geliştirme/Migration aşaması veya henüz giriş yapılmamışsa boş Guid döner
             return Guid.Empty;
         }
+
+        public bool IsSystemContext => _httpContextAccessor.HttpContext == null;
     }
 }

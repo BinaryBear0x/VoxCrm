@@ -61,11 +61,21 @@
                                 </td>
                                 <td class="text-end">
                                     <a href="/Dealer/Edit/@c.ID" class="btn btn-outline-primary btn-sm me-1">Duzenle</a>
-                                    <form method="post" action="/Dealer/Delete/@c.ID" class="d-inline"
-                                          onsubmit="return confirm('@c.Name klinikini sistemden kaldirmak istediginizden emin misiniz?')">
-                                        @Html.AntiForgeryToken()
-                                        <button type="submit" class="btn btn-outline-danger btn-sm">Kaldir</button>
-                                    </form>
+                                    @if (c.IsActive)
+                                    {
+                                        <form method="post" action="/Dealer/Deactivate/@c.ID" class="d-inline"
+                                              data-confirm="@c.Name klinigini pasiflestirmek istediginizden emin misiniz?">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-danger btn-sm">Pasiflestir</button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <form method="post" action="/Dealer/Reactivate/@c.ID" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-success btn-sm">Aktiflestir</button>
+                                        </form>
+                                    }
                                 </td>
                             </tr>
                         }

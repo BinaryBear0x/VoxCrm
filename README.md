@@ -33,7 +33,7 @@ Proje tek bir monorepo altında üç ana bölümden oluşuyor:
 
 ```
 VoxCRM
-├── VoxCrm.*         (C# / .NET 8)  <-- Ana uygulama
+├── VoxCrm.*         (C# / .NET 10) <-- Ana uygulama
 ├── whatsapp-gateway (Python + Node) <-- WhatsApp geçidi
 └── backups/         (Bash + pg_dump) <-- Yedekleme klasörü
 ```
@@ -173,7 +173,7 @@ Bildirim akışı kasıtlı olarak asenkroniktir: Web uygulaması doğrudan gate
 
 **Görev:** Bakım ve yedekleme araçları.
 
-- `backup.sh` — PostgreSQL dump (voxcrm_dev + voxcrm_gateway_dev), klinik bazlı JSON export, WhatsApp session arşivi. Hedef klasörler: `backups/daily/`, `backups/weekly/`, `backups/monthly/`
+- `backup.sh` — PostgreSQL dump, klinik bazlı JSON export, şifreli WhatsApp session arşivi ve SHA-256 manifest. Production hedefi `/var/backups/voxcrm/`; yerelde `BACKUP_ROOT` ile değiştirilebilir.
 - `restore.sh` — Belirlenen backup snapshot'ını yerel veritabanına yükler (kasıtlı olarak interaktif; yanlışlıkla çalıştırılmaz)
 - `test-all.sh` — .NET build + NuGet audit + pytest + Vitest + syntax check + backup smoke test'ini sırayla çalıştırır
 - `test-backup-smoke.sh` — Gerçek veri silmeden backup script'ini test eder
@@ -189,10 +189,10 @@ Bildirim akışı kasıtlı olarak asenkroniktir: Web uygulaması doğrudan gate
 **Amaç:** Yedekleme klasörü yapısı. Gerçek dump dosyaları `.gitignore` ile Git dışında tutulur; sadece klasör iskelet yapısı (`.gitkeep`) repoda yer alır.
 
 ```
-backups/
-├── daily/    # Son 7 günlük yedekler (backup.sh otomatik temizler)
-├── weekly/   # Son 4 haftanın pazartesi yedekleri
-└── monthly/  # Son 3 ayın 1. günü yedekleri
+/var/backups/voxcrm/
+├── snapshots/ # 28 adet 6-saatlik snapshot (7 gün)
+├── daily/     # 30 günlük snapshot
+└── monthly/   # 12 aylık snapshot
 ```
 
 **Her snapshot içeriği:**
@@ -250,12 +250,12 @@ backups/
 
 | Katman | Teknoloji |
 |--------|-----------|
-| Web Uygulaması | C# / .NET 8, ASP.NET Core MVC, Razor Pages |
-| API | C# / .NET 8, ASP.NET Core Minimal API |
-| ORM | Entity Framework Core 9, Code-First Migrations |
+| Web Uygulaması | C# / .NET 10, ASP.NET Core MVC, Razor Pages |
+| API | C# / .NET 10, ASP.NET Core Minimal API |
+| ORM | Entity Framework Core 10, Code-First Migrations |
 | Veritabanı | PostgreSQL 16 |
 | Arka Plan İşleri | Hangfire (PostgreSQL storage) |
-| WhatsApp Geçidi | Python 3.12 / FastAPI, SQLAlchemy, Alembic |
+| WhatsApp Geçidi | Python / FastAPI, SQLAlchemy, Alembic (hash-kilitli) |
 | WhatsApp İstemci | Node.js 22 / Baileys (linked-device) |
 | Container | Docker Compose (geliştirme), OrbStack (yerel) |
 | Ön Yüz | Bootstrap 5, jQuery, Vanilla CSS/JS |
@@ -266,8 +266,8 @@ backups/
 
 ### Ön Koşullar
 
-- .NET 8 SDK
-- Python 3.12
+- .NET 10 SDK
+- Python 3.14 (production image bağımlılık lock'ı ile)
 - Node.js 22
 - PostgreSQL 16 (OrbStack veya Docker)
 - Redis (gateway için)
@@ -328,15 +328,23 @@ Tarayıcıda `VoxCrm.Web > WhatsApp` menüsünden kliniğe ait "Bağla" düğmes
 ## Yedekleme
 
 ```bash
-# Günlük yedek al:
-./whatsapp-gateway/scripts/backup.sh
+# Anahtarı repodan ve yedek diskinden ayrı saklayın (bir kez):
+install -m 600 /dev/null ~/.voxcrm-backup.key
+openssl rand -base64 48 > ~/.voxcrm-backup.key
 
-# Yedekler şu klasöre yazılır:
-# backups/daily/YYYYMMDDTHHMMSSZ/
+# Günlük yedek al:
+BACKUP_ENCRYPTION_KEY_FILE=~/.voxcrm-backup.key ./whatsapp-gateway/scripts/backup.sh
+
+# Yedekler şu klasöre yazılır (BACKUP_ROOT ile değiştirilebilir):
+# $HOME/Documents/Projeler/voxcrm-backups/snapshots/YYYYMMDDTHHMMSSZ/
 
 # Geri yükle (dikkatli kullan, yerel veritabanını değiştirir):
-./whatsapp-gateway/scripts/restore.sh backups/daily/<timestamp>
+BACKUP_ENCRYPTION_KEY_FILE=~/.voxcrm-backup.key \
+  ./whatsapp-gateway/scripts/restore.sh "$HOME/Documents/Projeler/voxcrm-backups/snapshots/<timestamp>"
 ```
+
+Yedekler AES-256 ile şifrelenir ve geri yükleme öncesi bütünlük manifesti doğrulanır.
+Şifreli paketlerin ayrı kimlik bilgileri olan bir uzak depoya kopyalanması gerekir.
 
 ---
 
@@ -363,12 +371,394 @@ npm test
 
 ---
 
-## Test Kullanıcıları (Geliştirme Ortamı)
+## Test kullanıcıları
 
-Veritabanı ilk çalışmada `DbSeeder` tarafından aşağıdaki test verileriyle doldurulur:
+Repoda veya README içinde çalışan parola bulunmaz. Geliştirme kullanıcılarını kendi
+`appsettings.Development.json`/seeder ayarlarınızla oluşturun; production bootstrap
+hesapları için yalnızca `deploy/production.env.example` içindeki placeholder'ları güçlü,
+tek kullanımlık secret'larla değiştirin. İlk başarılı production girişinden sonra
+bootstrap ayarlarını kapatın ve parolaları secret dosyasından kaldırın.
 
-| Rol | E-posta | Şifre |
-|-----|---------|-------|
-| Bayi Yöneticisi | admin@voxcrm.com | Admin123! |
-| Klinik - Mutlu Patiler | iletisim@mutlupatiler.com | Klinik123! |
-| Klinik - Şifa Vet | bilgi@sifavet.com | Klinik123! |
+---
+
+## Production teslim ve işletim rehberi
+
+Bu bölüm, mevcut güvenlik ve production değişikliklerinin nerede olduğunu, nasıl
+doğrulandığını ve sunucuya nasıl aktarılacağını anlatır. Ayrıntılı rollback ve runbook
+için [docs/PRODUCTION_RUNBOOK.md](docs/PRODUCTION_RUNBOOK.md) esas alınır.
+
+### Mevcut durum
+
+Kod ve yerel production-preflight doğrulandı; canlı sunucuya deployment yapılmış değildir.
+Canlıya çıkmadan önce salt-okunur sunucu envanteri, sunucu sertleştirmesi, DNS/TLS, gerçek
+alarm kanalları, production restore ve rollback tatbikatı tamamlanmalıdır. Yedeklerin
+yalnızca aynı VPS'te tutulması hâlâ kritik felaket kurtarma riskidir.
+
+Son yerel doğrulama kaydı: 15 Temmuz 2026 — .NET 37/37, Python 12/12, Worker 15/15;
+build 0 hata/0 uyarı; EF model pending değişikliği yok; NuGet/Python/npm audit temiz;
+şifreli backup ve geçici DB restore başarılı; production image Trivy taramasında
+High/Critical bulgu 0. Bu kayıt yerel ortam içindir; production sunucusu için aynı
+kontroller release sonrasında tekrar edilir.
+
+### Değişiklik haritası
+
+| Konu | Nerede | Nasıl kontrol edilir |
+|---|---|---|
+| Tenant izolasyonu ve soft archive | `VoxCrm.Domain/Common`, `VoxCrm.Infrastructure/Data/VoxCrmDbContext.cs`, servis klasörleri | `SecurityRegressionTests`, `AppointmentIntegrationTests`, `ArchiveVaccinationIntegrationTests` |
+| MFA, recovery code, zorunlu parola değişimi | `VoxCrm.Web/Controllers/AuthController.cs`, `VoxCrm.Web/Views/Auth`, `ApplicationUser` | İlk SystemAdmin/Dealer girişi; MFA kurulumu ve reset audit kaydı |
+| AES-256-GCM PII | `VoxCrm.Infrastructure/Security`, EF interceptor ve migration'lar | PostgreSQL kolonları `enc:v1:` ile başlar; plaintext araması ve blind-index testi |
+| WhatsApp şifreleme/idempotency/retry | `whatsapp-gateway/gateway-api/app`, `whatsapp-gateway/wa-worker/src` | Python pytest, Worker Vitest, restart/retry testleri |
+| CSP ve XSS savunması | `VoxCrm.Web/Program.cs`, `TagHelpers`, `wwwroot/js/site.js` | Response CSP'de `unsafe-inline` bulunmamalı; nonce bulunmalı |
+| Retention | `VoxCrm.Infrastructure/Jobs/DataRetentionJob.cs` | 30 günlük WhatsApp ve 365 günlük audit testi |
+| Production container güvenliği | `deploy/docker-compose.prod.yml`, Dockerfile'lar | `docker compose config`, health-check, non-root/read-only/cap-drop incelemesi |
+| Backup/restore/monitor | `deploy/scripts`, `deploy/systemd` | Backup smoke, checksum, geçici DB restore ve alarm testi |
+
+### Çalışma ağacını ve değişiklikleri kontrol etme
+
+```bash
+cd /Users/ozhanyildirim/Documents/Projeler/VoxCrm
+git status --short
+git diff --check
+git diff --stat
+git diff -- README.md deploy/docker-compose.prod.yml
+```
+
+Release üretmeden önce çalışma ağacı temiz ve commit edilmiş olmalıdır. Secret, `.env`,
+PII anahtarı, backup anahtarı, WhatsApp session veya `bin/obj` dosyaları commit edilmez.
+
+### Yerel test kapısı
+
+Tek komut bütün zorunlu kontrolleri çalıştırır:
+
+```bash
+cd /Users/ozhanyildirim/Documents/Projeler/VoxCrm
+./whatsapp-gateway/scripts/test-all.sh
+```
+
+Bu komut .NET restore/build/test, EF pending-model kontrolü, NuGet transitive audit,
+Python syntax/pytest, Node/Vitest, shell syntax ve gerçek şifreli backup-restore smoke
+testini çalıştırır. Yerel Python sanal ortamı yoksa:
+
+```bash
+python3 -m venv /private/tmp/voxcrm-test-venv
+/private/tmp/voxcrm-test-venv/bin/pip install --require-hashes \
+  -r whatsapp-gateway/gateway-api/requirements.lock
+/private/tmp/voxcrm-test-venv/bin/pip install pytest==9.1.1 pytest-asyncio==1.4.0
+PYTHON_BIN=/private/tmp/voxcrm-test-venv/bin/python \
+  ./whatsapp-gateway/scripts/test-all.sh
+rm -rf /private/tmp/voxcrm-test-venv
+```
+
+Beklenen sonuç: .NET 37, Python 12 ve Worker 15 testin başarılı olmasıdır. Test sırasında
+EF tools/runtime sürüm uyarısı görülebilir; `No changes have been made to the model`
+çıktısı migration modelinin senkron olduğunu gösterir.
+
+Elle seçili kontroller:
+
+```bash
+dotnet test VoxCrm.slnx
+dotnet ef migrations has-pending-model-changes \
+  --project VoxCrm.Infrastructure --startup-project VoxCrm.Web \
+  --context VoxCrmDbContext
+cd whatsapp-gateway/gateway-api && pytest
+cd ../wa-worker && npm test
+```
+
+### Migration kontrolü
+
+Yeni model değişikliğinde migration üretin, dosyaları inceleyin ve tekrar test edin:
+
+```bash
+dotnet ef migrations add <MigrationAdi> \
+  --project VoxCrm.Infrastructure --startup-project VoxCrm.Web
+dotnet ef migrations has-pending-model-changes \
+  --project VoxCrm.Infrastructure --startup-project VoxCrm.Web \
+  --context VoxCrmDbContext
+```
+
+Production'da migration doğrudan host'tan değil, Compose migration job'larından uygulanır.
+
+### Yerel Compose preflight
+
+Production Compose'u gerçek secret kullanmadan izole test etmek için geçici env ve PII key
+kullanın. Bu dosyalar test sonrasında silinmelidir:
+
+```bash
+cp deploy/production.env.example /private/tmp/voxcrm-preflight.env
+openssl rand -base64 32 > /private/tmp/voxcrm-preflight-pii.key
+chmod 600 /private/tmp/voxcrm-preflight.env /private/tmp/voxcrm-preflight-pii.key
+export VOXCRM_SECRETS_ENV=/private/tmp/voxcrm-preflight.env
+export VOXCRM_PII_KEY_FILE=/private/tmp/voxcrm-preflight-pii.key
+export VOXCRM_SESSION_DIR=/private/tmp/voxcrm-preflight-sessions
+
+docker compose --project-name voxcrmpreflight \
+  --env-file "$VOXCRM_SECRETS_ENV" -f deploy/docker-compose.prod.yml \
+  build web api gateway-api wa-worker
+docker compose --project-name voxcrmpreflight \
+  --env-file "$VOXCRM_SECRETS_ENV" -f deploy/docker-compose.prod.yml \
+  up -d --wait
+docker compose --project-name voxcrmpreflight \
+  --env-file "$VOXCRM_SECRETS_ENV" -f deploy/docker-compose.prod.yml ps -a
+docker compose --project-name voxcrmpreflight \
+  --env-file "$VOXCRM_SECRETS_ENV" -f deploy/docker-compose.prod.yml \
+  down --volumes --remove-orphans
+rm -f /private/tmp/voxcrm-preflight.env /private/tmp/voxcrm-preflight-pii.key
+rm -rf /private/tmp/voxcrm-preflight-sessions
+```
+
+Preflight'te beklenen bootstrap kontrolü: boş DB, bir SystemAdmin, bir Dealer ve her iki
+hesapta `MustChangePassword=true`; tüm servisler healthy olmalıdır.
+
+### Production sunucu ön koşulları
+
+Önce mevcut SSH bağlantısını doğrulayın; ardından yalnızca salt-okunur envanter alın:
+
+```bash
+ssh <kullanici>@<sunucu> 'bash -s' < deploy/scripts/server-inventory.sh \
+  > server-inventory.txt
+```
+
+Deployment şu koşullarda durdurulur: Ubuntu 22.04/24.04 dışı işletim sistemi, 2 vCPU'dan
+az, 4 GB RAM'den az, 80 GB SSD'den az, açıklanamayan public port/servis veya bekleyen
+kritik OS güncellemesi. Envanter onaylanmadan SSH, UFW, Docker veya kullanıcı ayarı
+değiştirilmez.
+
+Bu VPS'te kullanıcı talebiyle SSH tamamen kapsam dışıdır: port, root/parola girişi,
+authorized_keys ve SSH yapılandırması değiştirilmez. Sunucu birden fazla aktif site
+barındırdığı için Nginx, Apache, Docker daemon, PM2, UFW ve global ağ ayarları bakım
+penceresi ve mevcut site baseline karşılaştırması olmadan değiştirilmez. Envanter sonucu
+`docs/SERVER_INVENTORY_2026-07-15.md` dosyasındadır.
+
+### Secret oluşturma
+
+Secretlar release arşivine, Git'e veya Docker image'a konmaz:
+
+```bash
+sudo install -d -o voxcrm -g voxcrm -m 700 /etc/voxcrm/secrets
+sudo cp deploy/production.env.example /etc/voxcrm/secrets/production.env
+sudo openssl rand -base64 32 | sudo tee /etc/voxcrm/secrets/pii.key >/dev/null
+sudo openssl rand -base64 48 | sudo tee /etc/voxcrm/secrets/backup.key >/dev/null
+sudo chmod 600 /etc/voxcrm/secrets/*
+sudoedit /etc/voxcrm/secrets/production.env
+
+# PII key yalnız sabit non-root container UID'si tarafından salt okunabilir.
+# Hostta UID 1654 başka bir kullanıcıya ait olmamalıdır. Bu komut çıktı verirse durun.
+getent passwd 1654
+sudo apt-get install -y --no-install-recommends acl
+sudo setfacl -m u:1654:r /etc/voxcrm/secrets/pii.key
+sudo getfacl -p /etc/voxcrm/secrets/pii.key
+```
+
+`POSTGRES_PASSWORD`, JWT secret, worker token, session encryption key, bootstrap
+parolaları ve `ACME_EMAIL` placeholder olmamalıdır. PII ve backup anahtarları birbirinden
+ve DB parolasından farklı tutulur. Anahtar kaybı şifreli verinin geri döndürülememesi
+anlamına gelir; ayrı, erişim kontrollü bir recovery kopyası planlanmalıdır. PII anahtarı
+ACL çıktısında yalnız owner `voxcrm`, `user:1654:r--` ve `other::---` göstermelidir;
+UID 1654 hem .NET hem gateway imajlarında sabitlenmiştir. Hostta bu UID sonradan başka
+bir kullanıcıya atanamaz.
+
+`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` production env içinde zorunludur. Aksi halde
+Docker bridge üzerinden gelen Nginx `X-Forwarded-Proto: https` başlığı güvenilir sayılmaz
+ve login yönlendirmeleri yanlışlıkla `http://` üretilir. Doğrulama çıktısındaki `Location`
+mutlaka `https://petcrm.fenrirsoftware.com/...` olmalıdır.
+
+WhatsApp worker session dizinine yazdığı için hosttaki `voxcrm` kullanıcısıyla aynı
+UID/GID ile çalışır. Aşağıdaki değerleri okuyup `production.env` içindeki
+`VOXCRM_HOST_UID` ve `VOXCRM_HOST_GID` alanlarına yazın; örnek `995:986` her sunucuda
+aynı kabul edilmemelidir:
+
+```bash
+id -u voxcrm
+id -g voxcrm
+sudo install -d -o voxcrm -g voxcrm -m 700 /var/lib/voxcrm/whatsapp-sessions
+```
+
+### Release üretme ve sunucuya aktarma
+
+#### GitHub'a kod gönderme ve sonraki güncellemeleri alma
+
+Kaynak kodun resmi uzak deposu `https://github.com/BinaryBear0x/VoxCrm`'dir. Secret,
+`.env`, PII/backup anahtarı, WhatsApp session veya production verisi GitHub'a gönderilmez.
+Değişiklik önce ayrı bir branch'e gönderilir:
+
+```bash
+cd /Users/ozhanyildirim/Documents/Projeler/VoxCrm
+git status --short
+git add -A
+git diff --cached --check
+git commit -m "fix: <kısa değişiklik açıklaması>"
+git push -u origin <branch-adı>
+```
+
+Branch GitHub üzerinde incelenip `main` branch'ine birleştirildikten sonra yeni release
+her zaman güncel ve temiz `main` checkout'undan üretilir:
+
+```bash
+git switch main
+git pull --ff-only origin main
+git status --short       # çıktı vermemeli
+git log -1 --oneline     # dağıtılacak commit'i kaydedin
+deploy/scripts/release.sh <versiyon>
+```
+
+Production sunucusunda `/opt/voxcrm/current` içinde `git pull` çalıştırılmaz. Bu dizin
+sürümlü ve geri alınabilir release paketini gösterir. GitHub'dan alınan güncelleme önce
+yerelde test edilip checksum'lı release paketine dönüştürülür, aşağıdaki `scp` adımıyla
+`/opt/voxcrm/incoming` dizinine aktarılır. Böylece yarım kalmış bir Git işlemi canlı kodu
+değiştiremez ve önceki release rollback için yerinde kalır.
+
+Normal güncellemede kalıcı veriler release paketinin dışında kalır:
+
+- PostgreSQL: `voxcrm-production_postgres-data` Docker volume'u;
+- WhatsApp oturumları: `/var/lib/voxcrm/whatsapp-sessions`;
+- secret ve şifreleme anahtarları: `/etc/voxcrm/secrets`;
+- yedekler: `/var/backups/voxcrm`.
+
+`docker compose down --volumes`, `docker volume rm` veya bu kalıcı dizinlere yönelik
+silme komutları güncelleme prosedürünün parçası değildir ve çalıştırılmamalıdır.
+
+Release yalnız testleri geçen temiz commit'ten üretilir:
+
+```bash
+git status --short                 # boş olmalı
+git add -A
+git commit -m "release: <versiyon>"
+deploy/scripts/release.sh <versiyon>
+```
+
+Oluşan iki dosya `artifacts/releases/voxcrm-<versiyon>.tar.gz` ve `.sha256`'dır. Aktarım
+ve sunucu doğrulaması:
+
+```bash
+scp artifacts/releases/voxcrm-<versiyon>.tar.gz \
+    artifacts/releases/voxcrm-<versiyon>.tar.gz.sha256 \
+    <kullanici>@<sunucu>:/opt/voxcrm/incoming/
+ssh <kullanici>@<sunucu> 'cd /opt/voxcrm/incoming && sha256sum -c voxcrm-<versiyon>.tar.gz.sha256'
+```
+
+Checksum doğrulanmadan arşiv açılmaz. Release içeriği secret taşımaz ve container build
+kullanıcılarının dosyaları okuyabilmesi gerekir; secret oluştururken kullanılan `umask 077`
+ile arşiv açılmamalıdır. Sunucuda şu şekilde çıkarılır ve PostgreSQL init dosyası ayrıca
+doğrulanır:
+
+```bash
+install -d -o voxcrm -g voxcrm -m 755 /opt/voxcrm/releases/<versiyon>
+(umask 022; tar -xzf /opt/voxcrm/incoming/voxcrm-<versiyon>.tar.gz \
+  -C /opt/voxcrm/releases/<versiyon> --strip-components=1)
+test "$(stat -c '%a' /opt/voxcrm/releases/<versiyon>/deploy/postgres/init.sql)" = 644
+```
+
+Arşiv `/opt/voxcrm/releases/<versiyon>` dizinine açılır ve `current` symlink'i yalnız
+readiness/smoke sonrası değiştirilir. Sunucu mimarisi
+(amd64/arm64) envanterde doğrulanmadan yerel image aktarımı yapılmaz; gerekirse image'lar
+sunucuda yeniden build edilir.
+
+### Production deployment sırası
+
+```bash
+cd /opt/voxcrm/current
+sudo -u voxcrm ./deploy/scripts/backup-production.sh
+
+docker compose --env-file /etc/voxcrm/secrets/production.env \
+  -f deploy/docker-compose.prod.yml run --rm migrate-crm
+docker compose --env-file /etc/voxcrm/secrets/production.env \
+  -f deploy/docker-compose.prod.yml run --rm migrate-gateway
+docker compose --env-file /etc/voxcrm/secrets/production.env \
+  -f deploy/docker-compose.prod.yml up -d --no-build --wait \
+  web api gateway-api wa-worker
+curl -fsS http://127.0.0.1:5180/healthz
+./deploy/scripts/verify-production.sh
+```
+
+Bu sunucuda Caddy başlatılmaz; 80/443 mevcut Nginx tarafından kullanılmaktadır. VoxCrm
+yalnız `127.0.0.1:5180` adresinde dinler. Önce origin health/smoke yapılır, ardından
+`deploy/nginx/petcrm.fenrirsoftware.com.conf` kurulur. `nginx -t` başarılı olmadan
+graceful reload yapılmaz; öncesi/sonrası mevcut sitelerin HTTP durum kodları
+karşılaştırılır. DNS yönlendirmesinden sonra Certbot Nginx sertifikasını üretir ve
+TLS/HSTS doğrulanır. İlk giriş sırası:
+SystemAdmin → Dealer → tek klinik. İlk başarılı girişlerden sonra
+`DataSeeding__SystemAdmin__Enabled` ve `DataSeeding__ProductionDealer__Enabled` false
+yapılır; bootstrap parolaları secret dosyasından silinir ve servisler yeniden oluşturulur.
+
+### Backup, bütünlük ve restore
+
+Backup kapsamı CRM PostgreSQL, gateway PostgreSQL ve şifreli WhatsApp session dizinidir.
+Saklama politikası 28 adet 6-saatlik snapshot (7 gün), 30 günlük kopya ve 12 aylık aylık
+kopyadır. Paket AES-256 ile şifrelenir ve iç/dış SHA-256 manifest taşır.
+
+```bash
+sudo systemctl enable --now voxcrm-backup.timer voxcrm-monitor.timer
+sudo systemctl start voxcrm-backup.service
+sudo -u voxcrm ./deploy/scripts/verify-latest-backup.sh
+```
+
+Restore geri döndürülemez bir işlemdir; önce pre-deploy snapshot ve iki kişi onayı alınır.
+Yerel restore için:
+
+```bash
+BACKUP_ENCRYPTION_KEY_FILE=/etc/voxcrm/secrets/backup.key \
+  ./whatsapp-gateway/scripts/restore.sh /var/backups/voxcrm/snapshots/<timestamp>
+```
+
+Script checksum ve şifre çözme doğrulamasından sonra interaktif olarak `RESTORE` kelimesini
+ister. Aylık tatbikat production DB yerine geçici iki PostgreSQL DB'ye yapılır; başarı ve
+RTO kayda geçirilir. Off-site immutable kopya yoksa VPS kaybında geri dönüş garanti değildir.
+
+### Rollback
+
+Readiness veya smoke testi başarısızsa DNS açılmaz. `current` symlink'i önceki release'e
+döndürülür ve eski image'lar `--no-build` ile başlatılır. Migration geriye uyumlu değilse
+servisler durdurulur; yalnızca doğrulanmış pre-deploy snapshot iki kişi onayıyla restore
+edilir. Rollback tatbikatı production kabul formunda işaretlenmeden go-live tamamlanmaz.
+
+### Alarm ve izleme
+
+`voxcrm-monitor.timer` her 5 dakikada HTTPS health, disk (%75/%85), son login hataları ve
+lockout'ları, migration/retention hatalarını, WhatsApp retry/`NeedsReview` sayılarını ve
+queue gecikmesini kontrol eder. `voxcrm-backup.timer` 6 saatte bir çalışır. Telegram için
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`, e-posta için `ALERT_EMAIL_TO` doldurulur ve gerçek
+test mesajı doğrulanır.
+
+```bash
+sudo systemctl status voxcrm-monitor.timer voxcrm-backup.timer
+journalctl -u voxcrm-monitor.service -n 100 --no-pager
+journalctl -u voxcrm-backup.service -n 100 --no-pager
+```
+
+### Güvenlik ve production kabul kapıları
+
+Go-live öncesi aşağıdakilerin tamamı kanıtla kapatılır:
+
+- 64/64 otomatik test, EF pending-model kapısı ve dependency audit başarılı.
+- Tenantlar arası ID/list/socket/gateway/WhatsApp erişimi reddediliyor.
+- SystemAdmin ve Dealer MFA, recovery code ve reset audit testi başarılı.
+- Şifreli kolonlarda plaintext yok; blind-index araması tenant ile sınırlı.
+- CSP'de `unsafe-inline` yok; XSS, CSRF, open redirect, body limit ve rate-limit testleri başarılı.
+- Eşzamanlı randevu çakışması engelleniyor; arşivleme/geri alma çalışıyor.
+- Sahipsiz hayvan ve kimliği belirsiz kişi minimum bilgiyle kaydedilebiliyor.
+- Backup checksum, gerçek restore ve rollback tatbikatı başarılı.
+- TLS/HSTS, açık port, varsayılan/demo parola, gerçek alarm kanalları ve ZAP baseline doğrulandı.
+- İlk 48 saat yalnız yönetici/dealer/tek klinik ile gözlem tamamlandı.
+
+### Sorun giderme
+
+```bash
+docker compose --env-file /etc/voxcrm/secrets/production.env \
+  -f deploy/docker-compose.prod.yml ps -a
+docker compose --env-file /etc/voxcrm/secrets/production.env \
+  -f deploy/docker-compose.prod.yml logs --tail=200 web api gateway-api wa-worker
+curl -fsS https://petcrm.fenrirsoftware.com/healthz
+curl -fsSI https://petcrm.fenrirsoftware.com/Auth/Login
+```
+
+`web`/`api` health başarısızsa önce PostgreSQL ve migration job durumunu; gateway health
+başarısızsa gateway migration, worker health ve `/app/sessions` izinlerini kontrol edin.
+WhatsApp mesajı `NeedsReview` durumuna düşerse aynı mesajı körlemesine yeniden göndermek
+yerine gateway audit kaydını ve retry sayısını inceleyin.
+
+### Bu dokümanın güncellenmesi
+
+Her migration, secret değişikliği, yeni container image, retention değişikliği veya rollback
+tatbikatından sonra bu README ve [PRODUCTION_RUNBOOK.md](docs/PRODUCTION_RUNBOOK.md)
+aynı commit içinde güncellenir. Release notuna test çıktısı, image digest, migration listesi,
+backup/restore sonucu ve kalan riskler eklenir.

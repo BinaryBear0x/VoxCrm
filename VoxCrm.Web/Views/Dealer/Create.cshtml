@@ -1,3 +1,4 @@
+@model VoxCrm.Web.Models.CreateClinicViewModel
 @{
     ViewData["Title"] = "Yeni Klinik";
     ViewData["ActiveMenu"] = "dealer-create";
@@ -16,36 +17,47 @@
             <div class="card-body p-4">
                 <form method="post" action="/Dealer/Create">
                     @Html.AntiForgeryToken()
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Bayi *</label>
-                        <select name="DealerId" class="form-select" required>
-                            <option value="">-- Bayi Sec --</option>
-                            @foreach (var d in (ViewBag.Dealers as List<VoxCrm.Domain.Entities.Dealer> ?? new()))
-                            {
-                                <option value="@d.ID">@d.CompanyName</option>
-                            }
-                        </select>
-                    </div>
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Klinik Adi *</label>
-                        <input type="text" name="Name" class="form-control" placeholder="Ornek Veteriner Klinigi" required>
+                        <input asp-for="Name" class="form-control" placeholder="Ornek Veteriner Klinigi">
+                        <span asp-validation-for="Name" class="text-danger small"></span>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Telefon</label>
-                        <input type="tel" name="phone" class="form-control" placeholder="0212 000 00 00">
+                        <input asp-for="Phone" type="tel" class="form-control" placeholder="0212 000 00 00">
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">E-posta</label>
-                        <input type="email" name="Email" class="form-control" placeholder="klinik@mail.com">
+                        <input asp-for="Email" type="email" class="form-control" placeholder="klinik@mail.com">
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Adres</label>
-                        <textarea name="Address" class="form-control" rows="2" placeholder="Tam adres..."></textarea>
+                        <textarea asp-for="Address" class="form-control" rows="2" placeholder="Tam adres..."></textarea>
                     </div>
                     <div class="mb-4">
                         <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="IsWhatsAppEnabled" value="true" id="waEnabled">
+                            <input asp-for="IsWhatsAppEnabled" class="form-check-input" type="checkbox" id="waEnabled">
                             <label class="form-check-label" for="waEnabled">WhatsApp Bot Entegrasyonu Aktif</label>
+                        </div>
+                    </div>
+                    <hr class="my-4">
+                    <h2 class="h6 fw-bold mb-3">Ilk Klinik Kullanicisi</h2>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label asp-for="InitialUserFirstName" class="form-label fw-semibold">Ad *</label>
+                            <input asp-for="InitialUserFirstName" class="form-control">
+                            <span asp-validation-for="InitialUserFirstName" class="text-danger small"></span>
+                        </div>
+                        <div class="col-sm-6">
+                            <label asp-for="InitialUserLastName" class="form-label fw-semibold">Soyad *</label>
+                            <input asp-for="InitialUserLastName" class="form-control">
+                            <span asp-validation-for="InitialUserLastName" class="text-danger small"></span>
+                        </div>
+                        <div class="col-12">
+                            <label asp-for="InitialUserEmail" class="form-label fw-semibold">E-posta *</label>
+                            <input asp-for="InitialUserEmail" type="email" class="form-control">
+                            <span asp-validation-for="InitialUserEmail" class="text-danger small"></span>
                         </div>
                     </div>
                     <div class="d-grid gap-2">

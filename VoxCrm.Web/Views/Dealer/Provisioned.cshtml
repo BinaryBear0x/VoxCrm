@@ -1,0 +1,26 @@
+@model VoxCrm.Web.Models.ProvisionedClinicViewModel
+@{
+    ViewData["Title"] = "Klinik Olusturuldu";
+    ViewData["ActiveMenu"] = "dealer";
+}
+
+<div class="row justify-content-center pt-4">
+    <div class="col-12 col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h4 fw-bold mb-2">@Model.ClinicName olusturuldu</h1>
+                <p class="text-muted">Ilk kullanici: @Model.UserEmail</p>
+                <label class="form-label fw-semibold" for="activationUrl">24 saatlik aktivasyon baglantisi</label>
+                <div class="input-group mb-3">
+                    <input id="activationUrl" class="form-control" value="@Model.ActivationUrl" readonly>
+                    <button class="btn btn-outline-secondary" type="button"
+                            data-copy-target="#activationUrl">
+                        Kopyala
+                    </button>
+                </div>
+                <div class="alert alert-warning mb-4">Bu baglanti bu ekrandan ayrildiktan sonra yeniden gosterilmez.</div>
+                <a href="/Dealer" class="btn btn-primary">Kliniklere Don</a>
+            </div>
+        </div>
+    </div>
+</div>

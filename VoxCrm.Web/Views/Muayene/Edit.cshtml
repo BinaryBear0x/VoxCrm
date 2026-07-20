@@ -17,6 +17,7 @@
             <div class="card-body p-4">
                 <form method="post" action="/Muayene/Edit/@Model.ID">
                     @Html.AntiForgeryToken()
+                    <div asp-validation-summary="All" class="alert alert-danger py-2 small @(ViewData.ModelState.IsValid ? "d-none" : "")"></div>
                     <input type="hidden" name="ID" value="@Model.ID" />
                     <input type="hidden" name="ClinicID" value="@Model.ClinicID" />
                     
@@ -31,10 +32,12 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Ateş (°C)</label>
                             <input type="number" step="0.1" name="Temperature" class="form-control" value="@Model.Temperature?.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+                            <span asp-validation-for="Temperature" class="text-danger small"></span>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Kilo (kg)</label>
                             <input type="number" step="0.01" name="WeightAtVisit" class="form-control" value="@Model.WeightAtVisit?.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+                            <span asp-validation-for="WeightAtVisit" class="text-danger small"></span>
                         </div>
                     </div>
 

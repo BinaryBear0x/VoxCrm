@@ -14,15 +14,16 @@
     <div class="col-12 col-md-8 col-lg-6">
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
+                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
                 <form method="post" action="/Finance/Create">
                     @Html.AntiForgeryToken()
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Müşteri *</label>
                         <select name="PetOwnerId" class="form-select" required data-search-select="owner" data-required="true" data-placeholder="Müşteri adı, telefon, e-posta, adres veya hayvan ara...">
                             <option value="">-- Müşteri Seç --</option>
-                            @foreach (var o in (ViewBag.Owners as List<VoxCrm.Domain.Entities.PetOwner> ?? new()))
+                            @foreach (var o in (ViewBag.Owners as IReadOnlyList<VoxCrm.Application.Finance.FinanceOwnerListItem> ?? Array.Empty<VoxCrm.Application.Finance.FinanceOwnerListItem>()))
                             {
-                                <option value="@o.ID">@o.FirstName @o.LastName - @o.Phone</option>
+                                <option value="@o.Id">@o.DisplayName - @o.Phone</option>
                             }
                         </select>
                     </div>
@@ -33,7 +34,7 @@
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="form-label fw-semibold">Tutar (TL) *</label>
-                            <input type="number" name="Amount" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                            <input type="number" name="Amount" class="form-control" step="0.01" min="0.01" placeholder="0.00" required>
                         </div>
                         <div class="col-6">
                             <label class="form-label fw-semibold">Son Odeme Tarihi *</label>

@@ -17,7 +17,7 @@ namespace VoxCrm.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -192,6 +192,9 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -245,6 +248,12 @@ namespace VoxCrm.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ClinicID")
                         .HasColumnType("uuid");
 
@@ -275,9 +284,16 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasKey("ID");
 
+                    b.HasIndex("ClinicID");
+
                     b.HasIndex("PatientId");
 
-                    b.ToTable("Appointments");
+                    b.HasIndex("ClinicID", "ScheduledAt");
+
+                    b.ToTable("Appointments", t =>
+                        {
+                            t.HasCheckConstraint("CK_Appointments_DurationMinutes", "\"DurationMinutes\" BETWEEN 10 AND 240");
+                        });
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Clinic", b =>
@@ -288,6 +304,12 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.Property<string>("Address")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -312,6 +334,11 @@ namespace VoxCrm.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("WhatsAppPhoneNumberId")
                         .HasColumnType("text");
 
@@ -335,6 +362,9 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasIndex("DealerId");
 
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
                     b.ToTable("Clinics");
                 });
 
@@ -342,6 +372,12 @@ namespace VoxCrm.Infrastructure.Migrations
                 {
                     b.Property<Guid>("ID")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("CompanyName")
@@ -376,6 +412,22 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
 
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CancelledByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ClinicID")
                         .HasColumnType("uuid");
 
@@ -406,9 +458,14 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasKey("ID");
 
+                    b.HasIndex("ClinicID");
+
                     b.HasIndex("PetOwnerId");
 
-                    b.ToTable("Borçlar");
+                    b.ToTable("Borçlar", t =>
+                        {
+                            t.HasCheckConstraint("CK_Borçlar_Amount_Positive", "\"Amount\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Muayene", b =>
@@ -418,6 +475,12 @@ namespace VoxCrm.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<Guid?>("AppointmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Assessment")
@@ -454,6 +517,8 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasIndex("AppointmentId");
 
+                    b.HasIndex("ClinicID");
+
                     b.HasIndex("PatientId");
 
                     b.ToTable("Muayeneler");
@@ -463,6 +528,12 @@ namespace VoxCrm.Infrastructure.Migrations
                 {
                     b.Property<Guid>("ID")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Breed")
@@ -500,6 +571,12 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasKey("ID");
 
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("ClinicID", "MicrochipNumber")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = TRUE AND \"MicrochipNumber\" IS NOT NULL AND \"MicrochipNumber\" <> ''");
+
                     b.ToTable("Patients");
                 });
 
@@ -507,6 +584,12 @@ namespace VoxCrm.Infrastructure.Migrations
                 {
                     b.Property<Guid>("ID")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ClinicID")
@@ -529,9 +612,18 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasKey("ID");
 
+                    b.HasIndex("ClinicID");
+
                     b.HasIndex("PatientId");
 
                     b.HasIndex("PetOwnerId");
+
+                    b.HasIndex("ClinicID", "PatientId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = TRUE AND \"IsPrimaryOwner\" = TRUE");
+
+                    b.HasIndex("ClinicID", "PatientId", "PetOwnerId")
+                        .IsUnique();
 
                     b.ToTable("PatientOwners");
                 });
@@ -542,8 +634,17 @@ namespace VoxCrm.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ClinicID")
                         .HasColumnType("uuid");
@@ -553,6 +654,11 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.Property<Guid>("DebtId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("EntryType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -567,11 +673,27 @@ namespace VoxCrm.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("ReversesPaymentId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
 
                     b.HasIndex("DebtId");
 
-                    b.ToTable("Payments");
+                    b.HasIndex("ReversesPaymentId")
+                        .IsUnique()
+                        .HasFilter("\"ReversesPaymentId\" IS NOT NULL");
+
+                    b.ToTable("Payments", t =>
+                        {
+                            t.HasCheckConstraint("CK_Payments_Amount_Positive", "\"Amount\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.PetOwner", b =>
@@ -583,6 +705,12 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<string>("Address")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ClinicID")
                         .HasColumnType("uuid");
 
@@ -592,6 +720,10 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<string>("Email")
                         .HasColumnType("text");
 
+                    b.Property<string>("EmailLookupHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("FirstName")
                         .HasColumnType("text");
 
@@ -600,6 +732,10 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.Property<string>("LastName")
                         .HasColumnType("text");
+
+                    b.Property<string>("NormalizedPhone")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
@@ -612,6 +748,14 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasKey("ID");
 
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("ClinicID", "EmailLookupHash");
+
+                    b.HasIndex("ClinicID", "NormalizedPhone")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = TRUE AND \"NormalizedPhone\" IS NOT NULL");
+
                     b.ToTable("PetOwners");
                 });
 
@@ -619,6 +763,12 @@ namespace VoxCrm.Infrastructure.Migrations
                 {
                     b.Property<Guid>("ID")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ClinicID")
@@ -642,7 +792,16 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasKey("ID");
 
-                    b.ToTable("ServiceItems");
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("ClinicID", "Name")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = TRUE");
+
+                    b.ToTable("ServiceItems", t =>
+                        {
+                            t.HasCheckConstraint("CK_ServiceItems_Price_NonNegative", "\"Price\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.SystemAuditLog", b =>
@@ -663,6 +822,12 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.Property<string>("ActorUserName")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Category")
                         .IsRequired()
@@ -762,6 +927,12 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<DateTime>("AdministeredDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ClinicID")
                         .HasColumnType("uuid");
 
@@ -785,6 +956,8 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasKey("ID");
 
+                    b.HasIndex("ClinicID");
+
                     b.HasIndex("PatientId");
 
                     b.HasIndex("VaccineTypeId");
@@ -796,6 +969,12 @@ namespace VoxCrm.Infrastructure.Migrations
                 {
                     b.Property<Guid>("ID")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ClinicID")
@@ -819,13 +998,30 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasKey("ID");
 
-                    b.ToTable("VaccineTypes");
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("ClinicID", "Name")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = TRUE");
+
+                    b.ToTable("VaccineTypes", t =>
+                        {
+                            t.HasCheckConstraint("CK_VaccineTypes_ReminderDaysBefore", "\"ReminderDaysBefore\" >= 0 AND \"ReminderDaysBefore\" <= \"ValidityDays\"");
+
+                            t.HasCheckConstraint("CK_VaccineTypes_ValidityDays", "\"ValidityDays\" BETWEEN 1 AND 3650");
+                        });
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.WhatsAppInboundMessage", b =>
                 {
                     b.Property<Guid>("ID")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ClinicID")
@@ -849,10 +1045,20 @@ namespace VoxCrm.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("ProviderMessageId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<DateTime>("ReceivedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("ClinicID", "ProviderMessageId")
+                        .IsUnique();
 
                     b.HasIndex("ClinicID", "ReceivedAt");
 
@@ -863,6 +1069,12 @@ namespace VoxCrm.Infrastructure.Migrations
                 {
                     b.Property<Guid>("ID")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ClinicID")
@@ -919,6 +1131,8 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasKey("ID");
 
+                    b.HasIndex("ClinicID");
+
                     b.HasIndex("GatewayMessageId");
 
                     b.HasIndex("PetOwnerId");
@@ -932,6 +1146,12 @@ namespace VoxCrm.Infrastructure.Migrations
                 {
                     b.Property<Guid>("ID")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Body")
@@ -952,6 +1172,8 @@ namespace VoxCrm.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
 
                     b.HasIndex("ClinicID", "NotificationType", "IsActive");
 
@@ -1026,10 +1248,16 @@ namespace VoxCrm.Infrastructure.Migrations
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Appointment", b =>
                 {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("VoxCrm.Domain.Entities.Patient", "Patient")
                         .WithMany()
                         .HasForeignKey("PatientId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Patient");
@@ -1040,7 +1268,7 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.HasOne("VoxCrm.Domain.Entities.Dealer", "Dealer")
                         .WithMany("Clinics")
                         .HasForeignKey("DealerId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Dealer");
@@ -1048,10 +1276,16 @@ namespace VoxCrm.Infrastructure.Migrations
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Debt", b =>
                 {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("VoxCrm.Domain.Entities.PetOwner", "PetOwner")
                         .WithMany()
                         .HasForeignKey("PetOwnerId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("PetOwner");
@@ -1061,12 +1295,19 @@ namespace VoxCrm.Infrastructure.Migrations
                 {
                     b.HasOne("VoxCrm.Domain.Entities.Appointment", "Appointment")
                         .WithMany()
-                        .HasForeignKey("AppointmentId");
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("VoxCrm.Domain.Entities.Patient", "Patient")
                         .WithMany()
                         .HasForeignKey("PatientId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Appointment");
@@ -1074,18 +1315,33 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("VoxCrm.Domain.Entities.Patient", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("VoxCrm.Domain.Entities.PatientOwner", b =>
                 {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("VoxCrm.Domain.Entities.Patient", "Patient")
                         .WithMany("Owners")
                         .HasForeignKey("PatientId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("VoxCrm.Domain.Entities.PetOwner", "PetOwner")
                         .WithMany("OwnedPatients")
                         .HasForeignKey("PetOwnerId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Patient");
@@ -1095,27 +1351,64 @@ namespace VoxCrm.Infrastructure.Migrations
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Payment", b =>
                 {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("VoxCrm.Domain.Entities.Debt", "Debt")
                         .WithMany("Payments")
                         .HasForeignKey("DebtId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("VoxCrm.Domain.Entities.Payment", "ReversesPayment")
+                        .WithOne("Reversal")
+                        .HasForeignKey("VoxCrm.Domain.Entities.Payment", "ReversesPaymentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Debt");
+
+                    b.Navigation("ReversesPayment");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.PetOwner", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.ServiceItem", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.VaccinationRecord", b =>
                 {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("VoxCrm.Domain.Entities.Patient", "Patient")
                         .WithMany()
                         .HasForeignKey("PatientId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("VoxCrm.Domain.Entities.VaccineType", "VaccineType")
                         .WithMany()
                         .HasForeignKey("VaccineTypeId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Patient");
@@ -1123,15 +1416,48 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Navigation("VaccineType");
                 });
 
+            modelBuilder.Entity("VoxCrm.Domain.Entities.VaccineType", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.WhatsAppInboundMessage", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("VoxCrm.Domain.Entities.WhatsAppNotification", b =>
                 {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("VoxCrm.Domain.Entities.PetOwner", "PetOwner")
                         .WithMany()
                         .HasForeignKey("PetOwnerId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("PetOwner");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.WhatsAppTemplate", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Dealer", b =>
@@ -1147,6 +1473,11 @@ namespace VoxCrm.Infrastructure.Migrations
             modelBuilder.Entity("VoxCrm.Domain.Entities.Patient", b =>
                 {
                     b.Navigation("Owners");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.Payment", b =>
+                {
+                    b.Navigation("Reversal");
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.PetOwner", b =>

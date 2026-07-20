@@ -1,0 +1,15 @@
+[Unit]
+Description=VoxCrm encrypted backup
+After=docker.service
+
+[Service]
+Type=oneshot
+User=voxcrm
+Group=voxcrm
+EnvironmentFile=/etc/voxcrm/secrets/production.env
+ExecStart=/opt/voxcrm/current/deploy/scripts/backup-production.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true

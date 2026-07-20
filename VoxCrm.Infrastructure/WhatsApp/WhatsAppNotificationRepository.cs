@@ -142,13 +142,22 @@ public sealed class WhatsAppNotificationRepository : IWhatsAppNotificationReposi
         DateTime now,
         CancellationToken cancellationToken)
     {
+        var existing = await _context.WhatsAppInboundMessages
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(item => item.ClinicID == request.ClinicId
+                                         && item.ProviderMessageId == request.ProviderMessageId,
+                cancellationToken);
+        if (existing != null)
+            return existing.ID;
+
         var message = new WhatsAppInboundMessage
         {
             ClinicID = request.ClinicId,
             FromPhone = request.FromPhone,
             Message = request.Message,
             ReceivedAt = request.ReceivedAt ?? now,
-            GatewaySessionId = request.GatewaySessionId
+            GatewaySessionId = request.GatewaySessionId,
+            ProviderMessageId = request.ProviderMessageId
         };
 
         _context.WhatsAppInboundMessages.Add(message);

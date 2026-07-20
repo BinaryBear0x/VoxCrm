@@ -89,14 +89,17 @@ The suite runs VoxCrm build/tests, NuGet vulnerability audit, Gateway pytest, wo
 
 ## Backup
 
-The lightweight local backup script creates:
+The backup script creates one encrypted package containing:
 
 - compressed `pg_dump -Fc` backups for VoxCrm and Gateway databases
 - per-clinic `json.gz` exports for readable clinic archives
 - compressed WhatsApp session archive
+- a SHA-256 manifest checked before every restore
 
 ```bash
-./scripts/backup.sh
+install -m 600 /dev/null ~/.voxcrm-backup.key
+openssl rand -base64 48 > ~/.voxcrm-backup.key
+BACKUP_ENCRYPTION_KEY_FILE=~/.voxcrm-backup.key ./scripts/backup.sh
 ```
 
 Default retention is daily 7, weekly 4 and monthly 3 under:
@@ -108,8 +111,13 @@ Default retention is daily 7, weekly 4 and monthly 3 under:
 Restore is intentionally explicit because it replaces local databases:
 
 ```bash
-./scripts/restore.sh ~/Documents/Projeler/voxcrm-backups/daily/<timestamp>
+BACKUP_ENCRYPTION_KEY_FILE=~/.voxcrm-backup.key \
+  ./scripts/restore.sh ~/Documents/Projeler/voxcrm-backups/daily/<timestamp>
 ```
+
+Keep the key outside the repository and outside the backup disk. Copy encrypted
+snapshots to a separately credentialed off-site/object store. `test-backup-smoke.sh`
+performs a non-destructive restore into temporary databases and queries both of them.
 
 ## API
 

@@ -4,7 +4,7 @@ using Hangfire.Dashboard;
 namespace VoxCrm.Web.Services;
 
 /// <summary>
-/// /hangfire dashboard'una sadece "Dealer" rolündeki kullanıcıların
+    /// /hangfire dashboard'una sadece "SystemAdmin" rolündeki kullanıcıların
 /// erişmesine izin veren filtre.
 ///
 /// Neden bu gerekli?
@@ -22,7 +22,8 @@ public class HangfireAuthFilter : IDashboardAuthorizationFilter
         if (!(httpContext.User?.Identity?.IsAuthenticated ?? false))
             return false;
 
-        // Sadece "Dealer" rolündeki kullanıcılara izin ver
-        return httpContext.User.IsInRole("Dealer");
+        // Hangfire job'ları tüm tenantları etkilediğinden Dealer yetkisi yeterli
+        // değildir. Bu yüzey yalnız platform yöneticilerine aittir.
+        return httpContext.User.IsInRole("SystemAdmin");
     }
 }

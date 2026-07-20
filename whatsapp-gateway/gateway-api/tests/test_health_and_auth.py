@@ -8,7 +8,7 @@ from tests.conftest import gateway_token
 
 
 @pytest.mark.asyncio
-async def test_health_returns_operational_metrics(client, test_database, monkeypatch):
+async def test_health_does_not_expose_operational_or_tenant_metrics(client, test_database, monkeypatch):
     clinic_id = uuid.uuid4()
     old_created_at = datetime.now(timezone.utc) - timedelta(minutes=3)
     async with test_database() as session:
@@ -54,13 +54,7 @@ async def test_health_returns_operational_metrics(client, test_database, monkeyp
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert body["database"] == "ok"
-    assert body["sessionCount"] == 1
-    assert body["readyClinicCount"] == 1
-    assert body["failedCount"] == 1
-    assert body["needsReviewCount"] == 1
-    assert body["queueLagSeconds"] >= 120
-    assert body["lastError"] == "worker failed"
+    assert body == {"status": "ok", "service": "gateway-api"}
 
 
 @pytest.mark.asyncio
@@ -107,7 +101,7 @@ async def test_clinic_status_metrics_are_scoped_by_clinic(client, test_database,
 
     response = await client.get(
         f"/api/clinics/{clinic_a}/whatsapp/status",
-        headers={"Authorization": f"Bearer {gateway_token('whatsapp.session.read')}"},
+        headers={"Authorization": f"Bearer {gateway_token('whatsapp.session.read', clinic_id=clinic_a)}"},
     )
 
     assert response.status_code == 200
@@ -130,7 +124,7 @@ async def test_gateway_rejects_replayed_and_wrong_scope_tokens(client, monkeypat
     monkeypatch.setattr(worker_client, "status", status)
 
     clinic_id = uuid.uuid4()
-    token = gateway_token("whatsapp.session.read", jti="replayed-token")
+    token = gateway_token("whatsapp.session.read", jti="replayed-token", clinic_id=clinic_id)
     first = await client.get(
         f"/api/clinics/{clinic_id}/whatsapp/status",
         headers={"Authorization": f"Bearer {token}"},
@@ -141,12 +135,31 @@ async def test_gateway_rejects_replayed_and_wrong_scope_tokens(client, monkeypat
     )
     wrong_scope = await client.get(
         f"/api/clinics/{clinic_id}/whatsapp/status",
-        headers={"Authorization": f"Bearer {gateway_token('whatsapp.session.write')}"},
+        headers={"Authorization": f"Bearer {gateway_token('whatsapp.session.write', clinic_id=clinic_id)}"},
     )
 
     assert first.status_code == 200
     assert replay.status_code == 401
     assert wrong_scope.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_gateway_rejects_a_token_for_another_clinic(client, monkeypatch):
+    from app.main import worker_client
+
+    async def status(_clinic_id):
+        return {"status": "ready"}
+
+    monkeypatch.setattr(worker_client, "status", status)
+    token_clinic = uuid.uuid4()
+    requested_clinic = uuid.uuid4()
+
+    response = await client.get(
+        f"/api/clinics/{requested_clinic}/whatsapp/status",
+        headers={"Authorization": f"Bearer {gateway_token('whatsapp.session.read', clinic_id=token_clinic)}"},
+    )
+
+    assert response.status_code == 403
 
 
 def message(clinic_id: uuid.UUID, state: str) -> OutboundMessage:

@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def to_camel(value: str) -> str:
@@ -50,7 +51,8 @@ class WorkerQr(CamelModel):
 
 class InboundFromWorker(CamelModel):
     clinic_id: uuid.UUID
-    from_phone: str
-    message: str
+    from_phone: Annotated[str, Field(min_length=10, max_length=32)]
+    message: Annotated[str, Field(min_length=1, max_length=4096)]
     received_at: datetime | None = None
-    gateway_session_id: str
+    gateway_session_id: Annotated[str, Field(min_length=1, max_length=128)]
+    provider_message_id: Annotated[str, Field(min_length=1, max_length=256)]

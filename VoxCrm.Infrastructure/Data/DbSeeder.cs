@@ -9,13 +9,20 @@ namespace VoxCrm.Infrastructure.Data
 {
     public static class DbSeeder
     {
-        public static async Task SeedAsync(VoxCrmDbContext context, UserManager<ApplicationUser> userManager, RoleManager<IdentityRole<Guid>> roleManager)
+        public static async Task SeedAsync(
+            VoxCrmDbContext context,
+            UserManager<ApplicationUser> userManager,
+            RoleManager<IdentityRole<Guid>> roleManager,
+            bool seedDemoData)
         {
-            foreach (var roleName in new[] { "Dealer", "Clinic" })
+            foreach (var roleName in new[] { "SystemAdmin", "Dealer", "Clinic" })
             {
                 if (!await roleManager.RoleExistsAsync(roleName))
                     await roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
             }
+
+            if (!seedDemoData)
+                return;
 
             var dealer = await context.Dealers.FirstOrDefaultAsync(d => d.CompanyName == "VoxCrm Ana Bayi");
             if (dealer == null)
@@ -86,9 +93,9 @@ namespace VoxCrm.Infrastructure.Data
             // Global filter engeli: IgnoreQueryFilters kullanıyoruz
             if (!await context.PetOwners.IgnoreQueryFilters().AnyAsync(o => o.Email == "ahmet@mail.com"))
             {
-                var owner1 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic1.ID, FirstName = "Ahmet", LastName = "Yılmaz", Phone = "05321112233", Email = "ahmet@mail.com" };
-                var owner1_2 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic1.ID, FirstName = "Mehmet", LastName = "Demir", Phone = "05441234567", Email = "mehmet.demir@mail.com" };
-                var owner1_3 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic1.ID, FirstName = "Zeynep", LastName = "Çelik", Phone = "05559876543", Email = "zeynep.c@mail.com" };
+                var owner1 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic1.ID, FirstName = "Ahmet", LastName = "Yılmaz", Phone = "05321112233", NormalizedPhone = "05321112233", Email = "ahmet@mail.com" };
+                var owner1_2 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic1.ID, FirstName = "Mehmet", LastName = "Demir", Phone = "05441234567", NormalizedPhone = "05441234567", Email = "mehmet.demir@mail.com" };
+                var owner1_3 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic1.ID, FirstName = "Zeynep", LastName = "Çelik", Phone = "05559876543", NormalizedPhone = "05559876543", Email = "zeynep.c@mail.com" };
                 context.PetOwners.AddRange(owner1, owner1_2, owner1_3);
 
                 var patient1 = new Patient { ID = Guid.NewGuid(), ClinicID = clinic1.ID, Name = "Karabaş", Species = "Köpek", Breed = "Kangal", cinsiyet = 'E' };
@@ -158,9 +165,9 @@ namespace VoxCrm.Infrastructure.Data
             // Global filter engeli: IgnoreQueryFilters kullanıyoruz
             if (!await context.PetOwners.IgnoreQueryFilters().AnyAsync(o => o.Email == "ayse@mail.com"))
             {
-                var owner2 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic2.ID, FirstName = "Ayşe", LastName = "Kaya", Phone = "05332223344", Email = "ayse@mail.com" };
-                var owner2_2 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic2.ID, FirstName = "Ali", LastName = "Vefa", Phone = "05051239988", Email = "ali.vefa@mail.com" };
-                var owner2_3 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic2.ID, FirstName = "Fatma", LastName = "Yılmaz", Phone = "05329998877", Email = "fatma.y@mail.com" };
+                var owner2 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic2.ID, FirstName = "Ayşe", LastName = "Kaya", Phone = "05332223344", NormalizedPhone = "05332223344", Email = "ayse@mail.com" };
+                var owner2_2 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic2.ID, FirstName = "Ali", LastName = "Vefa", Phone = "05051239988", NormalizedPhone = "05051239988", Email = "ali.vefa@mail.com" };
+                var owner2_3 = new PetOwner { ID = Guid.NewGuid(), ClinicID = clinic2.ID, FirstName = "Fatma", LastName = "Yılmaz", Phone = "05329998877", NormalizedPhone = "05329998877", Email = "fatma.y@mail.com" };
                 context.PetOwners.AddRange(owner2, owner2_2, owner2_3);
 
                 var patient2 = new Patient { ID = Guid.NewGuid(), ClinicID = clinic2.ID, Name = "Pamuk", Species = "Kedi", Breed = "Van", cinsiyet = 'D' };
@@ -192,6 +199,116 @@ namespace VoxCrm.Infrastructure.Data
                 );
 
                 await context.SaveChangesAsync();
+            }
+        }
+
+        public static async Task BootstrapProductionDealerAsync(
+            VoxCrmDbContext context,
+            UserManager<ApplicationUser> userManager,
+            ProductionDealerBootstrapOptions options)
+        {
+            if (!options.Enabled || await context.Dealers.AnyAsync())
+                return;
+
+            ValidateBootstrapOptions(options);
+
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            var dealer = new Dealer
+            {
+                ID = Guid.NewGuid(),
+                CompanyName = options.CompanyName.Trim(),
+                ContactEmail = options.Email.Trim(),
+                ContactPhone = options.Phone.Trim(),
+                IsActive = true
+            };
+            context.Dealers.Add(dealer);
+            await context.SaveChangesAsync();
+
+            var user = new ApplicationUser
+            {
+                UserName = options.Email.Trim(),
+                Email = options.Email.Trim(),
+                FirstName = options.FirstName.Trim(),
+                LastName = options.LastName.Trim(),
+                DealerId = dealer.ID,
+                EmailConfirmed = true,
+                MustChangePassword = true
+            };
+            var createResult = await userManager.CreateAsync(user, options.Password);
+            if (!createResult.Succeeded)
+            {
+                var errors = string.Join("; ", createResult.Errors.Select(error => error.Description));
+                throw new InvalidOperationException($"Production dealer bootstrap failed: {errors}");
+            }
+
+            var roleResult = await userManager.AddToRoleAsync(user, "Dealer");
+            if (!roleResult.Succeeded)
+            {
+                var errors = string.Join("; ", roleResult.Errors.Select(error => error.Description));
+                throw new InvalidOperationException($"Production dealer role assignment failed: {errors}");
+            }
+
+            await transaction.CommitAsync();
+        }
+
+        public static async Task BootstrapSystemAdminAsync(
+            UserManager<ApplicationUser> userManager,
+            SystemAdminBootstrapOptions options)
+        {
+            if (!options.Enabled || (await userManager.GetUsersInRoleAsync("SystemAdmin")).Count > 0)
+                return;
+
+            if (string.IsNullOrWhiteSpace(options.Email)
+                || string.IsNullOrWhiteSpace(options.FirstName)
+                || string.IsNullOrWhiteSpace(options.LastName)
+                || string.IsNullOrWhiteSpace(options.Password)
+                || options.Password.Length < 12
+                || options.Password is "Admin123!" or "Klinik123!" or "change-me")
+            {
+                throw new InvalidOperationException(
+                    "System admin bootstrap requires identity fields and a non-default password of at least 12 characters.");
+            }
+
+            if (await userManager.FindByEmailAsync(options.Email.Trim()) != null)
+                throw new InvalidOperationException("System admin bootstrap email is already assigned to another account.");
+
+            var user = new ApplicationUser
+            {
+                UserName = options.Email.Trim(),
+                Email = options.Email.Trim(),
+                FirstName = options.FirstName.Trim(),
+                LastName = options.LastName.Trim(),
+                EmailConfirmed = true,
+                ClinicId = null,
+                DealerId = null,
+                MustChangePassword = true,
+            };
+            var createResult = await userManager.CreateAsync(user, options.Password);
+            if (!createResult.Succeeded)
+                throw new InvalidOperationException($"System admin bootstrap failed: {string.Join("; ", createResult.Errors.Select(error => error.Description))}");
+
+            var roleResult = await userManager.AddToRoleAsync(user, "SystemAdmin");
+            if (!roleResult.Succeeded)
+                throw new InvalidOperationException($"System admin role assignment failed: {string.Join("; ", roleResult.Errors.Select(error => error.Description))}");
+        }
+
+        private static void ValidateBootstrapOptions(ProductionDealerBootstrapOptions options)
+        {
+            if (string.IsNullOrWhiteSpace(options.CompanyName)
+                || string.IsNullOrWhiteSpace(options.Email)
+                || string.IsNullOrWhiteSpace(options.FirstName)
+                || string.IsNullOrWhiteSpace(options.LastName)
+                || string.IsNullOrWhiteSpace(options.Password))
+            {
+                throw new InvalidOperationException(
+                    "Production dealer bootstrap requires company, email, first name, last name and password.");
+            }
+
+            if (options.Password is "Admin123!" or "Klinik123!" or "change-me"
+                || options.Password.Length < 12)
+            {
+                throw new InvalidOperationException(
+                    "Production dealer bootstrap password must be at least 12 characters and cannot be a known default.");
             }
         }
     }

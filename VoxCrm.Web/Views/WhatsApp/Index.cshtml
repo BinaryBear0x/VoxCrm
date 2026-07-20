@@ -16,7 +16,7 @@
     @if (Model.IsDealer && Model.AvailableClinics.Any())
     {
         <form method="get" class="d-flex align-items-center gap-2">
-            <select name="clinicId" class="form-select form-select-sm" onchange="this.form.submit()">
+            <select name="clinicId" class="form-select form-select-sm" data-submit-on-change>
                 @foreach (var clinic in Model.AvailableClinics)
                 {
                     if (clinic.ID == Model.Clinic.ID)
@@ -110,7 +110,7 @@
                         <div class="fw-semibold small">QR hazirlaniyor...</div>
                         <div class="text-muted small">Bu islem birkaç saniye surebilir.</div>
                     </div>
-                    <img src="@(Model.Qr?.Qr ?? "")" alt="WhatsApp QR" class="img-fluid @(hasQr ? "" : "d-none")" style="max-width: 260px;" data-wa-qr-image />
+                    <img src="@(Model.Qr?.Qr ?? "")" alt="WhatsApp QR" class="img-fluid qr-image @(hasQr ? "" : "d-none")" data-wa-qr-image />
                     <div class="small text-muted mt-2" data-wa-qr-status>
                         @(hasQr ? "QR hazir. Klinik telefonundan okutun." : shouldPollQr ? "Baglanti baslatildi, QR bekleniyor." : "")
                     </div>
@@ -366,11 +366,18 @@
                 toastEl.setAttribute('aria-atomic', 'true');
                 toastEl.setAttribute('data-bs-autohide', 'true');
                 toastEl.setAttribute('data-bs-delay', '4500');
-                toastEl.innerHTML = `
-                    <div class="d-flex">
-                        <div class="toast-body">${message}</div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Kapat"></button>
-                    </div>`;
+                const row = document.createElement('div');
+                row.className = 'd-flex';
+                const body = document.createElement('div');
+                body.className = 'toast-body';
+                body.textContent = String(message || '');
+                const close = document.createElement('button');
+                close.type = 'button';
+                close.className = 'btn-close btn-close-white me-2 m-auto';
+                close.setAttribute('data-bs-dismiss', 'toast');
+                close.setAttribute('aria-label', 'Kapat');
+                row.append(body, close);
+                toastEl.appendChild(row);
                 container.appendChild(toastEl);
                 new bootstrap.Toast(toastEl).show();
             };

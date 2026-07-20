@@ -5,5 +5,6 @@ namespace VoxCrm.Domain.Common
     public interface ITenantService
     {
         Guid GetClinicId();
+        bool IsSystemContext { get; }
     }
 }

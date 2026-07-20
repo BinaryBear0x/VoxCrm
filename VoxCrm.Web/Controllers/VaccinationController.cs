@@ -1,94 +1,114 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using VoxCrm.Application.Vaccinations;
 using VoxCrm.Domain.Entities;
-using VoxCrm.Infrastructure.Data;
 
 namespace VoxCrm.Web.Controllers;
 
 [Authorize(Roles = "Clinic")]
-public class VaccinationController : Controller
+public sealed class VaccinationController : Controller
 {
-    private readonly VoxCrmDbContext _context;
-    public VaccinationController(VoxCrmDbContext context) => _context = context;
+    private readonly IVaccinationService _service;
 
-    public async Task<IActionResult> Index()
+    public VaccinationController(IVaccinationService service) => _service = service;
+
+    public async Task<IActionResult> Index(bool includeArchived, CancellationToken cancellationToken)
     {
-        var records = await _context.VaccinationRecords
-            .Include(v => v.Patient)
-            .Include(v => v.VaccineType)
-            .OrderBy(v => v.NextDueDate)
-            .ToListAsync();
-        return View(records);
+        ViewBag.IncludeArchived = includeArchived;
+        return View(await _service.ListAsync(includeArchived, cancellationToken));
     }
 
-    public async Task<IActionResult> Create()
+    public async Task<IActionResult> Create(CancellationToken cancellationToken)
     {
-        ViewBag.Patients     = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-        ViewBag.VaccineTypes = await _context.VaccineTypes.OrderBy(v => v.Name).ToListAsync();
+        await SetChoicesAsync(cancellationToken);
         return View();
     }
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("PatientId,VaccineTypeId,AdministeredDate")] VaccinationRecord model)
+        [Bind("PatientId,VaccineTypeId,AdministeredDate")] VaccinationRecord model,
+        CancellationToken cancellationToken)
     {
-        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
-        var vaccineType = await _context.VaccineTypes.FindAsync(model.VaccineTypeId);
-
-        // Sistem alanları, navigasyon özellikleri ve hesaplanan alanlar doğrulama dışı bırakılıyor
-        ModelState.Remove(nameof(VaccinationRecord.ClinicID));
-        ModelState.Remove(nameof(VaccinationRecord.CreatedAt));
-        ModelState.Remove(nameof(VaccinationRecord.IsActive));
-        ModelState.Remove(nameof(VaccinationRecord.Patient));
-        ModelState.Remove(nameof(VaccinationRecord.VaccineType));
-        ModelState.Remove(nameof(VaccinationRecord.NextDueDate));
-        ModelState.Remove(nameof(VaccinationRecord.IsReminderSent));
-
-        if (!patientExists || vaccineType == null)
-        {
-            ModelState.AddModelError("", "Geçerli bir hasta ve aşı tipi seçin.");
-            ViewBag.Patients     = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-            ViewBag.VaccineTypes = await _context.VaccineTypes.OrderBy(v => v.Name).ToListAsync();
-            return View(model);
-        }
-
-        model.NextDueDate = model.AdministeredDate.AddDays(vaccineType.ValidityDays);
+        RemoveSystemValidation();
         if (!ModelState.IsValid)
         {
-            ViewBag.Patients     = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-            ViewBag.VaccineTypes = await _context.VaccineTypes.OrderBy(v => v.Name).ToListAsync();
+            await SetChoicesAsync(cancellationToken);
             return View(model);
         }
 
-        _context.VaccinationRecords.Add(model);
-        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
+        var result = await _service.CreateAsync(model, cancellationToken);
+        if (!result.Succeeded)
+        {
+            ModelState.AddModelError(string.Empty, result.Error ?? "Aşı kaydı oluşturulamadı.");
+            await SetChoicesAsync(cancellationToken);
+            return View(model);
+        }
+
         TempData["Success"] = "Aşı kaydı başarıyla eklendi.";
         return RedirectToAction(nameof(Index));
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Edit(Guid id)
+    public async Task<IActionResult> Edit(Guid id, CancellationToken cancellationToken)
     {
-        var record = await _context.VaccinationRecords.FindAsync(id);
+        var record = await _service.GetAsync(id, cancellationToken: cancellationToken);
         if (record == null) return NotFound();
-
-        ViewBag.Patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-        ViewBag.VaccineTypes = await _context.VaccineTypes.OrderBy(v => v.Name).ToListAsync();
+        await SetChoicesAsync(cancellationToken);
         return View(record);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(
-        [Bind("ID,PatientId,VaccineTypeId,AdministeredDate")] VaccinationRecord model)
+        [Bind("ID,PatientId,VaccineTypeId,AdministeredDate")] VaccinationRecord model,
+        CancellationToken cancellationToken)
     {
-        var existing = await _context.VaccinationRecords.FindAsync(model.ID); // Global Query Filter: başka klinik = null
-        if (existing == null) return NotFound();
+        RemoveSystemValidation();
+        if (!ModelState.IsValid)
+        {
+            await SetChoicesAsync(cancellationToken);
+            return View(model);
+        }
 
-        var patientExists = await _context.Patients.AnyAsync(p => p.ID == model.PatientId);
-        var vaccineType = await _context.VaccineTypes.FindAsync(model.VaccineTypeId);
+        var result = await _service.UpdateAsync(model, cancellationToken);
+        if (result.NotFound) return NotFound();
+        if (!result.Succeeded)
+        {
+            ModelState.AddModelError(string.Empty, result.Error ?? "Aşı kaydı güncellenemedi.");
+            await SetChoicesAsync(cancellationToken);
+            return View(model);
+        }
 
-        // Sistem alanları, navigasyon özellikleri ve hesaplanan alanlar doğrulama dışı bırakılıyor
+        TempData["Success"] = "Aşı kaydı başarıyla güncellendi.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _service.ArchiveAsync(id, ActorUserId(), cancellationToken);
+        if (result.NotFound) return NotFound();
+        TempData["Success"] = "Aşı kaydı arşivlendi.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _service.RestoreAsync(id, ActorUserId(), cancellationToken);
+        if (result.NotFound) return NotFound();
+        TempData["Success"] = "Aşı kaydı geri alındı.";
+        return RedirectToAction(nameof(Index), new { includeArchived = true });
+    }
+
+    private async Task SetChoicesAsync(CancellationToken cancellationToken)
+    {
+        var choices = await _service.GetChoicesAsync(cancellationToken);
+        ViewBag.Patients = choices.Patients;
+        ViewBag.VaccineTypes = choices.VaccineTypes;
+    }
+
+    private void RemoveSystemValidation()
+    {
         ModelState.Remove(nameof(VaccinationRecord.ClinicID));
         ModelState.Remove(nameof(VaccinationRecord.CreatedAt));
         ModelState.Remove(nameof(VaccinationRecord.IsActive));
@@ -96,43 +116,8 @@ public class VaccinationController : Controller
         ModelState.Remove(nameof(VaccinationRecord.VaccineType));
         ModelState.Remove(nameof(VaccinationRecord.NextDueDate));
         ModelState.Remove(nameof(VaccinationRecord.IsReminderSent));
-
-        if (!patientExists || vaccineType == null)
-        {
-            ModelState.AddModelError("", "Geçerli bir hasta ve aşı tipi seçin.");
-            ViewBag.Patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-            ViewBag.VaccineTypes = await _context.VaccineTypes.OrderBy(v => v.Name).ToListAsync();
-            return View(model);
-        }
-
-        if (!ModelState.IsValid)
-        {
-            ViewBag.Patients = await _context.Patients.OrderBy(p => p.Name).ToListAsync();
-            ViewBag.VaccineTypes = await _context.VaccineTypes.OrderBy(v => v.Name).ToListAsync();
-            return View(model);
-        }
-
-        existing.PatientId       = model.PatientId;
-        existing.VaccineTypeId   = model.VaccineTypeId;
-        existing.AdministeredDate = model.AdministeredDate;
-        existing.NextDueDate     = model.AdministeredDate.AddDays(vaccineType.ValidityDays);
-        // IsReminderSent, ClinicID, CreatedAt, IsActive → hiç dokunulmaz ✅
-
-        await _context.SaveChangesAsync();
-        TempData["Success"] = "Aşı kaydı başarıyla güncellendi.";
-        return RedirectToAction(nameof(Index));
     }
 
-    [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(Guid id)
-    {
-        var record = await _context.VaccinationRecords.FindAsync(id);
-        if (record != null)
-        {
-            _context.VaccinationRecords.Remove(record);
-            await _context.SaveChangesAsync();
-            TempData["Success"] = "Aşı kaydı başarıyla silindi.";
-        }
-        return RedirectToAction(nameof(Index));
-    }
+    private Guid ActorUserId() =>
+        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }

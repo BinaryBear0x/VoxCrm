@@ -21,7 +21,7 @@
         <a href="/PetOwner/Edit/@Model.ID" class="btn btn-sm btn-outline-primary">
             <i class="bi bi-pencil me-1"></i> Düzenle
         </a>
-        <form method="post" action="/PetOwner/Delete/@Model.ID" class="d-inline" onsubmit="return confirm('Bu müşteriyi silmek istediğinize emin misiniz? DİKKAT: Sahibi olduğu hayvanların sahiplik kaydı da silinebilir.');">
+        <form method="post" action="/PetOwner/Delete/@Model.ID" class="d-inline" data-confirm="Bu müşteriyi silmek istediğinize emin misiniz? DİKKAT: Sahibi olduğu hayvanların sahiplik kaydı da silinebilir.">
             @Html.AntiForgeryToken()
             <button type="submit" class="btn btn-sm btn-outline-danger">
                 <i class="bi bi-trash me-1"></i> Sil
@@ -36,8 +36,7 @@
         <div class="card border-0 shadow-sm">
             <div class="card-body text-center py-4">
                 <!-- Avatar -->
-                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center mx-auto mb-3"
-                     style="width:72px;height:72px;">
+                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center mx-auto mb-3 avatar-lg">
                     <span class="text-white fw-bold fs-3">@avatarText</span>
                 </div>
                 <h5 class="fw-bold mb-0">@displayName</h5>
@@ -88,8 +87,7 @@
                         if (p != null)
                         {
                             <div class="d-flex align-items-center gap-3 p-3 border-bottom">
-                                <div class="rounded-circle bg-light d-flex align-items-center justify-content-center flex-shrink-0"
-                                     style="width:48px;height:48px;font-size:1.5rem; color: var(--secondary-color);">
+                                <div class="rounded-circle bg-light d-flex align-items-center justify-content-center flex-shrink-0 avatar-md">
                                     <i class="bi bi-activity"></i>
                                 </div>
                                 <div class="flex-grow-1">
@@ -112,7 +110,7 @@
                                         <a href="/Patient/Details/@p.ID" class="btn btn-sm btn-outline-secondary" title="Profile Git">
                                             <i class="bi bi-heart"></i>
                                         </a>
-                                        <form method="post" action="/PetOwner/RemovePatient" class="d-inline" onsubmit="return confirm('Bu hayvanı müşteriden koparmak istediğinize emin misiniz?');">
+                                        <form method="post" action="/PetOwner/RemovePatient" class="d-inline" data-confirm="Bu hayvanı müşteriden koparmak istediğinize emin misiniz?">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="ownerId" value="@Model.ID" />
                                             <input type="hidden" name="patientId" value="@p.ID" />

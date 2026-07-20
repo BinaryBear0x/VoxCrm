@@ -107,7 +107,7 @@ public class SystemHealthService
             ?? _environment.IsDevelopment();
         if (!dockerEnabled)
         {
-            model.ContainerStatusError = "Container durumu bu ortamda kapalı.";
+            model.ContainerStatusError = "Güvenlik nedeniyle web uygulamasına Docker socket erişimi verilmemiştir. Servisler host monitor ve Telegram alarmlarıyla izlenir.";
             return;
         }
 

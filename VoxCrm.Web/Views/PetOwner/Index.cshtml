@@ -21,132 +21,25 @@
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
-        <form method="get" action="/PetOwner" class="d-flex gap-2">
-            <input type="search" name="search" value="@ViewBag.Search" 
-                   class="form-control" placeholder="İsim, telefon, e-posta, adres, not veya hayvan bilgisi ara..." data-auto-search>
+        <form method="get" action="/PetOwner" class="d-flex gap-2" id="owner-search-form">
+            <input type="text" name="search" id="owner-search-input" value="@ViewBag.Search"
+                   class="form-control"
+                   placeholder="Ad, soyad, telefon, e-posta, adres, hayvan adı ara..."
+                   autocomplete="off"
+                   data-auto-search>
             <button type="submit" class="btn btn-outline-primary">
                 <i class="bi bi-search"></i>
             </button>
-            @if (!string.IsNullOrEmpty(ViewBag.Search as string))
-            {
-                <a href="/PetOwner" class="btn btn-outline-secondary">Temizle</a>
-            }
+            <a href="/PetOwner" class="btn btn-outline-secondary" id="owner-search-clear"
+               @(string.IsNullOrEmpty(ViewBag.Search as string) ? "hidden" : "")>Temizle</a>
         </form>
     </div>
 </div>
 
 <div class="card border-0 shadow-sm">
-    <div class="card-body p-0">
-        @if (!Model.Any())
-        {
-            <div class="text-center py-5 text-muted">
-                <i class="bi bi-people fs-1 d-block mb-2"></i>
-                <p>Henüz müşteri eklenmemiş.</p>
-                <a href="/PetOwner/Create" class="btn btn-primary btn-sm">İlk Müşteriyi Ekle</a>
-            </div>
-        }
-        else
-        {
-            <div class="table-responsive d-none d-md-block">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Ad Soyad</th>
-                            <th>Telefon</th>
-                            <th>E-posta</th>
-                            <th>Hayvanları</th>
-                            <th>WhatsApp</th>
-                            <th class="text-end">İşlemler</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var owner in Model)
-                        {
-                            <tr>
-                                <td class="fw-semibold">@owner.FirstName @owner.LastName</td>
-                                <td>@owner.Phone</td>
-                                <td>@(owner.Email ?? "-")</td>
-                                <td>
-                                    @if (owner.OwnedPatients.Any())
-                                    {
-                                        <div class="fw-semibold">@owner.OwnedPatients.Count hayvan</div>
-                                        <div class="text-muted small">
-                                            @string.Join(", ", owner.OwnedPatients
-                                                .Where(op => op.Patient != null)
-                                                .Select(op => $"{op.Patient.Name} ({op.Patient.Species})")
-                                                .Take(3))
-                                        </div>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td>
-                                    @if (owner.WhatsAppConsent)
-                                    {
-                                        <span class="badge bg-success"><i class="bi bi-whatsapp"></i> Onaylı</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-secondary">Kapalı</span>
-                                    }
-                                </td>
-                                <td class="text-end">
-                                    <div class="d-flex justify-content-end gap-1">
-                                        <a href="/PetOwner/Details/@owner.ID" class="btn btn-sm btn-outline-info" title="Detay">
-                                            <i class="bi bi-eye"></i>
-                                        </a>
-                                        <a href="/PetOwner/Edit/@owner.ID" class="btn btn-sm btn-outline-primary" title="Düzenle">
-                                            <i class="bi bi-pencil"></i>
-                                        </a>
-                                        <form method="post" action="/PetOwner/Delete/@owner.ID" class="d-inline" onsubmit="return confirm('Bu müşteriyi silmek istediğinize emin misiniz?');">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Sil">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="d-md-none">
-                @foreach (var owner in Model)
-                {
-                    <div class="border-bottom p-3 d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="fw-semibold">@owner.FirstName @owner.LastName</div>
-                            <div class="text-muted small">@owner.Phone</div>
-                            @if (owner.OwnedPatients.Any())
-                            {
-                                <div class="text-muted small">
-                                    <i class="bi bi-heart-pulse"></i>
-                                    @string.Join(", ", owner.OwnedPatients
-                                        .Where(op => op.Patient != null)
-                                        .Select(op => op.Patient.Name)
-                                        .Take(3))
-                                </div>
-                            }
-                            @if (owner.WhatsAppConsent)
-                            {
-                                <span class="badge bg-success mt-1"><i class="bi bi-whatsapp"></i> WhatsApp Onaylı</span>
-                            }
-                        </div>
-                        <div class="d-flex gap-1">
-                            <a href="/PetOwner/Details/@owner.ID" class="btn btn-sm btn-outline-info">
-                                <i class="bi bi-eye"></i>
-                            </a>
-                            <a href="/PetOwner/Edit/@owner.ID" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-pencil"></i>
-                            </a>
-                        </div>
-                    </div>
-                }
-            </div>
-        }
+    <div class="card-body p-0"
+         data-search-table="/PetOwner?partial=true"
+         id="owner-table-wrapper">
+        @await Html.PartialAsync("_PetOwnerTablePartial", Model)
     </div>
 </div>

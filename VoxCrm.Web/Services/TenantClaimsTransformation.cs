@@ -26,6 +26,13 @@ public class TenantClaimsTransformation : IClaimsTransformation
         if (user == null)
             return principal;
 
+        foreach (var claim in identity.Claims
+                     .Where(claim => claim.Type is "ClinicId" or "DealerId")
+                     .ToList())
+        {
+            identity.RemoveClaim(claim);
+        }
+
         AddClaimIfMissing(identity, "ClinicId", user.ClinicId?.ToString());
         AddClaimIfMissing(identity, "DealerId", user.DealerId?.ToString());
 

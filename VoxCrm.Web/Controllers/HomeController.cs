@@ -1,8 +1,7 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using VoxCrm.Infrastructure.Data;
+using VoxCrm.Application.Dashboard;
 using VoxCrm.Web.Models;
 
 namespace VoxCrm.Web.Controllers;
@@ -12,27 +11,24 @@ namespace VoxCrm.Web.Controllers;
 [Authorize]
 public class HomeController : Controller
 {
-    private readonly VoxCrmDbContext _context;
+    private readonly IDashboardService _dashboard;
 
-    public HomeController(VoxCrmDbContext context) => _context = context;
+    public HomeController(IDashboardService dashboard) => _dashboard = dashboard;
 
-    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         // Dealer kullanıcısı → kendi dashboarduna yönlendir
         if (User.IsInRole("Dealer"))
             return RedirectToAction("Index", "Dealer");
 
+        var dashboard = await _dashboard.GetClinicDashboardAsync(cancellationToken);
         var vm = new DashboardViewModel
         {
-            TotalPetOwners       = await _context.PetOwners.CountAsync(),
-            TotalPatients        = await _context.Patients.CountAsync(),
-            TotalAppointments    = await _context.Appointments.CountAsync(),
-            TotalOutstandingDebt = await _context.Borçlar
-                                        .Where(d => !d.IsCollected)
-                                        .SumAsync(d => (decimal?)d.Amount) ?? 0,
-            PendingWhatsAppMessages = await _context.WhatsAppNotifications
-                                        .Where(w => w.Status == "Pending")
-                                        .CountAsync()
+            TotalPetOwners = dashboard.TotalPetOwners,
+            TotalPatients = dashboard.TotalPatients,
+            TotalAppointments = dashboard.TotalAppointments,
+            TotalOutstandingDebt = dashboard.TotalOutstandingDebt,
+            PendingWhatsAppMessages = dashboard.PendingWhatsAppMessages
         };
         return View(vm);
     }

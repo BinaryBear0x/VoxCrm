@@ -19,27 +19,27 @@ public class WhatsAppGatewayClient
 
     public Task<GatewaySessionStatus?> GetStatusAsync(Guid clinicId, CancellationToken cancellationToken = default)
     {
-        return SendAsync<GatewaySessionStatus>(HttpMethod.Get, $"/api/clinics/{clinicId}/whatsapp/status", "whatsapp.session.read", cancellationToken);
+        return SendAsync<GatewaySessionStatus>(HttpMethod.Get, $"/api/clinics/{clinicId}/whatsapp/status", "whatsapp.session.read", clinicId, cancellationToken);
     }
 
     public Task<GatewayQrResponse?> GetQrAsync(Guid clinicId, CancellationToken cancellationToken = default)
     {
-        return SendAsync<GatewayQrResponse>(HttpMethod.Get, $"/api/clinics/{clinicId}/whatsapp/qr", "whatsapp.session.read", cancellationToken);
+        return SendAsync<GatewayQrResponse>(HttpMethod.Get, $"/api/clinics/{clinicId}/whatsapp/qr", "whatsapp.session.read", clinicId, cancellationToken);
     }
 
     public Task<GatewayHealthResponse?> GetHealthAsync(CancellationToken cancellationToken = default)
     {
-        return SendAsync<GatewayHealthResponse>(HttpMethod.Get, "/api/health", "whatsapp.session.read", cancellationToken);
+        return SendAsync<GatewayHealthResponse>(HttpMethod.Get, "/api/health", "whatsapp.session.read", null, cancellationToken);
     }
 
     public Task ConnectAsync(Guid clinicId, CancellationToken cancellationToken = default)
     {
-        return SendWithoutResponseAsync(HttpMethod.Post, $"/api/clinics/{clinicId}/whatsapp/connect", "whatsapp.session.write", cancellationToken);
+        return SendWithoutResponseAsync(HttpMethod.Post, $"/api/clinics/{clinicId}/whatsapp/connect", "whatsapp.session.write", clinicId, cancellationToken);
     }
 
     public Task DisconnectAsync(Guid clinicId, CancellationToken cancellationToken = default)
     {
-        return SendWithoutResponseAsync(HttpMethod.Post, $"/api/clinics/{clinicId}/whatsapp/disconnect", "whatsapp.session.write", cancellationToken);
+        return SendWithoutResponseAsync(HttpMethod.Post, $"/api/clinics/{clinicId}/whatsapp/disconnect", "whatsapp.session.write", clinicId, cancellationToken);
     }
 
     /// <summary>Belirli bir telefona serbest metin mesajı gönderir.</summary>
@@ -47,16 +47,16 @@ public class WhatsAppGatewayClient
     {
         var payload = new { phone, message };
         var json = JsonSerializer.Serialize(payload, JsonOptions);
-        using var request = CreateRequest(HttpMethod.Post, $"/api/clinics/{clinicId}/whatsapp/send", "whatsapp.message.write");
+        using var request = CreateRequest(HttpMethod.Post, $"/api/clinics/{clinicId}/whatsapp/send", "whatsapp.message.write", clinicId);
         request.Content = new StringContent(json, Encoding.UTF8, "application/json");
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         return new GatewaySendResult(response.IsSuccessStatusCode, (int)response.StatusCode, body);
     }
 
-    private async Task<T?> SendAsync<T>(HttpMethod method, string url, string scope, CancellationToken cancellationToken)
+    private async Task<T?> SendAsync<T>(HttpMethod method, string url, string scope, Guid? clinicId, CancellationToken cancellationToken)
     {
-        using var request = CreateRequest(method, url, scope);
+        using var request = CreateRequest(method, url, scope, clinicId);
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode) return default;
 
@@ -64,9 +64,9 @@ public class WhatsAppGatewayClient
         return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken);
     }
 
-    private async Task SendWithoutResponseAsync(HttpMethod method, string url, string scope, CancellationToken cancellationToken)
+    private async Task SendWithoutResponseAsync(HttpMethod method, string url, string scope, Guid? clinicId, CancellationToken cancellationToken)
     {
-        using var request = CreateRequest(method, url, scope);
+        using var request = CreateRequest(method, url, scope, clinicId);
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         if (response.IsSuccessStatusCode) return;
 
@@ -77,14 +77,14 @@ public class WhatsAppGatewayClient
             response.StatusCode);
     }
 
-    private HttpRequestMessage CreateRequest(HttpMethod method, string url, string scope)
+    private HttpRequestMessage CreateRequest(HttpMethod method, string url, string scope, Guid? clinicId = null)
     {
         var request = new HttpRequestMessage(method, url);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", CreateJwt(scope));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", CreateJwt(scope, clinicId));
         return request;
     }
 
-    private string CreateJwt(string scope)
+    private string CreateJwt(string scope, Guid? clinicId)
     {
         var now = DateTimeOffset.UtcNow;
         var header = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(new { alg = "HS256", typ = "JWT" }));
@@ -99,8 +99,9 @@ public class WhatsAppGatewayClient
             sub = "voxcrm-web",
             scope,
             iat = now.ToUnixTimeSeconds(),
-            exp = now.AddMinutes(5).ToUnixTimeSeconds(),
-            jti = Guid.NewGuid().ToString("N")
+            exp = now.AddMinutes(1).ToUnixTimeSeconds(),
+            jti = Guid.NewGuid().ToString("N"),
+            clinic_id = clinicId?.ToString()
         }));
 
         var unsigned = $"{header}.{payload}";

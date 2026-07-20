@@ -3,13 +3,20 @@
     ViewData["Title"] = "Aşı Takvimi";
     ViewData["ActiveMenu"] = "vaccines";
     var today = DateTime.Today;
+    var includeArchived = ViewBag.IncludeArchived is true;
+    var nextArchiveMode = (!includeArchived).ToString().ToLowerInvariant();
 }
 
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
     <h1 class="h3 fw-bold mb-0">Aşı Takvimi</h1>
-    <a href="/Vaccination/Create" class="btn btn-primary btn-sm">
-        <i class="bi bi-plus-lg me-1"></i> Aşı Kaydı Ekle
-    </a>
+    <div class="d-flex gap-2">
+        <a href="/Vaccination?includeArchived=@nextArchiveMode" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-archive me-1"></i> @(includeArchived ? "Aktifleri Göster" : "Arşivi Göster")
+        </a>
+        <a href="/Vaccination/Create" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg me-1"></i> Aşı Kaydı Ekle
+        </a>
+    </div>
 </div>
 
 @if (TempData["Success"] != null)
@@ -92,12 +99,23 @@
                                     { <span class="badge bg-light text-muted">Bekliyor</span> }
                                 </td>
                                 <td class="text-end">
-                                    <a href="/Vaccination/Edit/@v.ID" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></a>
-                                    <form method="post" action="/Vaccination/Delete" class="d-inline ms-1" onsubmit="return confirm('Bu aşı kaydını silmek istediğinize emin misiniz?');">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="id" value="@v.ID">
-                                        <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>
-                                    </form>
+                                    @if (v.IsActive)
+                                    {
+                                        <a href="/Vaccination/Edit/@v.ID" class="btn btn-primary btn-sm" aria-label="Aşı kaydını düzenle"><i class="bi bi-pencil"></i></a>
+                                        <form method="post" action="/Vaccination/Delete" class="d-inline ms-1" data-confirm="Bu aşı kaydını silmek istediğinize emin misiniz?">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@v.ID">
+                                            <button type="submit" class="btn btn-danger btn-sm" aria-label="Aşı kaydını arşivle"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <form method="post" action="/Vaccination/Restore" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@v.ID">
+                                            <button type="submit" class="btn btn-success btn-sm" aria-label="Aşı kaydını geri al"><i class="bi bi-arrow-counterclockwise"></i> Geri Al</button>
+                                        </form>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -118,12 +136,23 @@
                         </div>
                         <div class="text-muted small mb-2">@v.VaccineType?.Name · Sonraki: @v.NextDueDate.ToString("dd.MM.yyyy")</div>
                         <div class="d-flex justify-content-end gap-1">
-                            <a href="/Vaccination/Edit/@v.ID" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></a>
-                            <form method="post" action="/Vaccination/Delete" class="d-inline" onsubmit="return confirm('Bu aşı kaydını silmek istediğinize emin misiniz?');">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="id" value="@v.ID">
-                                <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>
-                            </form>
+                            @if (v.IsActive)
+                            {
+                                <a href="/Vaccination/Edit/@v.ID" class="btn btn-primary btn-sm" aria-label="Aşı kaydını düzenle"><i class="bi bi-pencil"></i></a>
+                                <form method="post" action="/Vaccination/Delete" class="d-inline" data-confirm="Bu aşı kaydını silmek istediğinize emin misiniz?">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@v.ID">
+                                    <button type="submit" class="btn btn-danger btn-sm" aria-label="Aşı kaydını arşivle"><i class="bi bi-trash"></i></button>
+                                </form>
+                            }
+                            else
+                            {
+                                <form method="post" action="/Vaccination/Restore" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@v.ID">
+                                    <button type="submit" class="btn btn-success btn-sm" aria-label="Aşı kaydını geri al">Geri Al</button>
+                                </form>
+                            }
                         </div>
                     </div>
                 }

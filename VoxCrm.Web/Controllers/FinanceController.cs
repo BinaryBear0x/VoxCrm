@@ -1,121 +1,95 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using VoxCrm.Domain.Entities;
-using VoxCrm.Infrastructure.Data;
+using VoxCrm.Application.Finance;
 
 namespace VoxCrm.Web.Controllers;
 
 [Authorize(Roles = "Clinic")]
-public class FinanceController : Controller
+public sealed class FinanceController : Controller
 {
-    private readonly VoxCrmDbContext _context;
-    public FinanceController(VoxCrmDbContext context) => _context = context;
+    private readonly IFinanceService _service;
 
+    public FinanceController(IFinanceService service) => _service = service;
 
-    private static readonly HashSet<string> AllowedPaymentMethods =
-        new() { "Nakit", "Kredi Karti", "Havale/EFT" };
+    public async Task<IActionResult> Index(bool? collected, CancellationToken cancellationToken) =>
+        View(await _service.GetIndexAsync(collected, cancellationToken));
 
-    public async Task<IActionResult> Index(bool? collected)
+    public async Task<IActionResult> Create(CancellationToken cancellationToken)
     {
-        var query = _context.Borçlar
-            .Include(d => d.PetOwner)
-            .Include(d => d.Payments)
-            .AsQueryable();
-
-        if (collected.HasValue)
-            query = query.Where(d => d.IsCollected == collected.Value);
-
-        var list             = await query.OrderByDescending(d => d.DueDate).ToListAsync();
-        var totalOutstanding = await _context.Borçlar.Where(d => !d.IsCollected).SumAsync(d => (decimal?)d.Amount) ?? 0;
-        var totalCollected   = await _context.Borçlar.Where(d => d.IsCollected).SumAsync(d => (decimal?)d.Amount) ?? 0;
-
-        ViewBag.TotalOutstanding = totalOutstanding;
-        ViewBag.TotalCollected   = totalCollected;
-        ViewBag.FilterCollected  = collected;
-        return View(list);
-    }
-
-    public async Task<IActionResult> Create()
-    {
-        ViewBag.Owners = await _context.PetOwners.OrderBy(o => o.FirstName).ToListAsync();
+        ViewBag.Owners = await _service.GetOwnersAsync(cancellationToken);
         return View();
     }
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("PetOwnerId,Description,Amount,DueDate")] Debt model)
+        Guid petOwnerId,
+        string description,
+        decimal amount,
+        DateTime dueDate,
+        CancellationToken cancellationToken)
     {
-        // Sistem alanları, navigasyon özellikleri ve otomatik atanan alanlar doğrulama dışı bırakılıyor
-        ModelState.Remove(nameof(Debt.ClinicID));
-        ModelState.Remove(nameof(Debt.CreatedAt));
-        ModelState.Remove(nameof(Debt.IsActive));
-        ModelState.Remove(nameof(Debt.PetOwner));
-        ModelState.Remove(nameof(Debt.IsCollected));
-        ModelState.Remove(nameof(Debt.CollectedAt));
-        ModelState.Remove(nameof(Debt.PaymentMethod));
-        ModelState.Remove(nameof(Debt.Payments));
-
-        if (!ModelState.IsValid)
+        try
         {
-            ViewBag.Owners = await _context.PetOwners.OrderBy(o => o.FirstName).ToListAsync();
-            return View(model);
+            await _service.CreateDebtAsync(
+                new CreateDebtRequest(petOwnerId, description, amount, dueDate), cancellationToken);
+            TempData["Success"] = "Borç kaydı oluşturuldu.";
+            return RedirectToAction(nameof(Index));
         }
-
-        var ownerExists = await _context.PetOwners.AnyAsync(o => o.ID == model.PetOwnerId);
-        if (!ownerExists)
+        catch (FinanceException exception) when (exception.Error == FinanceError.Validation)
         {
-            ModelState.AddModelError(nameof(model.PetOwnerId), "Geçerli bir müşteri seçin.");
-            ViewBag.Owners = await _context.PetOwners.OrderBy(o => o.FirstName).ToListAsync();
-            return View(model);
+            ModelState.AddModelError(string.Empty, exception.Message);
+            ViewBag.Owners = await _service.GetOwnersAsync(cancellationToken);
+            return View();
         }
-
-        _context.Borçlar.Add(model);
-        await _context.SaveChangesAsync(); // ApplyTenantRules() ClinicID'yi burada atar
-        TempData["Success"] = "Borç kaydı oluşturuldu.";
-        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddPayment(Guid debtId, decimal amount, string paymentMethod)
+    public async Task<IActionResult> AddPayment(
+        Guid debtId,
+        decimal amount,
+        string paymentMethod,
+        CancellationToken cancellationToken) =>
+        await RunCommandAsync(
+            () => _service.AddPaymentAsync(
+                new AddPaymentRequest(debtId, amount, paymentMethod, ActorUserId()), cancellationToken),
+            "Tahsilat eklendi.");
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReversePayment(Guid paymentId, string reason, CancellationToken cancellationToken) =>
+        await RunCommandAsync(
+            () => _service.ReversePaymentAsync(
+                new ReversePaymentRequest(paymentId, reason, ActorUserId()), cancellationToken),
+            "Tahsilat ters kaydedildi.");
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CancelDebt(Guid debtId, string reason, CancellationToken cancellationToken) =>
+        await RunCommandAsync(
+            async () =>
+            {
+                await _service.CancelDebtAsync(
+                    new CancelDebtRequest(debtId, reason, ActorUserId()), cancellationToken);
+                return Guid.Empty;
+            },
+            "Borç iptal edildi.");
+
+    private async Task<IActionResult> RunCommandAsync(Func<Task<Guid>> command, string successMessage)
     {
-        if (!AllowedPaymentMethods.Contains(paymentMethod))
-            return BadRequest("Geçersiz ödeme yöntemi.");
-
-        if (amount <= 0)
-            return BadRequest("Tahsilat tutarı sıfırdan büyük olmalıdır.");
-
-        var debt = await _context.Borçlar
-            .Include(d => d.Payments)
-            .FirstOrDefaultAsync(d => d.ID == debtId);
-            
-        if (debt == null) return NotFound();
-
-        var remainingAmount = debt.Amount - debt.Payments.Sum(p => p.Amount);
-        if (amount > remainingAmount)
-            return BadRequest("Tahsilat tutarı kalan borçtan büyük olamaz.");
-
-        var payment = new Payment
+        try
         {
-            DebtId = debtId,
-            Amount = amount,
-            PaymentMethod = paymentMethod,
-            PaymentDate = DateTime.UtcNow
-        };
-
-        _context.Payments.Add(payment);
-        debt.Payments.Add(payment);
-
-        var totalPaid = debt.Payments.Sum(p => p.Amount);
-        if (totalPaid >= debt.Amount)
+            await command();
+            TempData["Success"] = successMessage;
+        }
+        catch (FinanceException exception)
         {
-            debt.IsCollected = true;
-            debt.CollectedAt = DateTime.UtcNow;
-            debt.PaymentMethod = paymentMethod;
+            if (exception.Error == FinanceError.NotFound)
+                return NotFound();
+            TempData["Error"] = exception.Message;
         }
 
-        await _context.SaveChangesAsync();
-        TempData["Success"] = "Tahsilat eklendi.";
         return RedirectToAction(nameof(Index));
     }
+
+    private Guid ActorUserId() =>
+        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 }
