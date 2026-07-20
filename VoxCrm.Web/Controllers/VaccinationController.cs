@@ -13,8 +13,11 @@ public sealed class VaccinationController : Controller
 
     public VaccinationController(IVaccinationService service) => _service = service;
 
-    public async Task<IActionResult> Index(CancellationToken cancellationToken) =>
-        View(await _service.ListAsync(cancellationToken: cancellationToken));
+    public async Task<IActionResult> Index(bool includeArchived, CancellationToken cancellationToken)
+    {
+        ViewBag.IncludeArchived = includeArchived;
+        return View(await _service.ListAsync(includeArchived, cancellationToken));
+    }
 
     public async Task<IActionResult> Create(CancellationToken cancellationToken)
     {
@@ -93,7 +96,8 @@ public sealed class VaccinationController : Controller
     {
         var result = await _service.RestoreAsync(id, ActorUserId(), cancellationToken);
         if (result.NotFound) return NotFound();
-        return RedirectToAction(nameof(Index));
+        TempData["Success"] = "Aşı kaydı geri alındı.";
+        return RedirectToAction(nameof(Index), new { includeArchived = true });
     }
 
     private async Task SetChoicesAsync(CancellationToken cancellationToken)

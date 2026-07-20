@@ -316,8 +316,16 @@ public sealed class AppointmentService : IAppointmentService
         return includeArchived ? query : query.Where(appointment => appointment.IsActive);
     }
 
-    private static DateTime ToClinicLocal(DateTime utc, TimeZoneInfo timeZone) =>
-        TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), timeZone);
+    private static DateTime ToClinicLocal(DateTime utc, TimeZoneInfo timeZone)
+    {
+        var normalizedUtc = utc.Kind switch
+        {
+            DateTimeKind.Utc => utc,
+            DateTimeKind.Local => utc.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(utc, DateTimeKind.Utc)
+        };
+        return TimeZoneInfo.ConvertTimeFromUtc(normalizedUtc, timeZone);
+    }
 
     private static AppointmentCommandResult ConflictWarning() =>
         new(
