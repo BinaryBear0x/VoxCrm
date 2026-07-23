@@ -23,7 +23,9 @@ public sealed class ApiApplicationFactory : WebApplicationFactory<ApiProgram>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        builder
+            .UseEnvironment("Development")
+            .UseSetting("ConnectionStrings:DefaultConnection", _connectionString);
         builder.ConfigureAppConfiguration(configuration =>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
