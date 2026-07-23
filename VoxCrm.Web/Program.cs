@@ -103,15 +103,12 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-// HTTP bağlamını okumak için (TenantService kullanıyor)
 builder.Services.AddHttpContextAccessor();
-// BOLA koruması için aktif kliniği bulan servis
 builder.Services.AddScoped<VoxCrm.Domain.Common.ITenantService, VoxCrm.Web.Services.TenantService>();
 builder.Services.AddScoped<IClaimsTransformation, TenantClaimsTransformation>();
 builder.Services.AddVoxCrmApplication();
 builder.Services.AddVoxCrmWebApplication();
 
-// Veritabanı bağlantısı
 builder.Services.AddSingleton<IPiiProtector, AesGcmPiiProtector>();
 builder.Services.AddSingleton<PiiEncryptionInterceptor>();
 builder.Services.AddDbContext<VoxCrm.Infrastructure.Data.VoxCrmDbContext>((provider, options) =>
@@ -126,21 +123,14 @@ builder.Services.AddDbContext<VoxCrm.Infrastructure.Data.VoxCrmDbContext>((provi
 });
 builder.Services.AddVoxCrmWebInfrastructureServices();
 
-// ─── GÜVENLİK AÇIĞI #7 DÜZELTİLDİ: Şifre kuralları güçlendirildi ───────────
-// Neden? "123456" veya "aaaaaa" gibi tahmin edilmesi çok kolay şifreler
-// sistemi brute-force saldırısına açık bırakır.
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
 {
-    // En az 8 karakter, büyük harf, rakam VE özel karakter zorunlu.
     options.Password.RequireDigit           = true;
     options.Password.RequiredLength         = 8;
     options.Password.RequireNonAlphanumeric = true;
     options.Password.RequireUppercase       = true;
     options.Password.RequireLowercase       = true;
 
-    // ─── GÜVENLİK AÇIĞI #8 DÜZELTİLDİ: Brute-force (Kaba Kuvvet) koruması ──
-    // Neden? Lockout kapalıyken birisi şifrenizi saniyede 1000 kez deneyebilir.
-    // 5 yanlış denemeden sonra hesabı 10 dakika kilitleyerek bunu engelliyoruz.
     options.Lockout.AllowedForNewUsers  = true;
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.DefaultLockoutTimeSpan  = TimeSpan.FromMinutes(10);
@@ -148,7 +138,6 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
 .AddEntityFrameworkStores<VoxCrm.Infrastructure.Data.VoxCrmDbContext>()
 .AddDefaultTokenProviders();
 
-// Çerez (cookie) ayarları — kimlik doğrulama yolları
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath       = "/Auth/Login";
@@ -158,15 +147,14 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
         ? CookieSecurePolicy.SameAsRequest
         : CookieSecurePolicy.Always;
-    options.ExpireTimeSpan  = TimeSpan.FromHours(8); // 8 saatte bir yeniden giriş
-    options.SlidingExpiration = true; // Aktif kullanımda süre sıfırlanır
+    options.ExpireTimeSpan  = TimeSpan.FromHours(8);
+    options.SlidingExpiration = true;
 });
 builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
     options.TokenLifespan = TimeSpan.FromHours(24));
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
     options.ValidationInterval = TimeSpan.Zero);
 
-// Hangfire (zamanlanmış görevler)
 builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
@@ -187,9 +175,6 @@ if (args.Contains("--migrate-only", StringComparer.Ordinal))
     return;
 }
 
-// ─── ROLLER TOHUMU (Seed) — Uygulama ilk açıldığında rolleri oluştur ─────────
-// Neden? Rolleri elle veritabanına yazmak yerine kod garantisi veriyoruz.
-// "Dealer" rolü → bayi/admin. "Clinic" rolü → klinik personeli.
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<VoxCrm.Infrastructure.Data.VoxCrmDbContext>();
@@ -255,7 +240,7 @@ app.Use(async (context, next) =>
 });
 app.UseRouting();
 app.UseRateLimiter();
-app.UseAuthentication(); // Giriş yaptı mı?
+app.UseAuthentication();
 app.Use(async (context, next) =>
 {
     if (context.User.Identity?.IsAuthenticated == true
@@ -280,7 +265,7 @@ app.Use(async (context, next) =>
     }
     await next();
 });
-app.UseAuthorization();  // Bu sayfaya yetkisi var mı?
+app.UseAuthorization();
 
 
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
@@ -288,7 +273,6 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
     Authorization = new[] { new HangfireAuthFilter() }
 });
 
-// Günlük hatırlatma jobı
 RecurringJob.AddOrUpdate<VoxCrm.Infrastructure.Jobs.ReminderJob>(
     "daily-reminders",
     job => job.ProcessDailyRemindersAsync(),

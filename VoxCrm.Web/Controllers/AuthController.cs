@@ -12,16 +12,6 @@ using VoxCrm.Application.Audit;
 
 namespace VoxCrm.Web.Controllers;
 
-/// <summary>
-/// Giriş / Çıkış işlemleri.
-///
-/// TEMEL KAVRAMLAR:
-/// - Claim: Kullanıcının cookie'sine (çerezine) gömülen küçük veri parçaları.
-///   Örnek: "Bu kullanıcının ClinicId'si = abc-123" → artık her istekte
-///   veritabanına gitmeden bu bilgiyi okuyabiliyoruz.
-/// - Role: Kullanıcının sistemdeki rolü ("Dealer" veya "Clinic").
-///   Claim'den farkı: role, yetki kontrolü için özel olarak tasarlanmıştır.
-/// </summary>
 public class AuthController : Controller
 {
     private readonly SignInManager<ApplicationUser> _signInManager;
@@ -41,7 +31,6 @@ public class AuthController : Controller
         _audit = audit;
     }
 
-    // GET: /Auth/Login
     [EnableRateLimiting("authentication")]
     [HttpGet]
     public async Task<IActionResult> Login(string? returnUrl = null)
@@ -52,7 +41,6 @@ public class AuthController : Controller
             return View(); 
         }
 
-        // Zaten sağlıklı bir şekilde giriş yapmışsa direkt yönlendir, login sayfasını gösterme
         if (User.Identity?.IsAuthenticated == true)
             return RedirectToAction("Index", "Home");
 
@@ -60,7 +48,6 @@ public class AuthController : Controller
         return View();
     }
 
-    // POST: /Auth/Login
     [EnableRateLimiting("authentication")]
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Login(string email, string password, string? returnUrl = null)
@@ -80,7 +67,7 @@ public class AuthController : Controller
         var result = await _signInManager.PasswordSignInAsync(
             email, password,
             isPersistent: false,
-            lockoutOnFailure: true); // <<< KRİTİK DEĞİŞİKLİK
+            lockoutOnFailure: true);
 
         if (result.IsLockedOut)
         {
@@ -116,7 +103,6 @@ public class AuthController : Controller
             if (user.DealerId.HasValue)
                 additionalClaims.Add(new Claim("DealerId", user.DealerId.Value.ToString()));
 
-            // Claim'leri veritabanına ekle
             var existingClaims = await _userManager.GetClaimsAsync(user);
             var staleTenantClaims = existingClaims
                 .Where(c => c.Type is "ClinicId" or "DealerId")
@@ -127,12 +113,9 @@ public class AuthController : Controller
             if (additionalClaims.Any())
                 await _userManager.AddClaimsAsync(user, additionalClaims);
             
-            // Çerezi (cookie) anında yenile ki yeni claim'ler hemen aktif olsun
             await _signInManager.RefreshSignInAsync(user);
         }
 
-        // ─── ROL BAZLI YÖNLENDİRME ──────────────────────────────────────────
-        // Dealer → kendi paneline, Clinic kullanıcıları → klinik dashboarduna
         if (isSystemAdmin)
             return RedirectLocalOrDefault(returnUrl, "/hangfire");
 
@@ -142,7 +125,6 @@ public class AuthController : Controller
         return RedirectLocalOrDefault(returnUrl, "/");
     }
 
-    // POST: /Auth/Logout
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
@@ -357,7 +339,6 @@ public class AuthController : Controller
         });
     }
 
-    // GET: /Auth/AccessDenied
     public IActionResult AccessDenied() => View();
 
     private Task LogLoginFailureAsync(ApplicationUser? user, string action, string message) =>

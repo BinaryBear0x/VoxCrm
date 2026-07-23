@@ -9,12 +9,11 @@ namespace VoxCrm.Domain.Entities
 
     {
         public Guid ClinicID { get; set; }
-        public Guid PetOwnerId { get; set; } // Sahiplenen kişinin ID'si
-        public PetOwner PetOwner { get; set; } = null!; // Yazılımın kişiyi tanıması için bağlantı
-        public Guid PatientId { get; set; } // Sahiplenilen hayvanın ID'si
-        public Patient Patient { get; set; } = null!; // sistemin hayvanı tanıması için bağlantı
-        public bool IsPrimaryOwner { get; set; } = true; // Asıl sahibi mi? (Fatura kime kesilecek?)
+        public Guid PetOwnerId { get; set; }
+        public PetOwner PetOwner { get; set; } = null!;
+        public Guid PatientId { get; set; }
+        public Patient Patient { get; set; } = null!;
+        public bool IsPrimaryOwner { get; set; } = true;
     }
 }
-
 

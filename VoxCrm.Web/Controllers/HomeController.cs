@@ -6,8 +6,6 @@ using VoxCrm.Web.Models;
 
 namespace VoxCrm.Web.Controllers;
 
-// Dashboard her iki rol tarafından da görülebilir.
-// Ama View'da her rol kendi verilerini görür.
 [Authorize]
 public class HomeController : Controller
 {
@@ -17,7 +15,6 @@ public class HomeController : Controller
 
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
-        // Dealer kullanıcısı → kendi dashboarduna yönlendir
         if (User.IsInRole("Dealer"))
             return RedirectToAction("Index", "Dealer");
 
