@@ -10,10 +10,6 @@ using VoxCrm.Web.Services;
 
 namespace VoxCrm.Web.Controllers;
 
-/// <summary>
-/// Sadece Dealer (bayi/siz) kullanabilir.
-/// Klinik personeli bu sayfalara hiç erişemez.
-/// </summary>
 [Authorize(Roles = "Dealer")]
 public class DealerController : Controller
 {
@@ -31,24 +27,19 @@ public class DealerController : Controller
         _dealerLogService = dealerLogService;
     }
 
-    // GET: /Dealer — Tüm klinikler
     public async Task<IActionResult> Index()
     {
-        // Dealer, Global Query Filter dışındadır (Clinic entitysi değil)
-        // Bu yüzden tüm klinikleri görebilir — bu doğru davranış.
         if (!TryGetDealerId(out var dealerId)) return Forbid();
 
         var clinics = await _clinicManagementService.ListOwnedAsync(dealerId, HttpContext.RequestAborted);
         return View(clinics);
     }
 
-    // GET: /Dealer/Create
     public IActionResult Create()
     {
         return TryGetDealerId(out _) ? View(new CreateClinicViewModel()) : Forbid();
     }
 
-    // POST: /Dealer/Create
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(CreateClinicViewModel model)
     {
@@ -92,7 +83,6 @@ public class DealerController : Controller
         });
     }
 
-    // GET: /Dealer/Edit/{id}
     public async Task<IActionResult> Edit(Guid id)
     {
         if (!TryGetDealerId(out var dealerId)) return Forbid();
@@ -118,7 +108,6 @@ public class DealerController : Controller
         });
     }
 
-    // POST: /Dealer/Edit/{id}
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(Guid id, EditClinicViewModel model)
     {
@@ -149,7 +138,7 @@ public class DealerController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    // Eski URL korunuyor; işlem fiziksel silme değil pasifleştirmedir.
+    // Preserve the legacy endpoint while retaining soft-delete semantics.
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(Guid id)
     {

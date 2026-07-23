@@ -7,7 +7,7 @@ namespace VoxCrm.Domain.Entities
     {
         public Guid ClinicID { get; set; }
         
-        public string Name { get; set; } = string.Empty; // Örn: Kuduz Aşısı, Genel Muayene
+        public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public decimal Price { get; set; }
     }

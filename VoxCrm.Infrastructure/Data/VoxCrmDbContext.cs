@@ -9,13 +9,11 @@ using VoxCrm.Domain.Entities;
 
 namespace VoxCrm.Infrastructure.Data
 {
-    // Sistemdeki giriş (Login) ve rol tablolarını otomatik oluşturması için DbContext yerine IdentityDbContext kullanıyoruz
     public class VoxCrmDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>
     {
 
         private readonly ITenantService? _tenantService;
 
-        // EF Core araçları (Migration vb) için boş constructor veya ITenantService'i opsiyonel (?) yapıyoruz
         public VoxCrmDbContext(DbContextOptions<VoxCrmDbContext> options, ITenantService? tenantService = null) : base(options)
         {
             _tenantService = tenantService;
@@ -40,7 +38,7 @@ namespace VoxCrm.Infrastructure.Data
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
-            base.OnModelCreating(builder); // Identity tablolarının (Kullanıcı, Rol) düzgün oluşması için şart!
+            base.OnModelCreating(builder);
             builder.ApplyConfigurationsFromAssembly(typeof(VoxCrmDbContext).Assembly);
 
             builder.Entity<PetOwner>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);

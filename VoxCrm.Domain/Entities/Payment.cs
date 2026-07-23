@@ -12,9 +12,9 @@ namespace VoxCrm.Domain.Entities
         public Debt Debt { get; set; } = null!;
 
         public PaymentEntryType EntryType { get; set; } = PaymentEntryType.Payment;
-        public decimal Amount { get; set; } // Ödenen miktar
+        public decimal Amount { get; set; }
         public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
-        public string PaymentMethod { get; set; } = string.Empty; // Nakit, Kredi Kartı vb.
+        public string PaymentMethod { get; set; } = string.Empty;
 
         public Guid? ReversesPaymentId { get; set; }
         [ForeignKey(nameof(ReversesPaymentId))]
@@ -25,7 +25,6 @@ namespace VoxCrm.Domain.Entities
         public string? Reason { get; set; }
         public Guid? ActorUserId { get; set; }
 
-        // Ödemeyi yapan kişi genelde borcun sahibidir ama not düşmek istenebilir.
         public string? Notes { get; set; }
     }
 }

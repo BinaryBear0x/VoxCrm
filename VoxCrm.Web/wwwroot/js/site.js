@@ -31,23 +31,20 @@
     };
   };
 
-  // ── Auto-search: fetch partial table, no full page reload ──────────────────
   document.querySelectorAll("[data-auto-search]").forEach((input) => {
     const form = input.closest("form");
     if (!form) return;
 
     const tableWrapper = document.querySelector("[data-search-table]");
 
-    // If there's a partial-capable table container, use fetch approach
     if (tableWrapper) {
-      const partialUrl = tableWrapper.dataset.searchTable; // e.g. "/Patient?partial=true"
+      const partialUrl = tableWrapper.dataset.searchTable;
 
       const doSearch = debounce(async () => {
         const value = input.value;
         const url = new URL(partialUrl, window.location.origin);
         url.searchParams.set("search", value);
 
-        // Update browser URL without reload
         const historyUrl = new URL(form.action || window.location.href, window.location.origin);
         historyUrl.searchParams.set("search", value);
         if (!value) historyUrl.searchParams.delete("search");
@@ -60,16 +57,14 @@
           if (!res.ok) return;
           const html = await res.text();
           tableWrapper.innerHTML = html;
-          // Re-initialize delete confirm buttons inside the fresh HTML
           wireSecurityActions(tableWrapper);
         } catch {
-          // silently ignore network errors
+          // Search remains usable through the next input or full form submission.
         }
       }, 500);
 
       input.addEventListener("input", doSearch);
 
-      // Also keep clear button visible/hidden
       const clearBtn = form.querySelector("[data-search-clear]");
       if (clearBtn) {
         input.addEventListener("input", () => {
@@ -77,7 +72,6 @@
         });
       }
     } else {
-      // Fallback: classic form submit with increased debounce
       let lastValue = input.value;
       input.addEventListener("input", debounce(() => {
         if (input.value === lastValue) return;
@@ -87,7 +81,6 @@
     }
   });
 
-  // ── Search-select widget ───────────────────────────────────────────────────
   const endpointByType = {
     patient: "/Patient/Search",
     owner: "/PetOwner/Search"

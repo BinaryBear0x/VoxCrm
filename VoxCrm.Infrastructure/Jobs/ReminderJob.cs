@@ -7,12 +7,10 @@ namespace VoxCrm.Infrastructure.Jobs
     public class ReminderJob
     {
         private readonly VoxCrmDbContext _context;
-        // Veritabanına bağlanmak için kurucu metot (Dependency Injection)
         public ReminderJob(VoxCrmDbContext context)
         {
             _context = context;
         }
-        // Bu metot Hangfire tarafından her gece saat 00:00'da tetiklenecek
         public async Task ProcessDailyRemindersAsync()
         {
             var today = DateTime.UtcNow.Date;

@@ -14,7 +14,6 @@ namespace VoxCrm.Web.Services
 
         public Guid GetClinicId()
         {
-            // Giriş yapan kullanıcının Claim'lerinden (Çerez/Token) ClinicId'sini okuyoruz
             var clinicIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst("ClinicId")?.Value;
             
             if (Guid.TryParse(clinicIdClaim, out Guid clinicId))
@@ -22,7 +21,6 @@ namespace VoxCrm.Web.Services
                 return clinicId;
             }
 
-            // Geliştirme/Migration aşaması veya henüz giriş yapılmamışsa boş Guid döner
             return Guid.Empty;
         }
 
