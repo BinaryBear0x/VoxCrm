@@ -107,7 +107,7 @@ public class SystemHealthService
             ?? _environment.IsDevelopment();
         if (!dockerEnabled)
         {
-            model.ContainerStatusError = "Güvenlik nedeniyle web uygulamasına Docker socket erişimi verilmemiştir. Servisler host monitor ve Telegram alarmlarıyla izlenir.";
+            model.Containers = BuildSafeServiceStatus(model);
             return;
         }
 
@@ -150,6 +150,36 @@ public class SystemHealthService
         {
             model.ContainerStatusError = ex.Message;
         }
+    }
+
+    private static IReadOnlyList<ContainerStatusItem> BuildSafeServiceStatus(DealerHealthViewModel model)
+    {
+        static ContainerStatusItem Item(string name, string? health)
+        {
+            var healthy = string.Equals(health, "ok", StringComparison.OrdinalIgnoreCase);
+            return new ContainerStatusItem
+            {
+                Name = name,
+                Image = "Yönetilen production servisi",
+                State = healthy ? "running" : "degraded",
+                Status = healthy ? "healthy" : health ?? "unknown",
+                Ports = "private"
+            };
+        }
+
+        var workerStatus = model.GatewayHealth?.Worker is JsonElement worker
+            && worker.TryGetProperty("status", out var status)
+                ? status.GetString()
+                : null;
+
+        return new[]
+        {
+            Item("VoxCrm.Web", model.WebStatus),
+            Item("PostgreSQL", model.DatabaseStatus),
+            Item("VoxCrm.Api", model.VoxCrmApiStatus),
+            Item("WhatsApp Gateway", model.GatewayHealth?.Status),
+            Item("WhatsApp Worker", workerStatus)
+        };
     }
 
     private static IReadOnlyList<ContainerStatusItem> ParseDockerPs(string output)

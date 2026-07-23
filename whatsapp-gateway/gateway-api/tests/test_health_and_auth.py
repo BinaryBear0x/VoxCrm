@@ -73,6 +73,37 @@ async def test_health_is_degraded_when_worker_fails(client, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_internal_health_requires_scope_and_returns_operational_details(
+    client, test_database, monkeypatch
+):
+    from app.main import worker_client
+
+    async def ok_health():
+        return {"status": "ok", "service": "wa-worker", "sessions": 1}
+
+    monkeypatch.setattr(worker_client, "health", ok_health)
+
+    unauthenticated = await client.get("/api/internal/health")
+    wrong_scope = await client.get(
+        "/api/internal/health",
+        headers={"Authorization": f"Bearer {gateway_token('whatsapp.session.read')}"},
+    )
+    authorized = await client.get(
+        "/api/internal/health",
+        headers={"Authorization": f"Bearer {gateway_token('whatsapp.health.read')}"},
+    )
+
+    assert unauthenticated.status_code == 401
+    assert wrong_scope.status_code == 403
+    assert authorized.status_code == 200
+    body = authorized.json()
+    assert body["status"] == "ok"
+    assert body["worker"]["service"] == "wa-worker"
+    assert "database" in body
+    assert "readyClinicCount" in body
+
+
+@pytest.mark.asyncio
 async def test_clinic_status_metrics_are_scoped_by_clinic(client, test_database, monkeypatch):
     clinic_a = uuid.uuid4()
     clinic_b = uuid.uuid4()

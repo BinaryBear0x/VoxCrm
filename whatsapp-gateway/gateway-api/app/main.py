@@ -55,6 +55,28 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict:
     }
 
 
+@app.get("/api/internal/health")
+async def internal_health(
+    _principal: GatewayPrincipal = Depends(require_scope("whatsapp.health.read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    worker = None
+    worker_ok = True
+    try:
+        worker = await worker_client.health()
+    except Exception as exc:  # noqa: BLE001
+        worker_ok = False
+        worker = {"status": "error", "error": type(exc).__name__}
+
+    metrics = await global_metrics(session)
+    return {
+        "status": "ok" if worker_ok and metrics["database"] == "ok" else "degraded",
+        "service": "gateway-api",
+        "worker": worker,
+        **metrics,
+    }
+
+
 @app.post(
     "/api/clinics/{clinic_id}/whatsapp/connect",
 )

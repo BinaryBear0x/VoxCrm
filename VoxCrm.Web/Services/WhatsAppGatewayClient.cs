@@ -29,7 +29,7 @@ public class WhatsAppGatewayClient
 
     public Task<GatewayHealthResponse?> GetHealthAsync(CancellationToken cancellationToken = default)
     {
-        return SendAsync<GatewayHealthResponse>(HttpMethod.Get, "/api/health", "whatsapp.session.read", null, cancellationToken);
+        return SendAsync<GatewayHealthResponse>(HttpMethod.Get, "/api/internal/health", "whatsapp.health.read", null, cancellationToken);
     }
 
     public Task ConnectAsync(Guid clinicId, CancellationToken cancellationToken = default)
