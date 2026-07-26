@@ -139,11 +139,14 @@
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="clinicId" value="@Model.Clinic.ID" />
                         <button type="submit" class="btn btn-success btn-sm w-100"
-                                @(Model.SessionStatus?.Status == "ready" ? "" : "disabled")>
+                                data-wa-send-button
+                                @(sessionStatus == "ready" ? "" : "disabled")>
                             <i class="bi bi-phone me-1"></i>
-                            @(Model.SessionStatus?.Status == "ready"
-                                ? "Kendime Test Mesajı Gönder"
-                                : "Bağlantı gerekli (ready)")
+                            <span data-wa-send-label
+                                  data-ready-label="Kendime Test Mesajı Gönder"
+                                  data-waiting-label="Bağlantı gerekli (ready)">@(sessionStatus == "ready"
+                                    ? "Kendime Test Mesajı Gönder"
+                                    : "Bağlantı gerekli (ready)")</span>
                         </button>
                     </form>
                 </div>
@@ -173,11 +176,14 @@
                             </div>
                         </div>
                         <button type="submit" class="btn btn-primary btn-sm w-100"
-                                @(Model.SessionStatus?.Status == "ready" ? "" : "disabled")>
+                                data-wa-send-button
+                                @(sessionStatus == "ready" ? "" : "disabled")>
                             <i class="bi bi-send me-1"></i>
-                            @(Model.SessionStatus?.Status == "ready"
-                                ? "Gönder"
-                                : "Bağlantı gerekli (ready)")
+                            <span data-wa-send-label
+                                  data-ready-label="Gönder"
+                                  data-waiting-label="Bağlantı gerekli (ready)">@(sessionStatus == "ready"
+                                    ? "Gönder"
+                                    : "Bağlantı gerekli (ready)")</span>
                         </button>
                     </form>
                 </div>
@@ -309,6 +315,7 @@
             const statusText = document.querySelector('[data-wa-qr-status]');
             const errorBox = document.querySelector('[data-wa-qr-error]');
             const statusBadge = document.querySelector('[data-wa-status-badge]');
+            const sendButtons = document.querySelectorAll('[data-wa-send-button]');
             let enabledToastShown = false;
 
             const showElement = (element) => element?.classList.remove('d-none');
@@ -342,6 +349,18 @@
                 } else {
                     statusBadge.classList.add('bg-secondary');
                 }
+            };
+
+            const setSendControlsReady = (isReady) => {
+                sendButtons.forEach((button) => {
+                    button.disabled = !isReady;
+                    const label = button.querySelector('[data-wa-send-label]');
+                    if (label) {
+                        label.textContent = isReady
+                            ? label.dataset.readyLabel
+                            : label.dataset.waitingLabel;
+                    }
+                });
             };
 
             const showError = (message) => {
@@ -394,6 +413,7 @@
 
                     hideElement(errorBox);
                     setBadge(payload.status);
+                    setSendControlsReady(payload.status === 'ready');
 
                     if (payload.qr && image) {
                         image.src = payload.qr;

@@ -71,6 +71,8 @@ public sealed class ArchitectureTests
         Assert.Contains("SendManual", controller, StringComparison.Ordinal);
         Assert.Contains("/WhatsApp/SendManual", view, StringComparison.Ordinal);
         Assert.Contains("Manuel Bildirim Gönder", view, StringComparison.Ordinal);
+        Assert.Contains("data-wa-send-button", view, StringComparison.Ordinal);
+        Assert.Contains("setSendControlsReady(payload.status === 'ready')", view, StringComparison.Ordinal);
     }
 
     [Fact]
