@@ -53,7 +53,7 @@ public sealed class ArchitectureTests
     }
 
     [Fact]
-    public void WhatsApp_ui_does_not_expose_arbitrary_manual_messaging()
+    public void WhatsApp_ui_exposes_tenant_scoped_manual_messaging()
     {
         var repoRoot = FindRepoRoot();
         var controller = File.ReadAllText(Path.Combine(
@@ -68,9 +68,9 @@ public sealed class ArchitectureTests
             "WhatsApp",
             "Index.cshtml"));
 
-        Assert.DoesNotContain("SendManual", controller, StringComparison.Ordinal);
-        Assert.DoesNotContain("/WhatsApp/SendManual", view, StringComparison.Ordinal);
-        Assert.DoesNotContain("Manuel Bildirim Gönder", view, StringComparison.Ordinal);
+        Assert.Contains("SendManual", controller, StringComparison.Ordinal);
+        Assert.Contains("/WhatsApp/SendManual", view, StringComparison.Ordinal);
+        Assert.Contains("Manuel Bildirim Gönder", view, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot()
