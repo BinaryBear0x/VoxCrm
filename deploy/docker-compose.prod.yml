@@ -115,6 +115,8 @@ services:
       WORKER_BASE_URL: http://wa-worker:8090
       VOXCRM_API_BASE_URL: http://api:8080
       WHATSAPP_JWT_SECRET: ${WhatsAppGateway__JwtSecret}
+      PER_CLINIC_SEND_INTERVAL_SECONDS: ${WHATSAPP_SEND_INTERVAL_SECONDS:-60}
+      PER_CLINIC_JITTER_SECONDS: ${WHATSAPP_SEND_JITTER_SECONDS:-15}
     command: ["alembic", "-c", "alembic.ini", "upgrade", "head"]
     volumes:
       - ${VOXCRM_PII_KEY_FILE:-/etc/voxcrm/secrets/pii.key}:/run/secrets/pii.key:ro

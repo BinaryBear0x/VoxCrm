@@ -28,8 +28,8 @@ class Settings(BaseSettings):
 
     poll_interval_seconds: int = 10
     default_batch_size: int = 10
-    per_clinic_send_interval_seconds: int = 10
-    per_clinic_jitter_seconds: int = 2
+    per_clinic_send_interval_seconds: int = 60
+    per_clinic_jitter_seconds: int = 15
     max_retry_count: int = 3
 
     def validate_runtime(self) -> None:
@@ -40,6 +40,12 @@ class Settings(BaseSettings):
                 raise RuntimeError("WORKER_INTERNAL_TOKEN must be changed in production.")
             if not self.pii_encryption_key_file:
                 raise RuntimeError("PII_ENCRYPTION_KEY_FILE must be configured in production.")
+            if self.per_clinic_send_interval_seconds < 30:
+                raise RuntimeError("PER_CLINIC_SEND_INTERVAL_SECONDS must be at least 30 in production.")
+            if not 0 <= self.per_clinic_jitter_seconds < self.per_clinic_send_interval_seconds:
+                raise RuntimeError(
+                    "PER_CLINIC_JITTER_SECONDS must be non-negative and lower than the send interval."
+                )
 
 
 settings = Settings()

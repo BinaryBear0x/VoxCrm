@@ -46,13 +46,19 @@ namespace VoxCrm.Infrastructure.Jobs
 
             foreach (var record in dueVaccines)
             {
+                if (!clinics.TryGetValue(record.ClinicID, out var clinic)
+                    || !clinic.IsActive
+                    || !clinic.IsWhatsAppEnabled)
+                {
+                    continue;
+                }
+
                 var primaryOwner = record.Patient.Owners.FirstOrDefault(o => o.IsPrimaryOwner)?.PetOwner;
 
                 if (primaryOwner != null
                     && primaryOwner.WhatsAppConsent
                     && !string.IsNullOrWhiteSpace(primaryOwner.Phone))
                 {
-                    clinics.TryGetValue(record.ClinicID, out var clinic);
                     templates.TryGetValue(record.ClinicID, out var template);
 
                     var notification = new WhatsAppNotification

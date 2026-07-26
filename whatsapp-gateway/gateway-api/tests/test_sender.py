@@ -130,6 +130,39 @@ async def test_startup_marks_stale_sending_as_needs_review(test_database, monkey
 
 
 @pytest.mark.asyncio
+async def test_startup_marks_stale_sent_locally_as_needs_review(test_database, monkeypatch):
+    from app import sender
+
+    reports = []
+    notification_id = uuid.uuid4()
+    async with test_database() as session:
+        session.add(
+            OutboundMessage(
+                voxcrm_notification_id=notification_id,
+                clinic_id=uuid.uuid4(),
+                phone_number="+905551111111",
+                message_content="sent but not acknowledged",
+                state="SentLocally",
+            )
+        )
+        await session.commit()
+
+    async def report_status(*args, **kwargs):
+        reports.append((args, kwargs))
+
+    monkeypatch.setattr(sender.voxcrm_client, "report_status", report_status)
+
+    await sender.mark_stale_sending_as_needs_review()
+
+    async with test_database() as session:
+        outbound = await find_outbound(session, notification_id)
+
+    assert outbound is not None
+    assert outbound.state == "NeedsReview"
+    assert reports[0][0][1] == "NeedsReview"
+
+
+@pytest.mark.asyncio
 async def test_per_clinic_rate_limit_waits_only_for_the_same_clinic(monkeypatch):
     from app import sender
 
@@ -139,11 +172,15 @@ async def test_per_clinic_rate_limit_waits_only_for_the_same_clinic(monkeypatch)
     monkeypatch.setattr(sender.settings, "per_clinic_send_interval_seconds", 10)
     monkeypatch.setattr(sender.settings, "per_clinic_jitter_seconds", 0)
 
+    async def no_persisted_send(_clinic_id):
+        return None
+
     sleeps = []
 
     async def fake_sleep(seconds):
         sleeps.append(seconds)
 
+    monkeypatch.setattr(sender, "get_last_send_at", no_persisted_send)
     monkeypatch.setattr(sender.asyncio, "sleep", fake_sleep)
 
     await sender.wait_for_clinic_rate_limit(clinic_b)
@@ -152,6 +189,39 @@ async def test_per_clinic_rate_limit_waits_only_for_the_same_clinic(monkeypatch)
     await sender.wait_for_clinic_rate_limit(clinic_a)
     assert len(sleeps) == 1
     assert sleeps[0] > 0
+
+
+@pytest.mark.asyncio
+async def test_per_clinic_rate_limit_survives_gateway_restart(test_database, monkeypatch):
+    from app import sender
+
+    clinic_id = uuid.uuid4()
+    async with test_database() as session:
+        session.add(
+            OutboundMessage(
+                voxcrm_notification_id=uuid.uuid4(),
+                clinic_id=clinic_id,
+                phone_number="+905551111111",
+                message_content="already sent",
+                state="Sent",
+            )
+        )
+        await session.commit()
+
+    sender._last_send_by_clinic.clear()
+    monkeypatch.setattr(sender.settings, "per_clinic_send_interval_seconds", 60)
+    monkeypatch.setattr(sender.settings, "per_clinic_jitter_seconds", 0)
+    sleeps = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(sender.asyncio, "sleep", fake_sleep)
+
+    await sender.wait_for_clinic_rate_limit(clinic_id)
+
+    assert len(sleeps) == 1
+    assert 0 < sleeps[0] <= 61
 
 
 def notification(notification_id: uuid.UUID, clinic_id: uuid.UUID) -> dict:

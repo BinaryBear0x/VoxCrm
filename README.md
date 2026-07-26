@@ -323,6 +323,86 @@ npm run dev
 
 Tarayıcıda `VoxCrm.Web > WhatsApp` menüsünden kliniğe ait "Bağla" düğmesine tıklayarak QR kod taranır. QR kodunu wa-worker üretir, gateway-api aracılığıyla Web'e iletilir.
 
+### WhatsApp kapsamı, mesai saati ve gönderim aralığı
+
+Otomatik outbound kapsamı yalnız `VaccinationReminder` tipindeki aşı süresi
+hatırlatmalarıdır. Randevu hatırlatması üretilmez. Hangfire `daily-reminders` işi,
+hatırlatma günü gelen aşı kaydını yalnız şu şartların tamamında kuyruğa alır:
+
+- klinik aktif ve WhatsApp gönderimi açık;
+- birincil sahipte geçerli telefon numarası var;
+- sahip için WhatsApp izni kaydedilmiş;
+- aşı kaydı daha önce hatırlatılmış değil.
+
+Klinik gönderim penceresi varsayılan olarak `09:00-19:00 Europe/Istanbul` değeridir ve
+Dealer klinik düzenleme ekranından değiştirilebilir. Pencere dışındaki mesaj silinmez;
+sonraki pencere başlangıcına ertelenir. Aynı kliniğin mesajları production'da varsayılan
+olarak `60 ± 15 saniye` arayla gönderilir. Son gönderim zamanı gateway PostgreSQL
+veritabanından okunduğu için container restart sonrasında da aralık korunur.
+
+Production aralığı gerektiğinde `/etc/voxcrm/secrets/production.env` içinde artırılabilir:
+
+```dotenv
+WHATSAPP_SEND_INTERVAL_SECONDS=60
+WHATSAPP_SEND_JITTER_SECONDS=15
+```
+
+Production'da aralık 30 saniyenin altına indirilemez. Bu mekanizma spam veya ban
+garantisi sağlamaz; yalnız kontrollü kuyruk tüketimi sağlar.
+
+### WhatsApp test prosedürü
+
+Gerçek müşterilere mesaj göndermeden önce dört aşamalı kontrol uygulanır:
+
+1. Kod ve sahte sağlayıcı testleri:
+
+   ```bash
+   ./whatsapp-gateway/scripts/test-all.sh
+   dotnet test VoxCrm.slnx --no-restore
+   cd whatsapp-gateway/wa-worker
+   npm audit --omit=dev
+   ```
+
+2. İzole test kliniği:
+
+   - yalnız size ait test numarasını ve test hayvanını kullanın;
+   - WhatsApp iznini açıkça işaretleyin;
+   - test aşısının `NextDueDate` değerini, aşı tipindeki
+     `ReminderDaysBefore` kadar ileri ayarlayın;
+   - Hangfire panelinden yalnız `daily-reminders` işini bir kez çalıştırın;
+   - tek bir `VaccinationReminder/Pending` kaydı oluştuğunu doğrulayın;
+   - aynı işi yeniden çalıştırıp ikinci kayıt oluşmadığını doğrulayın.
+
+3. Zamanlama testi:
+
+   - gönderim penceresini test sırasında kısa ve kontrollü bir aralığa ayarlayın;
+   - pencere dışında kaydın `Pending` kaldığını ve `NextAttemptAt` değerinin sonraki
+     pencere başlangıcına taşındığını doğrulayın;
+   - iki test aşısı oluşturup gateway loglarındaki başarılı gönderimler arasında
+     en az yapılandırılmış eksi jitter kadar süre bulunduğunu doğrulayın;
+   - gateway container'ını yeniden başlatıp aralığın korunmasını kontrol edin.
+
+4. Canary gerçek mesaj:
+
+   - önce bağlı numaraya tek test mesajı gönderin;
+   - sonra önceden izin vermiş ikinci bir test numarasına tek aşı hatırlatması gönderin;
+   - uygulamada `Sent`, gateway'de provider message ID ve telefonda tek teslim
+     doğrulanmadan toplu kullanıma geçmeyin;
+   - `Failed` veya `NeedsReview` kaydını körlemesine tekrar göndermeyin.
+
+Production kontrol komutları:
+
+```bash
+docker compose --env-file /etc/voxcrm/secrets/production.env \
+  -f deploy/docker-compose.prod.yml ps
+docker compose --env-file /etc/voxcrm/secrets/production.env \
+  -f deploy/docker-compose.prod.yml logs --since=30m gateway-api wa-worker
+sudo journalctl -u voxcrm-monitor.service -n 100 --no-pager
+```
+
+Test boyunca gerçek hasta verisi kullanılmaz. İzin kaydı olmayan numara, rastgele numara
+listesi veya aynı mesajın hızlı tekrarlarıyla test yapılmaz.
+
 ---
 
 ## Yedekleme

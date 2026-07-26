@@ -21,12 +21,14 @@ _last_send_by_clinic: dict[uuid.UUID, datetime] = {}
 async def mark_stale_sending_as_needs_review() -> None:
     async with SessionLocal() as session:
         result = await session.execute(
-            select(OutboundMessage).where(OutboundMessage.state == "Sending")
+            select(OutboundMessage).where(
+                OutboundMessage.state.in_(("Sending", "SentLocally"))
+            )
         )
         messages = result.scalars().all()
         for message in messages:
             message.state = "NeedsReview"
-            message.last_error = "Gateway restarted while message was in Sending state."
+            message.last_error = "Gateway restarted before the final delivery state was acknowledged."
             await voxcrm_client.report_status(
                 message.voxcrm_notification_id,
                 "NeedsReview",
@@ -264,7 +266,10 @@ def next_send_sort_key(notification: dict) -> datetime:
 
 
 async def wait_for_clinic_rate_limit(clinic_id: uuid.UUID) -> None:
-    last_send = _last_send_by_clinic.get(clinic_id)
+    memory_last_send = _last_send_by_clinic.get(clinic_id)
+    persisted_last_send = await get_last_send_at(clinic_id)
+    candidates = [value for value in (memory_last_send, persisted_last_send) if value is not None]
+    last_send = max(candidates) if candidates else None
     if last_send is None:
         return
 
@@ -274,3 +279,21 @@ async def wait_for_clinic_rate_limit(clinic_id: uuid.UUID) -> None:
     wait_seconds = (next_allowed - datetime.now(timezone.utc)).total_seconds()
     if wait_seconds > 0:
         await asyncio.sleep(wait_seconds)
+
+
+async def get_last_send_at(clinic_id: uuid.UUID) -> datetime | None:
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(OutboundMessage.updated_at)
+            .where(
+                OutboundMessage.clinic_id == clinic_id,
+                OutboundMessage.state.in_(("SentLocally", "Sent")),
+            )
+            .order_by(OutboundMessage.updated_at.desc())
+            .limit(1)
+        )
+        last_send = result.scalar_one_or_none()
+
+    if last_send is None or last_send.tzinfo is not None:
+        return last_send
+    return last_send.replace(tzinfo=timezone.utc)

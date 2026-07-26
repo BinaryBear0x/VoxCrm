@@ -52,6 +52,27 @@ public sealed class ArchitectureTests
         Assert.Contains("RedirectToAction(\"Create\", \"Dealer\")", whatsAppController, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void WhatsApp_ui_does_not_expose_arbitrary_manual_messaging()
+    {
+        var repoRoot = FindRepoRoot();
+        var controller = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "VoxCrm.Web",
+            "Controllers",
+            "WhatsAppController.cs"));
+        var view = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "VoxCrm.Web",
+            "Views",
+            "WhatsApp",
+            "Index.cshtml"));
+
+        Assert.DoesNotContain("SendManual", controller, StringComparison.Ordinal);
+        Assert.DoesNotContain("/WhatsApp/SendManual", view, StringComparison.Ordinal);
+        Assert.DoesNotContain("Manuel Bildirim Gönder", view, StringComparison.Ordinal);
+    }
+
     private static string FindRepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

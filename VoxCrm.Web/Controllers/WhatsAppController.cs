@@ -287,63 +287,6 @@ public class WhatsAppController : Controller
         return RedirectToAction(nameof(Index), new { clinicId });
     }
 
-    /// <summary>Belirtilen numara ve mesajla manuel bildirim gönderir.</summary>
-    [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> SendManual(Guid clinicId, string phone, string message, CancellationToken cancellationToken)
-    {
-        var clinic = await ResolveClinicAsync(clinicId, cancellationToken);
-        if (clinic == null) return Forbid();
-
-        if (string.IsNullOrWhiteSpace(phone) || string.IsNullOrWhiteSpace(message))
-        {
-            TempData["Error"] = "Telefon numarası ve mesaj alanları boş bırakılamaz.";
-            return RedirectToAction(nameof(Index), new { clinicId });
-        }
-
-        GatewaySessionStatus? status;
-        try { status = await _gatewayClient.GetStatusAsync(clinic.ID, cancellationToken); }
-        catch (HttpRequestException ex)
-        {
-            TempData["Error"] = $"Gateway çalışmıyor veya ulaşılamıyor: {ex.Message}";
-            return RedirectToAction(nameof(Index), new { clinicId });
-        }
-
-        if (status?.Status != "ready")
-        {
-            TempData["Error"] = "Manuel mesaj göndermek için WhatsApp oturumunun bağlı (ready) olması gerekiyor.";
-            return RedirectToAction(nameof(Index), new { clinicId });
-        }
-
-        await EnsureWhatsAppEnabledAsync(clinic, cancellationToken);
-
-        var normalizedPhone = NormalizeWhatsAppPhone(phone);
-        if (string.IsNullOrWhiteSpace(normalizedPhone))
-        {
-            TempData["Error"] = "Telefon numarası geçerli değil.";
-            return RedirectToAction(nameof(Index), new { clinicId });
-        }
-
-        var owner = await GetOrCreateAnonymousOwnerAsync(clinic.ID, normalizedPhone, cancellationToken);
-        var nextAttemptAt = GetNextAttemptAtWithToast(clinic);
-
-        var notification = new WhatsAppNotification
-        {
-            ClinicID = clinic.ID,
-            PetOwnerId = owner.ID,
-            PhoneNumber = normalizedPhone,
-            MessageContent = message.Trim(),
-            NotificationType = WhatsAppNotificationTypes.ManualMessage,
-            Status = WhatsAppNotificationStatuses.Pending,
-            NextAttemptAt = nextAttemptAt
-        };
-
-        _context.WhatsAppNotifications.Add(notification);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        TempData["Success"] = $"Mesaj sıraya alındı ({normalizedPhone}).";
-        return RedirectToAction(nameof(Index), new { clinicId });
-    }
-
     private DateTime GetNextAttemptAtWithToast(Clinic clinic)
     {
         var now = DateTime.UtcNow;
@@ -405,12 +348,12 @@ public class WhatsAppController : Controller
         var newOwner = new PetOwner
         {
             ClinicID = clinicId,
-            FirstName = "Manuel",
+            FirstName = "WhatsApp",
             LastName = "Kayıt",
             Phone = phone,
             NormalizedPhone = phoneLookup,
             WhatsAppConsent = true,
-            Notes = "Manuel mesaj gönderimi için otomatik oluşturuldu."
+            Notes = "Bağlantı testi için otomatik oluşturuldu."
         };
         _context.PetOwners.Add(newOwner);
         await _context.SaveChangesAsync(cancellationToken);

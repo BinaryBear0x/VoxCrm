@@ -20,5 +20,10 @@
   "devDependencies": {
     "supertest": "^7.1.4",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "body-parser": "1.20.6",
+    "postcss": "8.5.18",
+    "protobufjs": "7.6.5"
   }
 }
