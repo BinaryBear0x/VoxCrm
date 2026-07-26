@@ -89,6 +89,20 @@ public sealed class ArchitectureTests
         Assert.Contains("  egress: {}", compose, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void WhatsApp_claim_decrypts_raw_sql_pii_before_leaving_the_api()
+    {
+        var repoRoot = FindRepoRoot();
+        var repository = File.ReadAllText(Path.Combine(
+            repoRoot,
+            "VoxCrm.Infrastructure",
+            "WhatsApp",
+            "WhatsAppNotificationRepository.cs"));
+
+        Assert.Contains("_protector.Unprotect(reader.GetString(3))", repository, StringComparison.Ordinal);
+        Assert.Contains("_protector.Unprotect(reader.GetString(4))", repository, StringComparison.Ordinal);
+    }
+
     private static string FindRepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

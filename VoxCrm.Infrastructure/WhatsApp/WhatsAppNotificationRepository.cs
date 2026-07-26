@@ -5,16 +5,19 @@ using Microsoft.EntityFrameworkCore.Storage;
 using VoxCrm.Application.WhatsApp;
 using VoxCrm.Domain.Entities;
 using VoxCrm.Infrastructure.Data;
+using VoxCrm.Infrastructure.Security;
 
 namespace VoxCrm.Infrastructure.WhatsApp;
 
 public sealed class WhatsAppNotificationRepository : IWhatsAppNotificationRepository
 {
     private readonly VoxCrmDbContext _context;
+    private readonly IPiiProtector _protector;
 
-    public WhatsAppNotificationRepository(VoxCrmDbContext context)
+    public WhatsAppNotificationRepository(VoxCrmDbContext context, IPiiProtector protector)
     {
         _context = context;
+        _protector = protector;
     }
 
     public async Task<IReadOnlyList<ClinicSendWindowInfo>> GetClinicSendWindowsAsync(
@@ -220,8 +223,10 @@ RETURNING n."ID", n."ClinicID", n."PetOwnerId", n."PhoneNumber", n."MessageConte
                 reader.GetGuid(0),
                 reader.GetGuid(1),
                 reader.GetGuid(2),
-                reader.GetString(3),
-                reader.GetString(4),
+                _protector.Unprotect(reader.GetString(3))
+                    ?? throw new InvalidOperationException("Claimed WhatsApp phone number could not be decrypted."),
+                _protector.Unprotect(reader.GetString(4))
+                    ?? throw new InvalidOperationException("Claimed WhatsApp message could not be decrypted."),
                 reader.GetString(5),
                 reader.GetInt32(6)));
         }

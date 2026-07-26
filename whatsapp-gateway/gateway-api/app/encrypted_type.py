@@ -2,6 +2,7 @@ import base64
 import os
 from functools import lru_cache
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import Text
 from sqlalchemy.types import TypeDecorator
@@ -27,8 +28,10 @@ class EncryptedText(TypeDecorator):
 
     def process_bind_param(self, value, dialect):
         key = _key()
-        if value is None or not key or str(value).startswith(PREFIX):
+        if value is None or not key:
             return value
+        if str(value).startswith(PREFIX):
+            value = self.process_result_value(value, dialect)
         nonce = os.urandom(12)
         encrypted = AESGCM(key).encrypt(nonce, str(value).encode("utf-8"), None)
         return PREFIX + base64.b64encode(nonce + encrypted).decode("ascii")
@@ -38,4 +41,17 @@ class EncryptedText(TypeDecorator):
         if value is None or not key or not str(value).startswith(PREFIX):
             return value
         payload = base64.b64decode(str(value)[len(PREFIX):], validate=True)
-        return AESGCM(key).decrypt(payload[:12], payload[12:], None).decode("utf-8")
+        if len(payload) < 29:
+            raise ValueError("Encrypted PII payload is invalid.")
+
+        try:
+            plain = AESGCM(key).decrypt(payload[:12], payload[12:], None)
+        except InvalidTag:
+            # .NET AesGcm stores nonce + tag + ciphertext; Python AESGCM
+            # expects nonce + ciphertext + tag.
+            plain = AESGCM(key).decrypt(
+                payload[:12],
+                payload[28:] + payload[12:28],
+                None,
+            )
+        return plain.decode("utf-8")

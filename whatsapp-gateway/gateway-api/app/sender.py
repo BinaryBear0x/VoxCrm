@@ -53,7 +53,7 @@ async def poll_loop(stop_event: asyncio.Event) -> None:
             await voxcrm_client.recover_expired_processing()
             await poll_once()
         except Exception as exc:  # noqa: BLE001
-            print(f"poll error: {exc}")
+            print(f"poll error: {type(exc).__name__}: {exc!r}")
 
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=settings.poll_interval_seconds)
