@@ -244,6 +244,10 @@ Bildirim akışı kasıtlı olarak asenkroniktir: Web uygulaması doğrudan gate
 +---------------------------+     +-------------------+
 ```
 
+Production'da PostgreSQL, API, gateway ve worker için public port yayınlanmaz. `wa-worker`,
+gateway ile private `backend` ağından konuşur; WhatsApp Web'e bağlanabilmesi için ayrıca
+yalnız outbound erişim sağlayan `egress` ağına bağlıdır. Worker'a host portu eklenmemelidir.
+
 ---
 
 ## Teknoloji Yığını

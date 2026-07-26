@@ -73,6 +73,20 @@ public sealed class ArchitectureTests
         Assert.Contains("Manuel Bildirim Gönder", view, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void WhatsApp_worker_has_outbound_connectivity_without_a_published_port()
+    {
+        var repoRoot = FindRepoRoot();
+        var compose = File.ReadAllText(Path.Combine(repoRoot, "deploy", "docker-compose.prod.yml"));
+        var workerStart = compose.IndexOf("  wa-worker:", StringComparison.Ordinal);
+        var caddyStart = compose.IndexOf("  caddy:", workerStart, StringComparison.Ordinal);
+        var worker = compose[workerStart..caddyStart];
+
+        Assert.Contains("networks: [backend, egress]", worker, StringComparison.Ordinal);
+        Assert.DoesNotContain("ports:", worker, StringComparison.Ordinal);
+        Assert.Contains("  egress: {}", compose, StringComparison.Ordinal);
+    }
+
     private static string FindRepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

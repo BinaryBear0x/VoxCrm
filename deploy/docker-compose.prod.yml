@@ -159,7 +159,7 @@ services:
       GATEWAY_INTERNAL_URL: http://gateway-api:8088
     volumes:
       - ${VOXCRM_SESSION_DIR:-/var/lib/voxcrm/whatsapp-sessions}:/app/sessions
-    networks: [backend]
+    networks: [backend, egress]
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8090/health',{headers:{'x-internal-token':process.env.WORKER_INTERNAL_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
       interval: 30s
@@ -192,6 +192,7 @@ networks:
     internal: true
   data:
     internal: true
+  egress: {}
 
 volumes:
   postgres-data: {}
