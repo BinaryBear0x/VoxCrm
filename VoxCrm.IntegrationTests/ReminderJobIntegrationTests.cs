@@ -45,6 +45,7 @@ public sealed class ReminderJobIntegrationTests
         Assert.Equal(WhatsAppNotificationTypes.VaccinationReminder, notification.NotificationType);
         Assert.Equal(WhatsAppNotificationStatuses.Pending, notification.Status);
         Assert.Contains("Kuduz", notification.MessageContent);
+        Assert.DoesNotContain("SERİ-ABC-123", notification.MessageContent, StringComparison.Ordinal);
 
         var enabledRecord = await verify.VaccinationRecords
             .IgnoreQueryFilters()
@@ -97,6 +98,7 @@ public sealed class ReminderJobIntegrationTests
             VaccineTypeId = vaccineType.ID,
             AdministeredDate = DateTime.UtcNow.Date.AddDays(-362),
             NextDueDate = DateTime.UtcNow.Date.AddDays(3),
+            VaccineCode = "SERİ-ABC-123",
         };
 
         db.AddRange(patient, ownership, vaccineType, vaccination);

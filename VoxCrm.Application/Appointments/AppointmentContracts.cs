@@ -22,8 +22,9 @@ public static class AppointmentRules
 
 public sealed record AppointmentListItem(
     Guid Id,
-    Guid PatientId,
+    Guid? PatientId,
     string PatientName,
+    string? GuestPhone,
     DateTime ScheduledAtLocal,
     int DurationMinutes,
     string AppointmentType,
@@ -34,12 +35,15 @@ public sealed record AppointmentListItem(
 
 public sealed record AppointmentEditModel(
     Guid Id,
-    Guid PatientId,
+    Guid? PatientId,
     DateTime ScheduledAtLocal,
     int DurationMinutes,
     string AppointmentType,
     string Status,
-    string? Reason);
+    string? Reason,
+    string? GuestName,
+    string? GuestPhone,
+    string? GuestNotes);
 
 public sealed record AppointmentPatientOption(
     Guid Id,
@@ -49,11 +53,14 @@ public sealed record AppointmentPatientOption(
     string? OwnerPhone);
 
 public sealed record AppointmentCommand(
-    Guid PatientId,
+    Guid? PatientId,
     DateTime ScheduledAtLocal,
     string AppointmentType,
     int DurationMinutes,
-    string? Reason);
+    string? Reason,
+    string? GuestName = null,
+    string? GuestPhone = null,
+    string? GuestNotes = null);
 
 public enum AppointmentCommandOutcome
 {

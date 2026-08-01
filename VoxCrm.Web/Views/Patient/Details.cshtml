@@ -205,6 +205,7 @@
                     <thead class="table-light">
                         <tr>
                             <th>Aşı Adı</th>
+                            <th>Aşı Kodu</th>
                             <th>Yapılma Tarihi</th>
                             <th>Sonraki Doz</th>
                             <th>Durum</th>
@@ -216,6 +217,7 @@
                             bool isPastDue = v.NextDueDate < DateTime.UtcNow.Date;
                             <tr>
                                 <td>@(v.VaccineType?.Name ?? "-")</td>
+                                <td>@(string.IsNullOrWhiteSpace(v.VaccineCode) ? "-" : v.VaccineCode)</td>
                                 <td>@v.AdministeredDate.ToLocalTime().ToString("dd.MM.yyyy")</td>
                                 <td class="@(isPastDue ? "text-danger fw-bold" : "")">@v.NextDueDate.ToLocalTime().ToString("dd.MM.yyyy")</td>
                                 <td>

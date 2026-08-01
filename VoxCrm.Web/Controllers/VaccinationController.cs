@@ -27,7 +27,7 @@ public sealed class VaccinationController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("PatientId,VaccineTypeId,AdministeredDate")] VaccinationRecord model,
+        [Bind("PatientId,VaccineTypeId,AdministeredDate,VaccineCode")] VaccinationRecord model,
         CancellationToken cancellationToken)
     {
         RemoveSystemValidation();
@@ -59,7 +59,7 @@ public sealed class VaccinationController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(
-        [Bind("ID,PatientId,VaccineTypeId,AdministeredDate")] VaccinationRecord model,
+        [Bind("ID,PatientId,VaccineTypeId,AdministeredDate,VaccineCode")] VaccinationRecord model,
         CancellationToken cancellationToken)
     {
         RemoveSystemValidation();

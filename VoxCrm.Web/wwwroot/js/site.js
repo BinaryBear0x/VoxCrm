@@ -199,6 +199,29 @@
     });
   });
 
+  const appointmentMode = document.querySelector("[data-appointment-mode]");
+  if (appointmentMode) {
+    const patientFields = document.querySelector("[data-appointment-patient-fields]");
+    const guestFields = document.querySelector("[data-appointment-guest-fields]");
+    const updateAppointmentMode = () => {
+      const registered = appointmentMode.value === "registered";
+      if (patientFields) {
+        patientFields.hidden = !registered;
+        patientFields.querySelectorAll("input, select").forEach((field) => {
+          field.disabled = !registered;
+        });
+      }
+      if (guestFields) {
+        guestFields.hidden = registered;
+        guestFields.querySelectorAll("input, textarea").forEach((field) => {
+          field.disabled = registered;
+        });
+      }
+    };
+    appointmentMode.addEventListener("change", updateAppointmentMode);
+    updateAppointmentMode();
+  }
+
   function escapeHtml(value) {
     return String(value)
       .replaceAll("&", "&amp;")

@@ -72,6 +72,34 @@ public sealed class AppointmentIntegrationTests
     }
 
     [Fact]
+    public async Task Guest_appointment_can_be_created_without_a_patient_record()
+    {
+        var (clinic, _) = await SeedClinicAndPatientAsync("guest", "Europe/Istanbul");
+        await using var db = CreateTenantDbContext(clinic.ID);
+        var service = new AppointmentService(db, new FixedTenantService(clinic.ID));
+        var command = new AppointmentCommand(
+            null,
+            new DateTime(2026, 4, 12, 11, 0, 0),
+            "Muayene",
+            30,
+            "Sokaktan geldi",
+            "Bilinmeyen kişi",
+            "+905551112233",
+            "Sahipsiz hayvan; yalnızca telefon bilgisi var.");
+
+        var result = await service.CreateAsync(command, confirmConflict: false);
+
+        Assert.True(result.Succeeded);
+        var saved = await db.Appointments.IgnoreQueryFilters().SingleAsync(item => item.ID == result.AppointmentId);
+        Assert.Null(saved.PatientId);
+        Assert.Equal("Bilinmeyen kişi", saved.GuestName);
+        Assert.Equal("+905551112233", saved.GuestPhone);
+        Assert.Equal("Sahipsiz hayvan; yalnızca telefon bilgisi var.", saved.GuestNotes);
+        Assert.Contains(await service.ListAsync(null), item =>
+            item.Id == saved.ID && item.PatientId == null && item.PatientName == "Bilinmeyen kişi");
+    }
+
+    [Fact]
     public async Task Concurrent_duplicate_booking_attempts_cannot_both_save_without_a_conflict_warning()
     {
         var (clinic, patient) = await SeedClinicAndPatientAsync("concurrent", "Europe/Istanbul");

@@ -43,6 +43,9 @@ public sealed class VaccinationService : IVaccinationService
     {
         if (record.AdministeredDate == default || record.AdministeredDate.Date > DateTime.UtcNow.Date)
             return new VaccinationCommandResult(false, Error: "Aşı tarihi boş veya gelecekte olamaz.");
+        var codeError = NormalizeVaccineCode(record);
+        if (codeError != null)
+            return new VaccinationCommandResult(false, Error: codeError);
         var validation = await ValidateReferencesAsync(record.PatientId, record.VaccineTypeId, cancellationToken);
         if (validation.Error != null) return new VaccinationCommandResult(false, Error: validation.Error);
         record.ClinicID = ClinicId;
@@ -56,6 +59,9 @@ public sealed class VaccinationService : IVaccinationService
     {
         if (record.AdministeredDate == default || record.AdministeredDate.Date > DateTime.UtcNow.Date)
             return new VaccinationCommandResult(false, Error: "Aşı tarihi boş veya gelecekte olamaz.");
+        var codeError = NormalizeVaccineCode(record);
+        if (codeError != null)
+            return new VaccinationCommandResult(false, Error: codeError);
         var existing = await _context.VaccinationRecords.FirstOrDefaultAsync(v => v.ID == record.ID && v.IsActive, cancellationToken);
         if (existing == null) return new VaccinationCommandResult(false, NotFound: true);
         var validation = await ValidateReferencesAsync(record.PatientId, record.VaccineTypeId, cancellationToken);
@@ -63,6 +69,7 @@ public sealed class VaccinationService : IVaccinationService
         existing.PatientId = record.PatientId;
         existing.VaccineTypeId = record.VaccineTypeId;
         existing.AdministeredDate = record.AdministeredDate;
+        existing.VaccineCode = record.VaccineCode;
         existing.NextDueDate = record.AdministeredDate.AddDays(validation.VaccineType!.ValidityDays);
         await _context.SaveChangesAsync(cancellationToken);
         return new VaccinationCommandResult(true, existing);
@@ -81,6 +88,14 @@ public sealed class VaccinationService : IVaccinationService
         return !patientExists || vaccineType == null
             ? (null, "Aynı kliniğe ait aktif bir hasta ve aşı tipi seçin.")
             : (vaccineType, null);
+    }
+
+    private static string? NormalizeVaccineCode(VaccinationRecord record)
+    {
+        record.VaccineCode = string.IsNullOrWhiteSpace(record.VaccineCode) ? null : record.VaccineCode.Trim();
+        return record.VaccineCode?.Length > 200
+            ? "Aşı kodu 200 karakteri geçemez."
+            : null;
     }
 
     private async Task<VaccinationCommandResult> SetArchiveStateAsync(Guid id, bool isActive, Guid actorUserId, CancellationToken cancellationToken)

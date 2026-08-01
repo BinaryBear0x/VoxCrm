@@ -8,8 +8,12 @@ namespace VoxCrm.Domain.Entities
     {
         public Guid ClinicID { get; set; }
 
-        public Guid PatientId { get; set; }
-        public Patient Patient { get; set; } = null!;
+        public Guid? PatientId { get; set; }
+        public Patient? Patient { get; set; }
+        public string? GuestName { get; set; }
+        public string? GuestPhone { get; set; }
+        public string? GuestNotes { get; set; }
+        public string? GuestPhoneLookupHash { get; set; }
         public DateTime ScheduledAt { get; set; }
         public int DurationMinutes { get; set; } = 30;
 

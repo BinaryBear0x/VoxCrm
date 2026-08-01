@@ -14,6 +14,7 @@ namespace VoxCrm.Domain.Entities
         public VaccineType VaccineType { get; set; } = null!;
         public DateTime AdministeredDate { get; set; }
         public DateTime NextDueDate { get; set; }
+        public string? VaccineCode { get; set; }
 
         public bool IsReminderSent { get; set; } = false;
     }

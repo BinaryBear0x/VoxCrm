@@ -68,6 +68,7 @@
                             <th>Hasta</th>
                             <th>Aşı</th>
                             <th>Yapıldı</th>
+                            <th>Aşı Kodu</th>
                             <th>Sonraki Aşı</th>
                             <th>Durum</th>
                             <th>Bot</th>
@@ -83,6 +84,7 @@
                                 <td class="fw-semibold">@v.Patient?.Name</td>
                                 <td>@v.VaccineType?.Name</td>
                                 <td>@v.AdministeredDate.ToString("dd.MM.yyyy")</td>
+                                <td>@(string.IsNullOrWhiteSpace(v.VaccineCode) ? "-" : v.VaccineCode)</td>
                                 <td>@v.NextDueDate.ToString("dd.MM.yyyy")</td>
                                 <td>
                                     @if (isOverdue)
@@ -134,7 +136,7 @@
                             else
                             { <span class="badge bg-success">Bekliyor</span> }
                         </div>
-                        <div class="text-muted small mb-2">@v.VaccineType?.Name · Sonraki: @v.NextDueDate.ToString("dd.MM.yyyy")</div>
+                        <div class="text-muted small mb-2">@v.VaccineType?.Name · Kod: @(string.IsNullOrWhiteSpace(v.VaccineCode) ? "-" : v.VaccineCode) · Sonraki: @v.NextDueDate.ToString("dd.MM.yyyy")</div>
                         <div class="d-flex justify-content-end gap-1">
                             @if (v.IsActive)
                             {

@@ -122,7 +122,10 @@ public class AppointmentController : Controller
             command.DurationMinutes,
             command.AppointmentType,
             existing.Status,
-            command.Reason));
+            command.Reason,
+            command.GuestName,
+            command.GuestPhone,
+            command.GuestNotes));
     }
 
     [HttpPost, ValidateAntiForgeryToken]

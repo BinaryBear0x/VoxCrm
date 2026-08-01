@@ -43,6 +43,11 @@
                         <input type="date" name="AdministeredDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required>
                         <div class="form-text">Sonraki aşı tarihi, seçilen aşı türüne göre otomatik hesaplanır.</div>
                     </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" for="VaccineCode">Aşı Kodu <span class="text-muted fw-normal">(opsiyonel)</span></label>
+                        <input id="VaccineCode" name="VaccineCode" class="form-control" maxlength="200" placeholder="Varsa parti/seri/uygulama kodu">
+                        <div class="form-text">Bu alan yalnızca uygulamada gösterilir; WhatsApp mesajına eklenmez.</div>
+                    </div>
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary">Kaydet</button>
                         <a href="/Vaccination" class="btn btn-outline-secondary">Iptal</a>

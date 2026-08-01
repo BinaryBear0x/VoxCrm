@@ -3,6 +3,7 @@ using VoxCrm.Application.Appointments;
 using VoxCrm.Domain.Common;
 using VoxCrm.Domain.Entities;
 using VoxCrm.Infrastructure.Data;
+using VoxCrm.Infrastructure.Security;
 
 namespace VoxCrm.Infrastructure.Appointments;
 
@@ -12,11 +13,13 @@ public sealed class AppointmentService : IAppointmentService
 
     private readonly VoxCrmDbContext _context;
     private readonly ITenantService _tenant;
+    private readonly IPiiProtector _protector;
 
-    public AppointmentService(VoxCrmDbContext context, ITenantService tenant)
+    public AppointmentService(VoxCrmDbContext context, ITenantService tenant, IPiiProtector? protector = null)
     {
         _context = context;
         _tenant = tenant;
+        _protector = protector ?? NoOpPiiProtector.Instance;
     }
 
     public async Task<IReadOnlyList<AppointmentListItem>> ListAsync(
@@ -38,7 +41,8 @@ public sealed class AppointmentService : IAppointmentService
         return appointments.Select(appointment => new AppointmentListItem(
             appointment.ID,
             appointment.PatientId,
-            appointment.Patient.Name ?? string.Empty,
+            appointment.Patient?.Name ?? appointment.GuestName ?? "Kayıtsız müşteri",
+            appointment.GuestPhone,
             ToClinicLocal(appointment.ScheduledAt, timeZone),
             appointment.DurationMinutes,
             appointment.AppointmentType,
@@ -95,7 +99,10 @@ public sealed class AppointmentService : IAppointmentService
             appointment.DurationMinutes,
             appointment.AppointmentType,
             appointment.Status,
-            appointment.Reason);
+            appointment.Reason,
+            appointment.GuestName,
+            appointment.GuestPhone,
+            appointment.GuestNotes);
     }
 
     public async Task<AppointmentCommandResult> CreateAsync(
@@ -108,10 +115,16 @@ public sealed class AppointmentService : IAppointmentService
             return validation.Error;
 
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-        await LockPatientScheduleAsync(command.PatientId, cancellationToken);
+        await LockPatientScheduleAsync(command.PatientId, command.GuestPhone, cancellationToken);
 
         if (!confirmConflict &&
-            await HasConflictAsync(command.PatientId, validation.ScheduledAtUtc, command.DurationMinutes, null, cancellationToken))
+            await HasConflictAsync(
+                NormalizePatientId(command.PatientId),
+                GuestPhoneHash(command.GuestPhone),
+                validation.ScheduledAtUtc,
+                command.DurationMinutes,
+                null,
+                cancellationToken))
         {
             return ConflictWarning();
         }
@@ -119,7 +132,11 @@ public sealed class AppointmentService : IAppointmentService
         var appointment = new Appointment
         {
             ClinicID = ClinicId,
-            PatientId = command.PatientId,
+            PatientId = NormalizePatientId(command.PatientId),
+            GuestName = NormalizeGuestField(command.GuestName),
+            GuestPhone = NormalizeGuestField(command.GuestPhone),
+            GuestNotes = NormalizeGuestField(command.GuestNotes),
+            GuestPhoneLookupHash = GuestPhoneHash(command.GuestPhone),
             ScheduledAt = validation.ScheduledAtUtc,
             AppointmentType = command.AppointmentType,
             DurationMinutes = command.DurationMinutes,
@@ -144,6 +161,7 @@ public sealed class AppointmentService : IAppointmentService
 
         if (await HasConflictAsync(
                 appointment.PatientId,
+                appointment.PatientId.HasValue ? null : appointment.GuestPhoneLookupHash,
                 appointment.ScheduledAt,
                 appointment.DurationMinutes,
                 appointment.ID,
@@ -170,7 +188,7 @@ public sealed class AppointmentService : IAppointmentService
             return validation.Error;
 
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-        await LockPatientScheduleAsync(command.PatientId, cancellationToken);
+        await LockPatientScheduleAsync(command.PatientId, command.GuestPhone, cancellationToken);
 
         var appointment = await TenantAppointments()
             .FirstOrDefaultAsync(candidate => candidate.ID == id, cancellationToken);
@@ -178,12 +196,22 @@ public sealed class AppointmentService : IAppointmentService
             return new AppointmentCommandResult(AppointmentCommandOutcome.NotFound);
 
         if (!confirmConflict &&
-            await HasConflictAsync(command.PatientId, validation.ScheduledAtUtc, command.DurationMinutes, id, cancellationToken))
+            await HasConflictAsync(
+                NormalizePatientId(command.PatientId),
+                GuestPhoneHash(command.GuestPhone),
+                validation.ScheduledAtUtc,
+                command.DurationMinutes,
+                id,
+                cancellationToken))
         {
             return ConflictWarning();
         }
 
-        appointment.PatientId = command.PatientId;
+        appointment.PatientId = NormalizePatientId(command.PatientId);
+        appointment.GuestName = NormalizeGuestField(command.GuestName);
+        appointment.GuestPhone = NormalizeGuestField(command.GuestPhone);
+        appointment.GuestNotes = NormalizeGuestField(command.GuestNotes);
+        appointment.GuestPhoneLookupHash = GuestPhoneHash(command.GuestPhone);
         appointment.ScheduledAt = validation.ScheduledAtUtc;
         appointment.AppointmentType = command.AppointmentType;
         appointment.DurationMinutes = command.DurationMinutes;
@@ -232,22 +260,31 @@ public sealed class AppointmentService : IAppointmentService
         AppointmentCommand command,
         CancellationToken cancellationToken)
     {
-        if (command.PatientId == Guid.Empty)
-            return (default, ValidationFailed("Geçerli bir hasta seçin."));
+        var patientId = NormalizePatientId(command.PatientId);
         if (!AppointmentRules.IsAllowedType(command.AppointmentType))
             return (default, ValidationFailed("Geçersiz randevu türü."));
         if (command.DurationMinutes is < AppointmentRules.MinimumDurationMinutes or > AppointmentRules.MaximumDurationMinutes)
             return (default, ValidationFailed($"Randevu süresi {AppointmentRules.MinimumDurationMinutes} ile {AppointmentRules.MaximumDurationMinutes} dakika arasında olmalıdır."));
 
-        var patientExists = await _context.Patients
-            .IgnoreQueryFilters()
-            .AnyAsync(
-                patient => patient.ID == command.PatientId &&
-                           patient.ClinicID == ClinicId &&
-                           patient.IsActive,
-                cancellationToken);
-        if (!patientExists)
-            return (default, ValidationFailed("Geçerli ve aktif bir hasta seçin."));
+        if (patientId.HasValue)
+        {
+            var patientExists = await _context.Patients
+                .IgnoreQueryFilters()
+                .AnyAsync(
+                    patient => patient.ID == patientId.Value &&
+                               patient.ClinicID == ClinicId &&
+                               patient.IsActive,
+                    cancellationToken);
+            if (!patientExists)
+                return (default, ValidationFailed("Geçerli ve aktif bir hasta seçin veya kayıtsız randevu seçeneğini kullanın."));
+        }
+
+        if (command.GuestName?.Trim().Length > 200)
+            return (default, ValidationFailed("Kayıtsız müşteri adı 200 karakteri geçemez."));
+        if (command.GuestPhone?.Trim().Length > 64)
+            return (default, ValidationFailed("Kayıtsız müşteri telefonu 64 karakteri geçemez."));
+        if (command.GuestNotes?.Trim().Length > 1000)
+            return (default, ValidationFailed("Kayıtsız randevu notu 1000 karakteri geçemez."));
 
         var timeZone = await GetClinicTimeZoneAsync(cancellationToken);
         var local = DateTime.SpecifyKind(command.ScheduledAtLocal, DateTimeKind.Unspecified);
@@ -258,16 +295,21 @@ public sealed class AppointmentService : IAppointmentService
     }
 
     private async Task<bool> HasConflictAsync(
-        Guid patientId,
+        Guid? patientId,
+        string? guestPhoneHash,
         DateTime scheduledAtUtc,
         int durationMinutes,
         Guid? excludedAppointmentId,
         CancellationToken cancellationToken)
     {
+        if (!patientId.HasValue && guestPhoneHash == null)
+            return false;
+
         var proposedEndUtc = scheduledAtUtc.AddMinutes(durationMinutes);
         var candidates = await TenantAppointments()
             .Where(appointment =>
                 appointment.PatientId == patientId &&
+                (patientId.HasValue || appointment.GuestPhoneLookupHash == guestPhoneHash) &&
                 appointment.Status != AppointmentRules.CancelledStatus &&
                 appointment.ScheduledAt < proposedEndUtc &&
                 (!excludedAppointmentId.HasValue || appointment.ID != excludedAppointmentId.Value))
@@ -279,10 +321,20 @@ public sealed class AppointmentService : IAppointmentService
             existing.ScheduledAt.AddMinutes(existing.DurationMinutes) > scheduledAtUtc);
     }
 
-    private Task<int> LockPatientScheduleAsync(Guid patientId, CancellationToken cancellationToken) =>
-        _context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock({ClinicId.GetHashCode()}, {patientId.GetHashCode()})",
+    private Task<int> LockPatientScheduleAsync(Guid? patientId, string? guestPhone, CancellationToken cancellationToken)
+    {
+        if (patientId.HasValue)
+        {
+            return _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock({ClinicId.GetHashCode()}, {patientId.Value.GetHashCode()})",
+                cancellationToken);
+        }
+
+        var lockKey = $"{ClinicId:N}:{GuestPhoneHash(guestPhone) ?? "guest"}";
+        return _context.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))",
             cancellationToken);
+    }
 
     private async Task<TimeZoneInfo> GetClinicTimeZoneAsync(CancellationToken cancellationToken)
     {
@@ -330,10 +382,25 @@ public sealed class AppointmentService : IAppointmentService
     private static AppointmentCommandResult ConflictWarning() =>
         new(
             AppointmentCommandOutcome.ConflictWarning,
-            Error: "Bu hastanın seçilen zaman aralığıyla çakışan başka bir randevusu var.");
+            Error: "Aynı kişi/hasta için seçilen zaman aralığıyla çakışan başka bir randevu var.");
 
     private static AppointmentCommandResult ValidationFailed(string error) =>
         new(AppointmentCommandOutcome.ValidationFailed, Error: error);
+
+    private static Guid? NormalizePatientId(Guid? patientId) =>
+        patientId is { } id && id != Guid.Empty ? id : null;
+
+    private static string? NormalizeGuestField(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return value.Trim();
+    }
+
+    private string? GuestPhoneHash(string? phone) =>
+        _protector.BlindIndex(ClinicId, NormalizePhone(phone));
+
+    private static string? NormalizePhone(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : new string(value.Where(char.IsDigit).ToArray());
 
     private static string? NormalizeReason(string? reason) =>
         string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();

@@ -463,6 +463,18 @@ hesapları için yalnızca `deploy/production.env.example` içindeki placeholder
 tek kullanımlık secret'larla değiştirin. İlk başarılı production girişinden sonra
 bootstrap ayarlarını kapatın ve parolaları secret dosyasından kaldırın.
 
+### Kayıtsız randevu ve aşı kodu
+
+Randevu oluşturma/düzenleme ekranında `Kayıtlı hasta seç` veya `Kayıtsız / yeni
+müşteri` akışı kullanılabilir. Kayıtsız randevuda ad, telefon ve not alanları
+opsiyoneldir; boş bırakıldığında kayıt `Kayıtsız müşteri` olarak gösterilir. Telefon
+verilmişse aynı telefon için zaman çakışması kontrol edilir. Kayıtsız müşteri alanları
+AES-256-GCM ile şifrelenir, telefon eşleştirmesi tenant'a bağlı blind-index üzerinden
+yapılır.
+
+Aşı kaydındaki `Aşı Kodu` opsiyonel ve serbest metindir. Aşı takviminde ve hasta
+detayında gösterilir; WhatsApp aşı hatırlatma şablonuna aktarılmaz.
+
 ---
 
 ## Production teslim ve işletim rehberi
@@ -473,12 +485,12 @@ için [docs/PRODUCTION_RUNBOOK.md](docs/PRODUCTION_RUNBOOK.md) esas alınır.
 
 ### Mevcut durum
 
-Kod ve yerel production-preflight doğrulandı; canlı sunucuya deployment yapılmış değildir.
-Canlıya çıkmadan önce salt-okunur sunucu envanteri, sunucu sertleştirmesi, DNS/TLS, gerçek
-alarm kanalları, production restore ve rollback tatbikatı tamamlanmalıdır. Yedeklerin
-yalnızca aynı VPS'te tutulması hâlâ kritik felaket kurtarma riskidir.
+Kod ve yerel production-preflight release öncesinde doğrulanır. Canlı sunucunun güncel
+durumu ayrıca container health, DNS/TLS, alarm ve backup bütünlük kontrolleriyle
+doğrulanmalıdır. Yedeklerin yalnızca aynı VPS'te tutulması hâlâ kritik felaket kurtarma
+riskidir.
 
-Son yerel doğrulama kaydı: 15 Temmuz 2026 — .NET 37/37, Python 12/12, Worker 15/15;
+Son yerel doğrulama kaydı: 1 Ağustos 2026 — .NET 43/43, Python 18/18, Worker 15/15;
 build 0 hata/0 uyarı; EF model pending değişikliği yok; NuGet/Python/npm audit temiz;
 şifreli backup ve geçici DB restore başarılı; production image Trivy taramasında
 High/Critical bulgu 0. Bu kayıt yerel ortam içindir; production sunucusu için aynı
@@ -533,7 +545,7 @@ PYTHON_BIN=/private/tmp/voxcrm-test-venv/bin/python \
 rm -rf /private/tmp/voxcrm-test-venv
 ```
 
-Beklenen sonuç: .NET 37, Python 12 ve Worker 15 testin başarılı olmasıdır. Test sırasında
+Beklenen sonuç: .NET 43, Python 18 ve Worker 15 testin başarılı olmasıdır. Test sırasında
 EF tools/runtime sürüm uyarısı görülebilir; `No changes have been made to the model`
 çıktısı migration modelinin senkron olduğunu gösterir.
 

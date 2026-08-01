@@ -32,9 +32,19 @@ public sealed class PiiEncryptionInterceptor(IPiiProtector protector) : SaveChan
 
     private void EncryptChanges(DbContext? context)
     {
-        if (!protector.Enabled || context == null) return;
+        if (context == null) return;
         foreach (var entry in context.ChangeTracker.Entries().Where(entry => entry.State is EntityState.Added or EntityState.Modified))
         {
+            if (entry.Entity is Appointment appointment)
+            {
+                appointment.GuestPhoneLookupHash = protector.BlindIndex(
+                    appointment.ClinicID,
+                    NormalizePhone(appointment.GuestPhone));
+            }
+
+            if (!protector.Enabled)
+                continue;
+
             if (entry.Entity is PetOwner owner)
             {
                 owner.NormalizedPhone = protector.BlindIndex(owner.ClinicID, NormalizePhone(owner.Phone));
@@ -70,7 +80,7 @@ public sealed class PiiEncryptionInterceptor(IPiiProtector protector) : SaveChan
         PetOwner => [nameof(PetOwner.Phone), nameof(PetOwner.Email), nameof(PetOwner.Address), nameof(PetOwner.Notes)],
         Patient => [nameof(Patient.MicrochipNumber), nameof(Patient.pasaportNumarasi), nameof(Patient.Notes)],
         Muayene => [nameof(Muayene.Subjective), nameof(Muayene.Objective), nameof(Muayene.Assessment), nameof(Muayene.Plan)],
-        Appointment => [nameof(Appointment.Reason)],
+        Appointment => [nameof(Appointment.Reason), nameof(Appointment.GuestName), nameof(Appointment.GuestPhone), nameof(Appointment.GuestNotes)],
         Debt => [nameof(Debt.Description), nameof(Debt.CancellationReason)],
         Payment => [nameof(Payment.Reason), nameof(Payment.Notes)],
         WhatsAppInboundMessage => [nameof(WhatsAppInboundMessage.FromPhone), nameof(WhatsAppInboundMessage.Message)],
