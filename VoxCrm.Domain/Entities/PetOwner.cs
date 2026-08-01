@@ -14,6 +14,8 @@ namespace VoxCrm.Domain.Entities
         public string? NormalizedPhone { get; set; }
         public string? Email { get; set; }
         public string? EmailLookupHash { get; set; }
+        public string? NationalIdentityNumber { get; set; }
+        public string? NationalIdentityLookupHash { get; set; }
         public bool WhatsAppConsent { get; set; } = false;
 
         public string? Notes { get; set; }

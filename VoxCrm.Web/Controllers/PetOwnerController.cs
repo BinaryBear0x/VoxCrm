@@ -50,7 +50,7 @@ public sealed class PetOwnerController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("FirstName,LastName,Phone,Email,Address,WhatsAppConsent,Notes")] PetOwner model,
+        [Bind("FirstName,LastName,Phone,Email,NationalIdentityNumber,Address,WhatsAppConsent,Notes")] PetOwner model,
         CancellationToken cancellationToken)
     {
         RemoveSystemValidation();
@@ -75,7 +75,7 @@ public sealed class PetOwnerController : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(
         Guid id,
-        [Bind("ID,FirstName,LastName,Phone,Email,Address,WhatsAppConsent,Notes")] PetOwner model,
+        [Bind("ID,FirstName,LastName,Phone,Email,NationalIdentityNumber,Address,WhatsAppConsent,Notes")] PetOwner model,
         CancellationToken cancellationToken)
     {
         if (id != model.ID) return BadRequest();

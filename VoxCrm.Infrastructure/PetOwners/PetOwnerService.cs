@@ -64,8 +64,11 @@ public sealed class PetOwnerService : IPetOwnerService
             return new PetOwnerCommandResult(false, Error: validationError);
         owner.NormalizedPhone = PhoneLookup(owner.Phone);
         owner.EmailLookupHash = EmailLookup(owner.Email);
+        owner.NationalIdentityLookupHash = IdentityLookup(owner.NationalIdentityNumber);
         if (await HasDuplicatePhoneAsync(owner.NormalizedPhone, null, cancellationToken))
             return new PetOwnerCommandResult(false, Error: $"Bu telefon numarası ({owner.Phone}) zaten kayıtlı.");
+        if (await HasDuplicateIdentityAsync(owner.NationalIdentityLookupHash, null, cancellationToken))
+            return new PetOwnerCommandResult(false, Error: "Bu T.C. kimlik numarası zaten kayıtlı.");
         owner.ClinicID = ClinicId;
         _context.PetOwners.Add(owner);
         await _context.SaveChangesAsync(cancellationToken);
@@ -82,12 +85,17 @@ public sealed class PetOwnerService : IPetOwnerService
         var normalizedPhone = PhoneLookup(owner.Phone);
         if (await HasDuplicatePhoneAsync(normalizedPhone, owner.ID, cancellationToken))
             return new PetOwnerCommandResult(false, Error: $"Bu telefon numarası ({owner.Phone}) başka bir müşteride kayıtlı.");
+        var identityLookup = IdentityLookup(owner.NationalIdentityNumber);
+        if (await HasDuplicateIdentityAsync(identityLookup, owner.ID, cancellationToken))
+            return new PetOwnerCommandResult(false, Error: "Bu T.C. kimlik numarası başka bir müşteride kayıtlı.");
         existing.FirstName = owner.FirstName;
         existing.LastName = owner.LastName;
         existing.Phone = owner.Phone;
         existing.NormalizedPhone = normalizedPhone;
         existing.Email = owner.Email;
         existing.EmailLookupHash = EmailLookup(owner.Email);
+        existing.NationalIdentityNumber = owner.NationalIdentityNumber;
+        existing.NationalIdentityLookupHash = identityLookup;
         existing.Address = owner.Address;
         existing.WhatsAppConsent = owner.WhatsAppConsent;
         existing.Notes = owner.Notes;
@@ -150,6 +158,8 @@ public sealed class PetOwnerService : IPetOwnerService
         if (owner == null) return new PetOwnerCommandResult(false, NotFound: true);
         if (isActive && await HasDuplicatePhoneAsync(owner.NormalizedPhone, owner.ID, cancellationToken))
             return new PetOwnerCommandResult(false, Error: "Aynı telefon numarasına sahip aktif bir müşteri zaten var.");
+        if (isActive && await HasDuplicateIdentityAsync(owner.NationalIdentityLookupHash, owner.ID, cancellationToken))
+            return new PetOwnerCommandResult(false, Error: "Aynı T.C. kimlik numarasına sahip aktif bir müşteri zaten var.");
         owner.IsActive = isActive;
         owner.ArchivedAt = isActive ? null : DateTime.UtcNow;
         owner.ArchivedByUserId = isActive ? null : actorUserId;
@@ -177,6 +187,15 @@ public sealed class PetOwnerService : IPetOwnerService
             cancellationToken);
     }
 
+    private Task<bool> HasDuplicateIdentityAsync(string? lookupHash, Guid? excludedId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(lookupHash)) return Task.FromResult(false);
+        return TenantOwners(false).AnyAsync(
+            owner => owner.NationalIdentityLookupHash == lookupHash
+                     && (!excludedId.HasValue || owner.ID != excludedId.Value),
+            cancellationToken);
+    }
+
     private static string? NormalizePhone(string? phone)
     {
         if (string.IsNullOrWhiteSpace(phone)) return null;
@@ -196,11 +215,13 @@ public sealed class PetOwnerService : IPetOwnerService
         var term = search.Trim().ToLower();
         var phoneHash = PhoneLookup(term);
         var emailHash = term.Contains('@') ? EmailLookup(term) : null;
+        var identityHash = term.Length == 11 && term.All(char.IsDigit) ? IdentityLookup(term) : null;
         return query.Where(o =>
             (o.FirstName != null && o.FirstName.ToLower().Contains(term)) ||
             (o.LastName != null && o.LastName.ToLower().Contains(term)) ||
             (phoneHash != null && o.NormalizedPhone == phoneHash) ||
             (emailHash != null && o.EmailLookupHash == emailHash) ||
+            (identityHash != null && o.NationalIdentityLookupHash == identityHash) ||
             o.OwnedPatients.Any(link => link.IsActive &&
                 ((link.Patient.Name != null && link.Patient.Name.ToLower().Contains(term)) ||
                  (link.Patient.Species != null && link.Patient.Species.ToLower().Contains(term)) ||
@@ -210,6 +231,7 @@ public sealed class PetOwnerService : IPetOwnerService
     private Guid ClinicId => _tenant.GetClinicId();
     private string? PhoneLookup(string? value) => _protector.BlindIndex(ClinicId, NormalizePhone(value));
     private string? EmailLookup(string? value) => _protector.BlindIndex(ClinicId, value?.Trim().ToLowerInvariant());
+    private string? IdentityLookup(string? value) => _protector.BlindIndex(ClinicId, value);
 
     private static string? NormalizeAndValidate(PetOwner owner, bool assignUnknownName)
     {
@@ -217,15 +239,20 @@ public sealed class PetOwnerService : IPetOwnerService
         owner.LastName = Normalize(owner.LastName);
         owner.Phone = Normalize(owner.Phone);
         owner.Email = Normalize(owner.Email);
+        owner.NationalIdentityNumber = NormalizeIdentity(owner.NationalIdentityNumber);
         owner.Address = Normalize(owner.Address);
         owner.Notes = Normalize(owner.Notes);
 
         if (TooLong(owner.FirstName, 120) || TooLong(owner.LastName, 120) || TooLong(owner.Phone, 32) ||
-            TooLong(owner.Email, 254) || TooLong(owner.Address, 500) || TooLong(owner.Notes, 2000))
+            TooLong(owner.Email, 254) || TooLong(owner.NationalIdentityNumber, 11) ||
+            TooLong(owner.Address, 500) || TooLong(owner.Notes, 2000))
             return "Girilen bilgiler izin verilen uzunluğu aşıyor.";
 
         if (owner.Email != null && !System.Net.Mail.MailAddress.TryCreate(owner.Email, out _))
             return "Geçerli bir e-posta adresi girin veya alanı boş bırakın.";
+
+        if (owner.NationalIdentityNumber != null && !IsValidTurkishIdentityNumber(owner.NationalIdentityNumber))
+            return "T.C. kimlik numarası 11 rakamdan oluşmalı ve geçerli olmalıdır; bilmiyorsanız alanı boş bırakın.";
 
         var digits = NormalizePhone(owner.Phone);
         if (digits != null && digits.Length is < 7 or > 15)
@@ -237,5 +264,19 @@ public sealed class PetOwnerService : IPetOwnerService
     }
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static string? NormalizeIdentity(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static bool IsValidTurkishIdentityNumber(string value)
+    {
+        if (value.Length != 11 || value[0] == '0' || !value.All(char.IsDigit)) return false;
+        var digits = value.Select(character => character - '0').ToArray();
+        var tenth = ((digits[0] + digits[2] + digits[4] + digits[6] + digits[8]) * 7
+                     - (digits[1] + digits[3] + digits[5] + digits[7])) % 10;
+        if (tenth < 0) tenth += 10;
+        return digits[9] == tenth && digits[10] == digits.Take(10).Sum() % 10;
+    }
     private static bool TooLong(string? value, int maxLength) => value?.Length > maxLength;
 }

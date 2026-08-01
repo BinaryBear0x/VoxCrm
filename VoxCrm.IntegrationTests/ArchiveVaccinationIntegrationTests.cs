@@ -79,12 +79,14 @@ public sealed class ArchiveVaccinationIntegrationTests
         var hugeNote = await patients.CreateAsync(new Patient { Notes = new string('x', 2001) }, null);
         var invalidPhone = await owners.CreateAsync(new PetOwner { Phone = "123" });
         var invalidEmail = await owners.CreateAsync(new PetOwner { Email = "not-an-email" });
+        var invalidIdentity = await owners.CreateAsync(new PetOwner { NationalIdentityNumber = "12345678901" });
 
         Assert.False(futureBirth.Succeeded);
         Assert.False(invalidGender.Succeeded);
         Assert.False(hugeNote.Succeeded);
         Assert.False(invalidPhone.Succeeded);
         Assert.False(invalidEmail.Succeeded);
+        Assert.False(invalidIdentity.Succeeded);
         Assert.False(await tenantDb.Patients.AnyAsync(patient =>
             patient.ID == futureBirthInput.ID || patient.ID == invalidGenderInput.ID));
     }

@@ -59,6 +59,13 @@
                             <div class="fw-semibold">@Model.Email</div>
                         </div>
                     }
+                    @if (!string.IsNullOrEmpty(Model.NationalIdentityNumber))
+                    {
+                        <div class="col-12 mt-2">
+                            <div class="text-muted"><i class="bi bi-person-vcard"></i> T.C. Kimlik No</div>
+                            <div class="fw-semibold">@Model.NationalIdentityNumber</div>
+                        </div>
+                    }
                 </div>
             </div>
         </div>

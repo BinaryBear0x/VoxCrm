@@ -47,6 +47,10 @@
                         </div>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label fw-semibold">T.C. Kimlik No <span class="text-muted fw-normal">(isteğe bağlı)</span></label>
+                        <input type="text" name="NationalIdentityNumber" class="form-control" inputmode="numeric" maxlength="11" autocomplete="off" value="@Model.NationalIdentityNumber">
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label fw-semibold">Adres</label>
                         <textarea name="Address" class="form-control" rows="2">@Model.Address</textarea>
                     </div>

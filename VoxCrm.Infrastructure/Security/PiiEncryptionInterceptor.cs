@@ -49,6 +49,7 @@ public sealed class PiiEncryptionInterceptor(IPiiProtector protector) : SaveChan
             {
                 owner.NormalizedPhone = protector.BlindIndex(owner.ClinicID, NormalizePhone(owner.Phone));
                 owner.EmailLookupHash = protector.BlindIndex(owner.ClinicID, owner.Email?.Trim().ToLowerInvariant());
+                owner.NationalIdentityLookupHash = protector.BlindIndex(owner.ClinicID, owner.NationalIdentityNumber);
             }
             TransformEntry(entry, protector.Protect);
         }
@@ -77,7 +78,7 @@ public sealed class PiiEncryptionInterceptor(IPiiProtector protector) : SaveChan
 
     private static string[] PropertyNames(object entity) => entity switch
     {
-        PetOwner => [nameof(PetOwner.Phone), nameof(PetOwner.Email), nameof(PetOwner.Address), nameof(PetOwner.Notes)],
+        PetOwner => [nameof(PetOwner.Phone), nameof(PetOwner.Email), nameof(PetOwner.NationalIdentityNumber), nameof(PetOwner.Address), nameof(PetOwner.Notes)],
         Patient => [nameof(Patient.MicrochipNumber), nameof(Patient.pasaportNumarasi), nameof(Patient.Notes)],
         Muayene => [nameof(Muayene.Subjective), nameof(Muayene.Objective), nameof(Muayene.Assessment), nameof(Muayene.Plan)],
         Appointment => [nameof(Appointment.Reason), nameof(Appointment.GuestName), nameof(Appointment.GuestPhone), nameof(Appointment.GuestNotes)],

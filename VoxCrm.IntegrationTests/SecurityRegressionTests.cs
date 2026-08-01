@@ -258,6 +258,7 @@ public sealed class SecurityRegressionTests
                     FirstName = "Az Bilgili",
                     Phone = "+90 555 123 45 67",
                     Email = "limited@example.test",
+                    NationalIdentityNumber = "10000000146",
                     Address = "Gizli adres",
                     Notes = "Sahipsiz hayvanı getiren kişi",
                 };
@@ -270,7 +271,7 @@ public sealed class SecurityRegressionTests
             await using var connection = new NpgsqlConnection(_database.ConnectionString);
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT \"Phone\", \"Email\", \"Address\", \"Notes\", \"NormalizedPhone\", \"EmailLookupHash\" FROM \"PetOwners\" WHERE \"ID\" = @id";
+            command.CommandText = "SELECT \"Phone\", \"Email\", \"NationalIdentityNumber\", \"Address\", \"Notes\", \"NormalizedPhone\", \"EmailLookupHash\", \"NationalIdentityLookupHash\" FROM \"PetOwners\" WHERE \"ID\" = @id";
             command.Parameters.AddWithValue("id", ownerId);
             await using var reader = await command.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
@@ -278,9 +279,11 @@ public sealed class SecurityRegressionTests
             Assert.StartsWith("enc:v1:", reader.GetString(1));
             Assert.StartsWith("enc:v1:", reader.GetString(2));
             Assert.StartsWith("enc:v1:", reader.GetString(3));
-            Assert.Equal(protector.BlindIndex(clinicId, "905551234567"), reader.GetString(4));
-            Assert.Equal(protector.BlindIndex(clinicId, "limited@example.test"), reader.GetString(5));
-            Assert.NotEqual(protector.BlindIndex(Guid.NewGuid(), "905551234567"), reader.GetString(4));
+            Assert.StartsWith("enc:v1:", reader.GetString(4));
+            Assert.Equal(protector.BlindIndex(clinicId, "905551234567"), reader.GetString(5));
+            Assert.Equal(protector.BlindIndex(clinicId, "limited@example.test"), reader.GetString(6));
+            Assert.Equal(protector.BlindIndex(clinicId, "10000000146"), reader.GetString(7));
+            Assert.NotEqual(protector.BlindIndex(Guid.NewGuid(), "905551234567"), reader.GetString(5));
         }
         finally
         {

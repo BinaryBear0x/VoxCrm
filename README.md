@@ -475,6 +475,12 @@ yapılır.
 Aşı kaydındaki `Aşı Kodu` opsiyonel ve serbest metindir. Aşı takviminde ve hasta
 detayında gösterilir; WhatsApp aşı hatırlatma şablonuna aktarılmaz.
 
+Hayvan sahibindeki `T.C. Kimlik No` alanı opsiyoneldir. Girildiğinde 11 hane ve T.C.
+kimlik kontrol basamakları doğrulanır; değer AES-256-GCM ile şifrelenir ve tenant içi
+arama/benzersizlik kontrolü yalnız HMAC blind-index üzerinden yapılır. Liste ekranında
+gösterilmez, yalnız yetkili klinik kullanıcısının müşteri detayında görüntülenir ve
+WhatsApp mesajlarına aktarılmaz.
+
 ---
 
 ## Production teslim ve işletim rehberi
