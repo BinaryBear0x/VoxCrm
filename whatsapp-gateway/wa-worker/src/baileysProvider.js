@@ -26,7 +26,9 @@ export class BaileysProvider {
     workerInternalToken,
     logger = pino({ level: "info" }),
     makeSocket = makeWASocket,
-    httpClient = axios
+    httpClient = axios,
+    reconnectBaseDelayMs = 5000,
+    reconnectMaxDelayMs = 60000
   }) {
     this.sessionStore = sessionStore;
     this.gatewayInternalUrl = gatewayInternalUrl;
@@ -34,6 +36,8 @@ export class BaileysProvider {
     this.logger = logger;
     this.makeSocket = makeSocket;
     this.httpClient = httpClient;
+    this.reconnectBaseDelayMs = reconnectBaseDelayMs;
+    this.reconnectMaxDelayMs = reconnectMaxDelayMs;
     this.sessions = new Map();
     this.sentNotifications = new Map();
   }
@@ -104,6 +108,8 @@ export class BaileysProvider {
       session.desiredConnected = false;
       session.generation += 1;
       session.socket = null;
+      clearTimeout(session.reconnectTimer);
+      session.reconnectTimer = null;
     }
     if (socket) {
       await socket.logout?.().catch(() => undefined);
@@ -191,6 +197,8 @@ export class BaileysProvider {
       lastSeenAt: null,
       lastError: null,
       reconnecting: false,
+      reconnectAttempts: 0,
+      reconnectTimer: null,
       desiredConnected: false,
       generation: 0,
       startPromise: null
@@ -252,6 +260,9 @@ export class BaileysProvider {
         session.lastSeenAt = new Date().toISOString();
         session.lastError = null;
         session.reconnecting = false;
+        session.reconnectAttempts = 0;
+        clearTimeout(session.reconnectTimer);
+        session.reconnectTimer = null;
       }
 
       if (connection === "close") {
@@ -272,6 +283,10 @@ export class BaileysProvider {
     if (!session.desiredConnected || generation !== session.generation) return;
     const statusCode = disconnectStatusCode(lastDisconnect);
     if (statusCode === DisconnectReason.loggedOut) {
+      session.socket = null;
+      session.reconnecting = false;
+      clearTimeout(session.reconnectTimer);
+      session.reconnectTimer = null;
       session.status = "auth_failed";
       session.qr = null;
       session.connectedPhone = null;
@@ -280,17 +295,32 @@ export class BaileysProvider {
     }
 
     session.status = "disconnected";
+    session.socket = null;
     session.connectedPhone = null;
     session.lastError = lastDisconnect?.error?.message || "WhatsApp socket disconnected.";
 
-    if (!session.reconnecting && TRANSIENT_RECONNECT_CODES.has(statusCode)) {
-      session.reconnecting = true;
-      session.socket = null;
+    const retryable = statusCode === undefined
+      || statusCode >= 500
+      || TRANSIENT_RECONNECT_CODES.has(statusCode);
+    this.logger.warn({ clinicId, statusCode, retryable }, "WhatsApp socket closed");
+    if (!retryable || session.reconnecting) return;
+
+    session.reconnecting = true;
+    const delayMs = Math.min(
+      this.reconnectBaseDelayMs * (2 ** session.reconnectAttempts),
+      this.reconnectMaxDelayMs
+    );
+    session.reconnectAttempts += 1;
+    session.reconnectTimer = setTimeout(async () => {
+      session.reconnectTimer = null;
+      session.reconnecting = false;
+      if (!session.desiredConnected || generation !== session.generation) return;
       await this.#ensureSocket(clinicId, session).catch((error) => {
-        session.reconnecting = false;
         session.lastError = error?.message || "Reconnect failed.";
+        this.logger.warn({ clinicId, error: session.lastError }, "WhatsApp reconnect failed");
       });
-    }
+    }, delayMs);
+    session.reconnectTimer.unref?.();
   }
 
   async #handleInbound(clinicId, session, message) {

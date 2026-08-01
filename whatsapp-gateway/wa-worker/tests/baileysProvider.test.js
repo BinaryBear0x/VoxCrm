@@ -86,6 +86,19 @@ describe("BaileysProvider", () => {
     expect(result.body.errorCode).toBe("WORKER_TRANSIENT");
   });
 
+  it("reconnects with a fresh socket after an unknown server failure", async () => {
+    const { provider, sockets } = createProvider({ reconnectBaseDelayMs: 0 });
+    await provider.connect(clinicA);
+
+    sockets[0].emitConnection({
+      connection: "close",
+      lastDisconnect: { error: { output: { statusCode: 500 }, message: "Connection Failure" } }
+    });
+
+    await waitFor(() => sockets.length === 2);
+    expect(provider.status(clinicA).status).toBe("connecting");
+  });
+
   it("forwards only supported inbound direct messages", async () => {
     const httpClient = { post: vi.fn().mockResolvedValue({}) };
     const { provider, sockets } = createProvider({ httpClient });
@@ -179,6 +192,7 @@ function createProvider(overrides = {}) {
     workerInternalToken: "test-token",
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
     httpClient: overrides.httpClient || { post: vi.fn().mockResolvedValue({}) },
+    reconnectBaseDelayMs: overrides.reconnectBaseDelayMs,
     makeSocket: () => {
       const socket = createSocketMock();
       sockets.push(socket);
