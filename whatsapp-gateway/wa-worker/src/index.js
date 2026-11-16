@@ -8,6 +8,11 @@ const config = loadConfig();
 validateRuntime(config);
 
 const logger = pino({ level: config.logLevel });
+
+// A stray rejected promise must not take every clinic's WhatsApp session down with it.
+process.on("unhandledRejection", (reason) => {
+  logger.error({ error: reason instanceof Error ? reason.message : String(reason) }, "Unhandled promise rejection");
+});
 const sessionStore = new FileSessionStore({
   sessionRoot: config.sessionRoot,
   sessionEncryptionKey: config.sessionEncryptionKey

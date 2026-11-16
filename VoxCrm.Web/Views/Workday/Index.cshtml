@@ -1,0 +1,42 @@
+@model VoxCrm.Application.Workday.WorkdayPage
+@{ ViewData["Title"] = "Bugün yapılacaklar"; ViewData["ActiveMenu"] = "workday"; var zone = TimeZoneInfo.FindSystemTimeZoneById(Model.TimeZone); }
+<div class="d-flex justify-content-between align-items-center my-4 flex-wrap gap-3">
+<div><h1 class="h3">Bugün yapılacaklar</h1><p class="text-muted mb-0">Günlük akış ve kapanış kontrolü · @Model.TimeZone</p></div>
+<div class="d-flex gap-2"><a class="btn btn-primary" href="/Workday/Task">Görev ekle</a><a class="btn btn-outline-secondary" href="#closing">Kapanış asistanı</a></div>
+</div>
+@foreach (var kind in new[] { "Error", "Success" }) { if (TempData[kind] is string message) { <div class="alert alert-@(kind == "Error" ? "danger" : "success")" role="alert">@message</div> } }
+<form method="get" class="d-flex gap-2 mb-4"><label for="date" class="col-form-label">Gün</label><input id="date" name="date" type="date" value="@Model.Date.ToString("yyyy-MM-dd")" class="form-control workday-date"><button class="btn btn-outline-primary">Göster</button><a class="btn btn-link" href="/Workday">Bugün</a></form>
+<div class="row g-3 mb-4">
+<div class="col-sm-4"><div class="card card-body"><span class="text-muted">Açık / geciken görevler</span><strong class="fs-3">@Model.Tasks.Count(x => x.Status == "Open")</strong></div></div>
+<div class="col-sm-4"><div class="card card-body"><span class="text-muted">Randevular</span><strong class="fs-3">@Model.Appointments.Count</strong></div></div>
+<div class="col-sm-4"><div class="card card-body"><span class="text-muted">Gözden geçirilecek uyarılar</span><strong class="fs-3">@Model.Issues.Count(x => x.Acknowledgement == null)</strong></div></div>
+</div>
+<div class="card shadow-sm mb-4"><div class="card-body"><h2 class="h5">Görevler ve hasta sahibi talepleri</h2><p class="small text-muted">Geciken açık görevler de gösterilir. Tamamlanan veya iptal edilen eski görevler kendi gününden incelenebilir.</p>
+@foreach (var t in Model.Tasks) {
+<div class="border-top py-3 d-flex justify-content-between align-items-start flex-wrap gap-2">
+<div><a class="fw-semibold text-decoration-none" href="/Workday/Task/@t.ID">@t.Title</a>
+<div class="small text-muted">@t.DueDate.ToString("dd.MM.yyyy") · @(t.Status == "Open" ? "Açık" : t.Status == "Done" ? "Tamamlandı" : "İptal") @(t.Important ? " · Öncelikli" : "") @(t.DueDate < Model.Date && t.Status == "Open" ? " · Gecikmiş" : "")</div>
+<div class="small">Sorumlu: @(Model.Staff.FirstOrDefault(x => x.Id == t.AssignedUserId)?.Label ?? "Atanmadı")</div>
+@if (t.PatientId.HasValue) { <a class="small" href="/Patient/Details/@t.PatientId">Hasta ve sahip bilgileri →</a> }
+</div>
+<form method="post" action="/Workday/TaskStatus" class="d-flex gap-2">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@t.ID"><input type="hidden" name="revision" value="@t.Revision">
+@if (t.Status == "Open") { <button class="btn btn-success btn-sm" name="status" value="Done">Tamamla</button><button class="btn btn-outline-danger btn-sm" name="status" value="Cancelled">İptal et</button> }
+else { <button class="btn btn-outline-primary btn-sm" name="status" value="Open">Yeniden aç</button> }
+</form></div>
+}
+@if (!Model.Tasks.Any()) { <p class="text-muted mb-0">Bu gün için görev yok.</p> }
+</div></div>
+<div class="row g-4 mb-4"><div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h5">Randevu akışı</h2>
+@foreach (var a in Model.Appointments) { <div class="border-top py-2"><a href="/Appointment/Edit/@a.ID">@TimeZoneInfo.ConvertTimeFromUtc(a.ScheduledAt, zone).ToString("HH:mm") — @(a.Patient?.Name ?? a.GuestName ?? "Misafir")</a><span class="badge bg-secondary ms-2">@a.Status</span><div class="small text-muted">@a.AppointmentType · @a.DurationMinutes dk</div></div> }
+@if (!Model.Appointments.Any()) { <p class="text-muted">Randevu yok.</p> }
+<a class="btn btn-outline-primary btn-sm mt-2" href="/Appointment">Takvime git</a>
+</div></div></div><div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h5">Aşı gündemi</h2><p class="small text-muted">Bugüne kadar vadesi gelen son 30 günlük aktif kayıtlar. Bu liste mesaj göndermez.</p>
+@foreach (var v in Model.Vaccinations) { <div class="border-top py-2"><a href="/Patient/Details/@v.PatientId">@v.Patient.Name</a> — @v.VaccineType.Name<div class="small text-muted">@v.NextDueDate.ToString("dd.MM.yyyy") @(DateOnly.FromDateTime(v.NextDueDate) < Model.Date ? " · Gecikmiş" : "")</div></div> }
+@if (!Model.Vaccinations.Any()) { <p class="text-muted">Bu aralıkta aşı gündemi yok.</p> }
+</div></div></div></div>
+<div id="closing" class="card shadow-sm mb-4"><div class="card-body"><h2 class="h4">Kapanış asistanı</h2><p class="text-muted">Kayıtlardaki somut eksikleri gösterir; borç, ödeme veya tıbbi işlem oluşturmaz. Kontrol notu uyarıyı çözülmüş saymaz.</p>
+@foreach (var issue in Model.Issues) { <div class="border-top py-3"><div class="d-flex justify-content-between gap-2"><strong>@issue.Title</strong><a class="btn btn-outline-primary btn-sm" href="@issue.Url">Kaydı aç</a></div><p class="small text-muted mt-2">@issue.Explanation</p>
+@if (issue.Acknowledgement != null) { <div class="alert alert-info py-2 small">Kontrol notu: @issue.Acknowledgement</div> }
+<form method="post" action="/Workday/Acknowledge" class="d-flex gap-2">@Html.AntiForgeryToken()<input type="hidden" name="date" value="@Model.Date.ToString("yyyy-MM-dd")"><input type="hidden" name="issueKey" value="@issue.Key"><input class="form-control form-control-sm" name="note" maxlength="500" placeholder="Kontrol ettim; açıklama..." aria-label="Kontrol açıklaması" required><button class="btn btn-outline-secondary btn-sm">Not kaydet</button></form></div> }
+@if (!Model.Issues.Any()) { <div class="alert alert-success mb-0">Bu günün kontrol kurallarında eksik bulunmadı.</div> }
+</div></div>

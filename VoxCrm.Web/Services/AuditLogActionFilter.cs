@@ -57,6 +57,7 @@ public class AuditLogActionFilter : IAsyncActionFilter
         var httpContext = context.HttpContext;
         var controller = context.RouteData.Values["controller"]?.ToString() ?? "Unknown";
         var action = context.RouteData.Values["action"]?.ToString() ?? "Unknown";
+        var safePath = controller is "Care" or "OwnerTrack" ? "/public/[private-link]" : httpContext.Request.Path.Value;
         var category = exception == null
             ? statusCode >= 400 ? AuditLogCategories.Validation : AuditLogCategories.Operation
             : AuditLogCategories.Exception;
@@ -77,7 +78,7 @@ public class AuditLogActionFilter : IAsyncActionFilter
             Outcome = outcome,
             Action = $"{controller}.{action}",
             Message = exception == null
-                ? $"{httpContext.Request.Method} {httpContext.Request.Path} işlemi tamamlandı."
+                ? $"{httpContext.Request.Method} {safePath} işlemi tamamlandı."
                 : exception.Message,
             EntityType = controller,
             EntityId = context.RouteData.Values["id"]?.ToString(),
@@ -89,7 +90,7 @@ public class AuditLogActionFilter : IAsyncActionFilter
                 ? "Dealer"
                 : httpContext.User.IsInRole("Clinic") ? "Clinic" : null,
             HttpMethod = httpContext.Request.Method,
-            Path = httpContext.Request.Path,
+            Path = safePath,
             StatusCode = statusCode,
             IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
             UserAgent = httpContext.Request.Headers["User-Agent"].ToString(),
@@ -101,7 +102,7 @@ public class AuditLogActionFilter : IAsyncActionFilter
             Metadata = new Dictionary<string, object?>
             {
                 ["route"] = $"{controller}.{action}",
-                ["query"] = httpContext.Request.QueryString.Value,
+                ["query"] = controller is "Care" or "OwnerTrack" ? null : httpContext.Request.QueryString.Value,
                 ["formFieldCount"] = httpContext.Request.HasFormContentType ? httpContext.Request.Form.Count : 0
             }
         };

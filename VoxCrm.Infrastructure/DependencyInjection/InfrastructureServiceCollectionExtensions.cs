@@ -48,22 +48,36 @@ public static class InfrastructureServiceCollectionExtensions
                 .AddInterceptors(provider.GetRequiredService<PiiEncryptionInterceptor>()));
 
         services.TryAddScoped<ITenantService, SystemTenantService>();
-        services.TryAddScoped<IAuditLogger, DbAuditLogger>();
+        // Resolve explicitly so the application always uses the isolated audit
+        // DbContext path. The DbContext constructor remains only for lightweight
+        // direct unit/integration test setup.
+        services.TryAddScoped<IAuditLogger>(provider =>
+            new DbAuditLogger(provider.GetRequiredService<IServiceScopeFactory>()));
         services.TryAddScoped<IWhatsAppNotificationRepository, WhatsAppNotificationRepository>();
+        services.TryAddScoped<WhatsAppRecipientGuard>();
+        services.TryAddScoped<IVaccinationReminderScheduler, VaccinationReminderScheduler>();
+        services.TryAddScoped<IVaccinationReminderForecast, VaccinationReminderScheduler>();
         return services;
     }
 
     public static IServiceCollection AddVoxCrmWebInfrastructureServices(this IServiceCollection services)
     {
+        services.TryAddScoped<VoxCrm.Application.Dashboard.IClinicWorkspaceService, VoxCrm.Infrastructure.Dashboard.ClinicWorkspaceService>();
+        services.TryAddScoped<VoxCrm.Application.Workday.IWorkdayService, VoxCrm.Infrastructure.Workday.WorkdayService>();
+        services.TryAddScoped<WhatsAppRecipientGuard>();
         services.TryAddSingleton<IPiiProtector, AesGcmPiiProtector>();
         services.TryAddSingleton<PiiEncryptionInterceptor>();
-        services.TryAddScoped<IAuditLogger, DbAuditLogger>();
+        services.TryAddScoped<IAuditLogger>(provider =>
+            new DbAuditLogger(provider.GetRequiredService<IServiceScopeFactory>()));
         services.TryAddScoped<IWhatsAppNotificationRepository, WhatsAppNotificationRepository>();
         services.TryAddScoped<IClinicManagementRepository, ClinicManagementRepository>();
+        services.TryAddScoped<IClinicAccessService, ClinicAccessService>();
         services.TryAddScoped<IPatientService, PatientService>();
         services.TryAddScoped<IPetOwnerService, PetOwnerService>();
         services.TryAddScoped<IVaccinationService, VaccinationService>();
         services.TryAddScoped<IVaccineTypeService, VaccineTypeService>();
+        services.TryAddScoped<IVaccinationReminderScheduler, VaccinationReminderScheduler>();
+        services.TryAddScoped<IVaccinationReminderForecast, VaccinationReminderScheduler>();
         services.TryAddScoped<IFinanceService, FinanceService>();
         services.TryAddScoped<IAppointmentService, AppointmentService>();
         services.TryAddScoped<IDashboardService, DashboardService>();

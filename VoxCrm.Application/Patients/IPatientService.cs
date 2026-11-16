@@ -8,7 +8,7 @@ public sealed record PatientDetails(
     IReadOnlyList<Muayene> Examinations,
     IReadOnlyList<VaccinationRecord> Vaccinations,
     IReadOnlyList<Appointment> Appointments,
-    IReadOnlyList<Debt> Debts);
+    IReadOnlyList<VoxCrm.Application.Finance.FinanceSummary> Debts);
 
 public sealed record PatientCommandResult(bool Succeeded, Patient? Patient = null, string? Error = null, bool NotFound = false);
 
@@ -24,5 +24,6 @@ public interface IPatientService
     Task<PatientCommandResult> ArchiveAsync(Guid id, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<PatientCommandResult> RestoreAsync(Guid id, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<PatientCommandResult> AddOwnerAsync(Guid patientId, Guid ownerId, CancellationToken cancellationToken = default);
+    Task<PatientCommandResult> SetPrimaryOwnerAsync(Guid patientId, Guid ownerId, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<PatientCommandResult> RemoveOwnerAsync(Guid patientId, Guid ownerId, Guid actorUserId, CancellationToken cancellationToken = default);
 }

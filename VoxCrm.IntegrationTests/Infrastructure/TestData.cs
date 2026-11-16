@@ -25,6 +25,7 @@ public static class TestData
             DealerId = dealer.ID,
             IsActive = true,
             IsWhatsAppEnabled = whatsAppEnabled,
+            AutomaticVaccinationRemindersEnabled = true,
             WhatsAppSendWindowEnabled = false,
         };
         var owner = new PetOwner
@@ -51,13 +52,15 @@ public static class TestData
         int count,
         string status = WhatsAppNotificationStatuses.Pending)
     {
+        var owner = await db.PetOwners.SingleAsync(x => x.ID == ownerId);
         for (var i = 0; i < count; i++)
         {
             db.WhatsAppNotifications.Add(new WhatsAppNotification
             {
                 ClinicID = clinicId,
                 PetOwnerId = ownerId,
-                PhoneNumber = $"+90555111{i:0000}",
+                PhoneNumber = owner.Phone!,
+                RecipientSnapshot = VoxCrm.Infrastructure.WhatsApp.WhatsAppRecipientGuard.Snapshot(owner, null),
                 MessageContent = $"Asi hatirlatma {i}",
                 NotificationType = WhatsAppNotificationTypes.VaccinationReminder,
                 Status = status,
@@ -69,6 +72,11 @@ public static class TestData
 
     public static async Task ClearWhatsAppDataAsync(VoxCrmDbContext db)
     {
+        await db.ClinicTasks.ExecuteDeleteAsync();
+        await db.ExcelImportBatches.ExecuteDeleteAsync();
+        await db.OwnerFollowUpShares.ExecuteDeleteAsync();
+        await db.CareCards.ExecuteDeleteAsync();
+        await db.ClosingAcknowledgements.ExecuteDeleteAsync();
         await db.UserClaims.ExecuteDeleteAsync();
         await db.UserLogins.ExecuteDeleteAsync();
         await db.UserTokens.ExecuteDeleteAsync();
@@ -78,6 +86,11 @@ public static class TestData
         await db.WhatsAppTemplates.ExecuteDeleteAsync();
         await db.WhatsAppNotifications.ExecuteDeleteAsync();
         await db.SystemAuditLogs.ExecuteDeleteAsync();
+        await db.FinanceChanges.ExecuteDeleteAsync();
+        await db.FinanceReceipts.ExecuteDeleteAsync();
+        await db.FinanceInstallments.ExecuteDeleteAsync();
+        await db.FinanceCharges.ExecuteDeleteAsync();
+        await db.FinanceAccounts.ExecuteDeleteAsync();
         await db.Payments.ExecuteDeleteAsync();
         await db.Borçlar.ExecuteDeleteAsync();
         await db.VaccinationRecords.ExecuteDeleteAsync();

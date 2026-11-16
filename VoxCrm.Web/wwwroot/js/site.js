@@ -124,9 +124,13 @@
 
     wrapper.append(hidden, input, results);
 
+    let selectedDisplay = selectedText;
     const setSelection = (item) => {
       hidden.value = item.id;
-      input.value = item.label;
+      // Keep the chosen owner visible, rather than leaving the search term in
+      // the box.  The phone portion is particularly useful when names match.
+      input.value = item.meta ? `${item.label} — ${item.meta.split(" · ")[0]}` : item.label;
+      selectedDisplay = input.value;
       input.setCustomValidity("");
       results.hidden = true;
 
@@ -152,6 +156,7 @@
 
       items.forEach((item) => {
         const button = document.createElement("button");
+        let selectedOnPointerDown = false;
         button.type = "button";
         button.className = "search-select-option";
         button.innerHTML = `
@@ -159,13 +164,27 @@
           ${item.meta ? `<span class="search-select-meta">${escapeHtml(item.meta)}</span>` : ""}
           ${item.detail ? `<span class="search-select-detail">${escapeHtml(item.detail)}</span>` : ""}
         `;
-        button.addEventListener("click", () => setSelection(item));
+        // On mobile browsers the search input can blur and hide this result
+        // before its click event is delivered. Select on pointerdown first;
+        // click remains as the keyboard/older-browser fallback.
+        button.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          selectedOnPointerDown = true;
+          setSelection(item);
+        });
+        button.addEventListener("click", () => {
+          if (!selectedOnPointerDown) setSelection(item);
+          selectedOnPointerDown = false;
+        });
         results.appendChild(button);
       });
       results.hidden = false;
     };
 
+    let searchVersion = 0;
     const search = debounce(async () => {
+      if (hidden.value && input.value === selectedDisplay) return;
+      const version = ++searchVersion;
       const query = input.value.trim();
       hidden.value = "";
       select.value = "";
@@ -175,10 +194,20 @@
         headers: { "Accept": "application/json" }
       });
       if (!response.ok) return;
-      render(await response.json());
+      const items = await response.json();
+      if (version !== searchVersion || query !== input.value.trim()) return;
+      render(items);
     }, 250);
 
-    input.addEventListener("input", search);
+    input.addEventListener("input", () => {
+      searchVersion++;
+      hidden.value = "";
+      select.value = "";
+      results.hidden = true;
+      if (input.value.trim() || select.dataset.required === "true") input.setCustomValidity("Listeden bir kayıt seçin.");
+      else input.setCustomValidity("");
+      search();
+    });
     input.addEventListener("focus", () => {
       if (!results.hidden && results.childElementCount) return;
       search();
@@ -198,6 +227,29 @@
       if (!results.parentElement.contains(event.target)) results.hidden = true;
     });
   });
+
+  const appointmentMode = document.querySelector("[data-appointment-mode]");
+  if (appointmentMode) {
+    const patientFields = document.querySelector("[data-appointment-patient-fields]");
+    const guestFields = document.querySelector("[data-appointment-guest-fields]");
+    const updateAppointmentMode = () => {
+      const registered = appointmentMode.value === "registered";
+      if (patientFields) {
+        patientFields.hidden = !registered;
+        patientFields.querySelectorAll("input, select").forEach((field) => {
+          field.disabled = !registered;
+        });
+      }
+      if (guestFields) {
+        guestFields.hidden = registered;
+        guestFields.querySelectorAll("input, textarea").forEach((field) => {
+          field.disabled = registered;
+        });
+      }
+    };
+    appointmentMode.addEventListener("change", updateAppointmentMode);
+    updateAppointmentMode();
+  }
 
   function escapeHtml(value) {
     return String(value)

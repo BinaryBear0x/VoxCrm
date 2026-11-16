@@ -16,6 +16,9 @@ describe("worker security helpers", () => {
     expect(requireClinicId(clinicId.toUpperCase())).toBe(clinicId);
     expect(() => requireClinicId("../../bad")).toThrow("Invalid clinic id");
     expect(normalizePhoneNumber("+90 (555) 111-11-11")).toBe("905551111111");
+    expect(normalizePhoneNumber("0555 111 11 11")).toBe("905551111111");
+    expect(normalizePhoneNumber("555 111 11 11")).toBe("905551111111");
+    expect(normalizePhoneNumber("+44 20 7946 0018")).toBe("442079460018");
     expect(() => normalizePhoneNumber("123")).toThrow("Invalid phone number");
   });
 
@@ -34,7 +37,8 @@ describe("worker security helpers", () => {
 
     const authPath = path.join(root, "baileys", clinicId, "auth.json");
     const stat = await fs.stat(authPath);
-    expect((stat.mode & 0o777).toString(8)).toBe("600");
+    // Windows uses ACLs; POSIX mode bits are enforced in the Linux deployment.
+    if (process.platform !== "win32") expect((stat.mode & 0o777).toString(8)).toBe("600");
 
     const restored = await store.useAuthState(clinicId);
     expect(restored.state.creds.me.id).toBe("905550000000@s.whatsapp.net");

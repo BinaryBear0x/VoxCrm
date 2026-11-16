@@ -1,115 +1,48 @@
-@model VoxCrm.Web.Models.DashboardViewModel
-@{
-    ViewData["Title"] = "Gösterge Paneli";
-    ViewData["ActiveMenu"] = "dashboard";
+@model VoxCrm.Application.Dashboard.ClinicWorkspace
+@using System.Globalization
+@inject VoxCrm.Web.Services.ClinicModules Modules
+@{ ViewData["Title"] = "Bugün"; ViewData["ActiveMenu"] = "dashboard";
+var workdayOn = await Modules.WorkdayAsync(); var followOn = await Modules.FollowUpAsync(); var whatsAppOn = await Modules.WhatsAppAsync();
+var day = Model.Workday.Date; var tr = CultureInfo.GetCultureInfo("tr-TR"); var zone = TimeZoneInfo.FindSystemTimeZoneById(Model.Workday.TimeZone);
+var week = day.AddDays(-(((int)day.DayOfWeek + 6) % 7));
+var tasks = Model.Workday.Tasks.Where(x => x.Kind != "CareContact" && x.Status != "Cancelled").ToList();
+var completed = tasks.Count(x => x.Status == "Done"); var percent = tasks.Count == 0 ? 0 : completed * 100 / tasks.Count;
+var returnUrl = Url.Action("Index", "Home", new { date = day.ToString("yyyy-MM-dd") });
 }
-
-<!-- Başlık Satırı -->
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-2 mb-4 border-bottom">
-    <h1 class="h3 fw-bold text-dark"><i class="bi bi-grid-1x2 me-2 text-primary"></i>Gösterge Paneli</h1>
-    <span class="text-muted small">@DateTime.Now.ToString("dddd, dd MMMM yyyy", new System.Globalization.CultureInfo("tr-TR"))</span>
-</div>
-
-<!-- Başarı Mesajı -->
-@if (TempData["Success"] != null)
-{
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-}
-
-<!-- İstatistik Kartları -->
-<div class="row g-3 mb-4">
-    <div class="col-12 col-sm-6 col-xl-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-3 p-3 dashboard-blue">
-                    <i class="bi bi-people-fill text-primary fs-3"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Toplam Müşteri</div>
-                    <div class="fw-bold fs-4">@Model.TotalPetOwners</div>
-                </div>
-            </div>
-            <div class="card-footer bg-transparent border-0 pt-0">
-                <a href="/PetOwner" class="text-primary text-decoration-none small">Tümünü Gör →</a>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12 col-sm-6 col-xl-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-3 p-3 dashboard-green">
-                    <i class="bi bi-heart-pulse-fill text-success fs-3"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Toplam Hasta</div>
-                    <div class="fw-bold fs-4">@Model.TotalPatients</div>
-                </div>
-            </div>
-            <div class="card-footer bg-transparent border-0 pt-0">
-                <a href="/Patient" class="text-success text-decoration-none small">Tümünü Gör <i class="bi bi-arrow-right-short"></i></a>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12 col-sm-6 col-xl-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-3 p-3 dashboard-yellow">
-                    <i class="bi bi-cash-coin text-warning fs-3"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Toplam Alacak</div>
-                    <div class="fw-bold fs-4">@Model.TotalOutstandingDebt.ToString("N2") ₺</div>
-                </div>
-            </div>
-            <div class="card-footer bg-transparent border-0 pt-0">
-                <a href="/Finance" class="text-warning text-decoration-none small">Finansa Git <i class="bi bi-arrow-right-short"></i></a>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12 col-sm-6 col-xl-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-3 p-3 dashboard-purple">
-                    <i class="bi bi-whatsapp text-purple fs-3 text-whatsapp-purple"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Bekleyen Bot Mesajı</div>
-                    <div class="fw-bold fs-4">@Model.PendingWhatsAppMessages</div>
-                </div>
-            </div>
-            <div class="card-footer bg-transparent border-0 pt-0">
-                <span class="text-muted small">Bot İşleyecek</span>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Hızlı Erişim Butonları -->
-<div class="row g-3">
-    <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom">
-                <h5 class="mb-0 fw-semibold"><i class="bi bi-lightning-charge text-warning me-2"></i>Hızlı İşlemler</h5>
-            </div>
-            <div class="card-body">
-                <div class="d-flex flex-wrap gap-2">
-                    <a href="/PetOwner/Create" class="btn btn-primary">
-                        <i class="bi bi-person-plus me-1"></i> Yeni Müşteri Ekle
-                    </a>
-                    <a href="/PetOwner" class="btn btn-outline-secondary">
-                        <i class="bi bi-people me-1"></i> Müşteri Listesi
-                    </a>
-                    <a href="/hangfire" target="_blank" class="btn btn-outline-dark">
-                        <i class="bi bi-clock-history me-1"></i> Hangfire Paneli
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<div class="workspace-heading"><div><div class="eyebrow">KLİNİĞİNİZE GENEL BAKIŞ</div><h1>@(day == Model.Today ? "Bugün" : day.ToString("dd MMMM", tr))</h1><p>@day.ToString("dddd, dd MMMM yyyy", tr)</p></div>
+<div class="workspace-heading-actions"><form method="get" class="workspace-date-picker"><label for="workspace-date" class="visually-hidden">Gün seç</label><input id="workspace-date" name="date" type="date" value="@day.ToString("yyyy-MM-dd")" data-submit-on-change><noscript><button>Göster</button></noscript></form><a href="/" class="btn btn-light border">Bugün</a><div class="dropdown"><button class="btn btn-primary" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-plus-lg me-2"></i>Yeni kayıt</button><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="/Patient/Create">Yeni hasta</a></li><li><a class="dropdown-item" href="/PetOwner/Create">Yeni müşteri</a></li><li><a class="dropdown-item" href="/Appointment/Create">Yeni randevu</a></li><li><a class="dropdown-item" href="/Muayene/Create">Muayene kaydı</a></li><li><a class="dropdown-item" href="/Finance/Create">Tahsilat hesabı</a></li>@if(workdayOn){<li><a class="dropdown-item" href="/Workday/Task">Görev ekle</a></li>}</ul></div></div></div>
+@foreach(var key in new[] { "Error", "Success" }) { if(TempData[key] is string message) { <div class="alert alert-@(key == "Error" ? "danger" : "success")" role="alert">@message</div> } }
+<nav class="week-strip" aria-label="Haftalık gün seçimi"><a href="/?date=@day.AddDays(-7).ToString("yyyy-MM-dd")" class="week-arrow" aria-label="Önceki hafta"><i class="bi bi-chevron-left"></i></a>@for(var i=0;i<7;i++){var d=week.AddDays(i);<a href="/?date=@d.ToString("yyyy-MM-dd")" class="week-day @(d==day ? "selected" : "")" aria-current="@(d==day ? "date" : null)"><span>@d.ToString("ddd",tr)</span><strong>@d.Day</strong></a>}<a href="/?date=@day.AddDays(7).ToString("yyyy-MM-dd")" class="week-arrow" aria-label="Sonraki hafta"><i class="bi bi-chevron-right"></i></a></nav>
+<section class="workspace-stats" aria-label="Gün özeti">
+<a class="workspace-stat" href="/Appointment"><span class="stat-symbol blue"><i class="bi bi-calendar3"></i></span><div><span>@(day==Model.Today ? "Bugünkü randevu" : "Günün randevuları")</span><strong>@Model.Appointments.Count</strong><small>@Model.Appointments.Count(x=>x.Appointment.Status=="Tamamlandı") tamamlandı · @Model.Appointments.Count(x=>x.Appointment.Status=="Planlandı") planlandı</small></div></a>
+<a class="workspace-stat" href="/Muayene"><span class="stat-symbol blue"><i class="bi bi-clipboard2-pulse"></i></span><div><span>Muayene</span><strong>@Model.DailyExaminations</strong><small>Seçilen günün kayıtları</small></div></a>
+<a class="workspace-stat" href="/Finance"><span class="stat-symbol orange"><i class="bi bi-wallet2"></i></span><div><span>Tahsilat (günlük)</span><strong>@Model.DailyReceipts.ToString("C0",tr)</strong><small>Ödeme tarihine göre gerçekleşen</small></div></a>
+@if(workdayOn){<a class="workspace-stat" href="/Workday"><span class="stat-symbol green"><i class="bi bi-check2-square"></i></span><div><span>Bekleyen işler</span><strong>@Model.Workday.Tasks.Count(x=>x.Status=="Open")</strong><small>Geciken görevler dahil</small></div></a>}
+</section>
+<div class="workspace-grid"><div class="workspace-primary">
+<section class="workspace-panel" aria-labelledby="appointments-heading"><div class="panel-heading"><h2 id="appointments-heading">Randevular <span class="muted-count">(@Model.Appointments.Count)</span></h2><a href="/Appointment" class="panel-link">Tümünü gör <i class="bi bi-arrow-up-right"></i></a></div>
+<div class="appointment-toolbar"><label class="table-search"><i class="bi bi-search"></i><input type="search" data-appointment-search placeholder="Hasta, sahip veya telefon ara…" aria-label="Randevularda ara"></label><select class="form-select" data-status-filter aria-label="Randevu durumu"><option value="">Tüm durumlar</option>@foreach(var status in VoxCrm.Application.Appointments.AppointmentRules.AllowedStatuses){<option>@status</option>}</select><button class="btn btn-light border filter-toggle" data-more-filters aria-expanded="false" aria-controls="appointment-filters"><i class="bi bi-sliders2"></i><span>Filtreler</span></button><button class="btn btn-light border" data-density-toggle aria-label="Kompakt tabloyu aç" aria-pressed="false"><i class="bi bi-list"></i></button></div>
+<div id="appointment-filters" class="appointment-extra-filters" hidden><label>İşlem türü<select class="form-select form-select-sm" data-type-filter><option value="">Tüm işlemler</option>@foreach(var type in Model.Appointments.Select(x=>x.Appointment.AppointmentType).Distinct()){<option>@type</option>}</select></label><button type="button" class="btn btn-link btn-sm" data-reset-filters>Filtreleri temizle</button></div>
+<div class="table-responsive"><table class="workspace-table" data-appointments-table><thead><tr><th>Saat</th><th>Hasta</th><th>Sahip / Telefon</th><th>İşlem</th><th>Durum</th><th><span class="visually-hidden">İşlemler</span></th></tr></thead><tbody>
+@foreach(var row in Model.Appointments){var a=row.Appointment;var pet=a.Patient?.Name??"Misafir";var statusClass=a.Status=="Tamamlandı"?"done":a.Status=="Planlandı"?"waiting":"neutral";
+<tr data-appointment-row data-search="@(pet+" "+row.OwnerName+" "+row.Phone+" "+a.AppointmentType)" data-status="@a.Status" data-type="@a.AppointmentType"><td><a class="appointment-time" href="/Appointment/Edit/@a.ID">@VoxCrm.Web.Services.ClinicDateDisplay.Convert(a.ScheduledAt,zone).ToString("HH:mm")</a></td><td><div class="patient-cell"><span class="patient-avatar"><i class="bi bi-heart-pulse"></i></span><div>@if(a.PatientId.HasValue){<a class="patient-name" href="/Patient/Details/@a.PatientId">@pet</a>}else{<strong>@pet</strong>}<small>@(a.Patient?.Species??"Misafir randevusu")</small></div></div></td><td><span class="owner-name">@row.OwnerName</span><small class="owner-phone">@(row.Phone??"Telefon yok")</small></td><td>@a.AppointmentType</td><td><span class="status-tag @statusClass">@a.Status</span></td><td><a class="row-action" href="/Appointment/Edit/@a.ID" aria-label="@pet randevusunu düzenle"><i class="bi bi-three-dots"></i></a></td></tr>}
+<tr data-appointments-empty hidden="@(Model.Appointments.Count>0)"><td colspan="6"><div class="workspace-empty"><i class="bi bi-calendar2-plus"></i><strong>@(Model.Appointments.Count==0?"Bu gün için randevu yok":"Filtreye uygun randevu bulunamadı")</strong><span>Randevu ekleyebilir veya farklı bir gün seçebilirsiniz.</span><a href="/Appointment/Create" class="btn btn-outline-primary btn-sm">Randevu ekle</a></div></td></tr>
+</tbody></table></div><div class="panel-footnote"><span data-filter-count>@Model.Appointments.Count randevu</span><span>Saat dilimi: @Model.Workday.TimeZone</span></div></section>
+@if(followOn && workdayOn){<section class="workspace-panel" aria-labelledby="callbacks-heading"><div class="panel-heading"><h2 id="callbacks-heading">Geri Arama Talepleri @if(Model.Callbacks.Count>0){<span class="count-badge">@Model.Callbacks.Count</span>}</h2><a class="panel-link" href="/Workday">Tümünü gör <i class="bi bi-arrow-up-right"></i></a></div>
+@foreach(var row in Model.Callbacks){<div class="callback-row"><span class="patient-avatar"><i class="bi bi-chat-heart"></i></span><div class="callback-person"><strong>@row.OwnerName</strong><small>@row.PatientName · @(row.Phone??"Telefon bilgisi yok")</small></div><div class="callback-description"><span>Bakım kartı üzerinden görüşme istedi</span><small>@VoxCrm.Web.Services.ClinicDateDisplay.Convert(row.Task.CreatedAt,zone).ToString("dd.MM HH:mm")</small></div><a class="btn btn-soft-primary btn-sm" href="/Workday/Task/@row.Task.ID">İlgilen <i class="bi bi-arrow-right ms-1"></i></a></div>}
+@if(!Model.Callbacks.Any()){<div class="workspace-empty compact"><i class="bi bi-chat-square-heart"></i><strong>Bekleyen görüşme talebi yok</strong><span>Bakım kartından gelen talepler burada görünür.</span></div>}
+</section>}
+<section class="workspace-summary"><a href="/Patient"><i class="bi bi-heart-pulse"></i><strong>@Model.Patients</strong> hasta</a><a href="/PetOwner"><i class="bi bi-people"></i><strong>@Model.Owners</strong> müşteri</a><a href="/Finance"><i class="bi bi-wallet2"></i>Açık bakiye <strong>@Model.Outstanding.ToString("C0",tr)</strong></a></section>
+</div><aside class="workspace-secondary">
+@if(workdayOn){<section class="workspace-panel"><div class="panel-heading"><div><h2>Yapılacaklar</h2><span class="panel-subtitle">@completed/@tasks.Count tamamlandı</span></div><a href="/Workday/Task" class="add-task" aria-label="Görev ekle"><i class="bi bi-plus-lg"></i></a></div><progress class="task-progress" max="100" value="@percent" aria-label="Görev tamamlama oranı">@percent%</progress>
+@foreach(var task in tasks.Take(7)){<form method="post" action="/Workday/TaskStatus" class="home-task @(task.Status=="Done"?"is-done":"")">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@task.ID"><input type="hidden" name="revision" value="@task.Revision"><input type="hidden" name="status" value="@(task.Status=="Done"?"Open":"Done")"><input type="hidden" name="returnUrl" value="@returnUrl"><input type="checkbox" checked="@(task.Status=="Done")" id="task-@task.ID" class="form-check-input" data-task-check aria-label="@task.Title görev durumunu değiştir"><a href="/Workday/Task/@task.ID">@task.Title @if(task.DueDate<day && task.Status=="Open"){<small>Gecikmiş · @task.DueDate.ToString("dd.MM")</small>}</a><noscript><button class="btn btn-sm">Değiştir</button></noscript></form>}
+@if(!tasks.Any()){<div class="workspace-empty compact"><i class="bi bi-check2-all"></i><strong>Günün görevleri için hazırsınız</strong><a href="/Workday/Task">İlk görevi ekle →</a></div>}
+<a class="task-all-link" href="/Workday">Tüm görevler ve kapanış kontrolü <i class="bi bi-arrow-right"></i></a></section>}
+<section class="workspace-panel quick-panel"><div class="panel-heading"><h2>Hızlı İşlemler</h2></div>
+<a href="/Patient/Create"><i class="bi bi-person-plus blue"></i>Yeni hasta<i class="bi bi-chevron-right"></i></a><a href="/Appointment/Create"><i class="bi bi-calendar-plus blue"></i>Yeni randevu<i class="bi bi-chevron-right"></i></a><a href="/Muayene/Create"><i class="bi bi-clipboard2-pulse blue"></i>Muayene kaydı<i class="bi bi-chevron-right"></i></a><a href="/Finance"><i class="bi bi-wallet2 green"></i>Tahsilat ekle<i class="bi bi-chevron-right"></i></a>@if(whatsAppOn){<a href="/WhatsApp"><i class="bi bi-whatsapp green"></i>WhatsApp mesajı hazırla<i class="bi bi-chevron-right"></i></a>}
+</section>
+<section class="workspace-panel clinic-note"><div class="panel-heading"><h2>Klinik Notu</h2><button class="btn-note-edit" data-bs-toggle="collapse" data-bs-target="#clinic-note-form" aria-expanded="false" aria-controls="clinic-note-form" aria-label="Klinik notunu düzenle"><i class="bi bi-pencil"></i></button></div><div class="clinic-note-text"><i class="bi bi-info-circle"></i><p>@(Model.Note??"Ekibiniz için kısa bir hatırlatma bırakın.")</p></div>
+<form id="clinic-note-form" method="post" action="/Home/SaveClinicNote" class="collapse mt-3">@Html.AntiForgeryToken()<input type="hidden" name="revision" value="@Model.NoteRevision"><label class="visually-hidden" for="clinic-note">Klinik notu</label><textarea id="clinic-note" name="note" maxlength="2000" rows="4" class="form-control mb-2">@Model.Note</textarea><button class="btn btn-primary btn-sm">Notu kaydet</button><span class="small text-muted d-block mt-2">Yalnız klinik ekibine görünür.</span></form></section>
+@if(workdayOn){<a href="/Workday#closing" class="closing-shortcut"><i class="bi bi-shield-check"></i><div><strong>Kapanış asistanı</strong><span>@Model.Workday.Issues.Count kontrol noktası · Günü gözden geçir</span></div><i class="bi bi-arrow-up-right"></i></a>}
+</aside></div>
+@section Scripts {<script src="~/js/crm-home.js" asp-append-version="true"></script>}

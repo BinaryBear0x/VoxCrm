@@ -107,17 +107,20 @@ public sealed class ClinicManagementRepository : IClinicManagementRepository
         ClinicUpdate update,
         CancellationToken cancellationToken)
     {
-        var clinic = await _context.Clinics.FirstOrDefaultAsync(
-            candidate => candidate.ID == update.ClinicId && candidate.DealerId == update.DealerId,
-            cancellationToken);
+        await using var transaction=await _context.Database.BeginTransactionAsync(cancellationToken);
+        var clinic=await _context.Clinics.FromSqlInterpolated($"SELECT * FROM \"Clinics\" WHERE \"ID\"={update.ClinicId} AND \"DealerId\"={update.DealerId} FOR UPDATE").SingleOrDefaultAsync(cancellationToken);
         if (clinic == null)
             return ClinicManagementResult.Failure("Klinik bulunamadı.");
 
+        if ((update.ModulesRevision.HasValue && update.ModulesRevision != clinic.ModulesRevision) || (!update.ModulesRevision.HasValue && update.IsWhatsAppEnabled != clinic.IsWhatsAppEnabled))
+            return ClinicManagementResult.Failure("Modül ayarları değişmiş veya form sürümü eksik. Sayfayı yenileyip tekrar deneyin.");
         clinic.Name = update.Name;
         clinic.phone = update.Phone;
         clinic.Email = update.Email;
         clinic.Address = update.Address;
+        if (clinic.IsWhatsAppEnabled != update.IsWhatsAppEnabled) clinic.ModulesRevision++;
         clinic.IsWhatsAppEnabled = update.IsWhatsAppEnabled;
+        if (!update.IsWhatsAppEnabled) clinic.AutomaticVaccinationRemindersEnabled = false;
         clinic.WhatsAppPhoneNumberId = update.WhatsAppPhoneNumberId;
         clinic.WhatsAppSendWindowEnabled = update.WhatsAppSendWindowEnabled;
         clinic.WhatsAppSendWindowStart = update.WhatsAppSendWindowStart;
@@ -125,6 +128,7 @@ public sealed class ClinicManagementRepository : IClinicManagementRepository
         clinic.WhatsAppTimeZoneId = update.WhatsAppTimeZoneId;
         await _context.SaveChangesAsync(cancellationToken);
 
+        await transaction.CommitAsync(cancellationToken);
         return ClinicManagementResult.Success();
     }
 
@@ -133,9 +137,9 @@ public sealed class ClinicManagementRepository : IClinicManagementRepository
         CancellationToken cancellationToken)
     {
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-        var clinic = await _context.Clinics.FirstOrDefaultAsync(
-            candidate => candidate.ID == change.ClinicId && candidate.DealerId == change.DealerId,
-            cancellationToken);
+        var clinic = await _context.Clinics.FromSqlInterpolated(
+            $"SELECT * FROM \"Clinics\" WHERE \"ID\" = {change.ClinicId} AND \"DealerId\" = {change.DealerId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
         if (clinic == null)
             return ClinicManagementResult.Failure("Klinik bulunamadı.");
 
@@ -228,6 +232,7 @@ public sealed class ClinicManagementRepository : IClinicManagementRepository
     private async Task<bool> CanActivateAsync(ApplicationUser? user, string token)
     {
         if (user == null
+            || user.LoginDisabled
             || user.ClinicId == null
             || user.PasswordHash != null
             || string.IsNullOrWhiteSpace(token))
@@ -237,7 +242,7 @@ public sealed class ClinicManagementRepository : IClinicManagementRepository
 
         var clinicIsActive = await _context.Clinics
             .AsNoTracking()
-            .AnyAsync(clinic => clinic.ID == user.ClinicId && clinic.IsActive);
+            .AnyAsync(clinic => clinic.ID == user.ClinicId && clinic.IsActive && clinic.Dealer.IsActive);
         if (!clinicIsActive)
             return false;
 
@@ -271,6 +276,8 @@ public sealed class ClinicManagementRepository : IClinicManagementRepository
 
     private async Task<IdentityResult> ReactivateUserAsync(ApplicationUser user)
     {
+        if (user.LoginDisabled)
+            return await DeactivateUserAsync(user);
         var unlockResult = await _userManager.SetLockoutEndDateAsync(user, null);
         if (!unlockResult.Succeeded)
             return unlockResult;

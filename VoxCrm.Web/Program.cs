@@ -65,13 +65,18 @@ if (!builder.Environment.IsDevelopment()
     throw new InvalidOperationException("WhatsAppGateway:JwtSecret must be configured with a non-development value.");
 }
 
+builder.Services.AddScoped<ClinicModules>();
+builder.Services.AddScoped<ClinicModuleFilter>();
 builder.Services.AddScoped<AuditLogActionFilter>();
 builder.Services.AddControllersWithViews(options =>
 {
     options.Filters.AddService<AuditLogActionFilter>();
+    options.Filters.AddService<ClinicModuleFilter>();
+    options.Filters.Add<ValidationFeedbackFilter>();
     options.ModelBinderProviders.Insert(0, new FlexibleDecimalModelBinderProvider());
 });
-builder.Services.AddHttpClient<WhatsAppGatewayClient>();
+// The default HttpClient timeout is 100 s; the WhatsApp page makes several sequential calls.
+builder.Services.AddHttpClient<WhatsAppGatewayClient>(client => client.Timeout = TimeSpan.FromSeconds(8));
 builder.Services.AddHttpClient<SystemHealthService>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -161,8 +166,13 @@ builder.Services.AddHangfire(config => config
     .UseRecommendedSerializerSettings()
     .UsePostgreSqlStorage(opts => opts.UseNpgsqlConnection(
         builder.Configuration.GetConnectionString("DefaultConnection"))));
-builder.Services.AddHangfireServer();
+var backgroundJobsEnabled = builder.Configuration.GetValue("BackgroundJobs:Enabled", true);
+if (backgroundJobsEnabled)
+    builder.Services.AddHangfireServer();
 
+builder.Services.AddScoped<VoxCrm.Infrastructure.FollowUp.OwnerFollowUpService>();
+builder.Services.AddScoped<ExcelTransferService>();
+builder.Services.AddScoped<QuickVisitService>();
 var app = builder.Build();
 
 if (args.Contains("--migrate-only", StringComparer.Ordinal))
@@ -244,7 +254,6 @@ app.UseAuthentication();
 app.Use(async (context, next) =>
 {
     if (context.User.Identity?.IsAuthenticated == true
-        && (context.User.IsInRole("SystemAdmin") || context.User.IsInRole("Dealer"))
         && !context.Request.Path.StartsWithSegments("/Auth")
         && !context.Request.Path.StartsWithSegments("/css")
         && !context.Request.Path.StartsWithSegments("/js")
@@ -257,7 +266,7 @@ app.Use(async (context, next) =>
             context.Response.Redirect("/Auth/ChangePassword");
             return;
         }
-        if (user is { TwoFactorEnabled: false })
+        if (user is { TwoFactorEnabled: false } && (context.User.IsInRole("SystemAdmin") || context.User.IsInRole("Dealer")))
         {
             context.Response.Redirect("/Auth/SetupMfa");
             return;
@@ -273,6 +282,8 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
     Authorization = new[] { new HangfireAuthFilter() }
 });
 
+if (backgroundJobsEnabled)
+{
 RecurringJob.AddOrUpdate<VoxCrm.Infrastructure.Jobs.ReminderJob>(
     "daily-reminders",
     job => job.ProcessDailyRemindersAsync(),
@@ -281,6 +292,7 @@ RecurringJob.AddOrUpdate<VoxCrm.Infrastructure.Jobs.DataRetentionJob>(
     "data-retention",
     job => job.ExecuteAsync(CancellationToken.None),
     Cron.Daily);
+}
 app.MapStaticAssets();
 app.MapGet("/healthz", async (VoxCrm.Infrastructure.Data.VoxCrmDbContext db, CancellationToken cancellationToken) =>
     await db.Database.CanConnectAsync(cancellationToken)

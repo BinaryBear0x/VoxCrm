@@ -28,7 +28,7 @@ public sealed class AesGcmPiiProtector : IPiiProtector
 
     public string? Protect(string? value)
     {
-        if (!Enabled || string.IsNullOrEmpty(value) || value.StartsWith(Prefix, StringComparison.Ordinal)) return value;
+        if (!Enabled || string.IsNullOrEmpty(value)) return value;
         var nonce = RandomNumberGenerator.GetBytes(12);
         var plain = Encoding.UTF8.GetBytes(value);
         var cipher = new byte[plain.Length];

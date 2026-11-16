@@ -6,6 +6,7 @@
     var patients = ViewBag.Patients as IReadOnlyList<AppointmentPatientOption> ?? [];
     var types = ViewBag.AppointmentTypes as IReadOnlyList<string> ?? AppointmentRules.AllowedTypes;
     var hasConflict = ViewBag.ConflictWarning != null;
+    var registeredPatient = Model.PatientId.HasValue;
 }
 
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
@@ -31,6 +32,14 @@
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="confirmConflict" value="@(hasConflict ? "true" : "false")">
                     <div class="mb-3">
+                        <label class="form-label fw-semibold">Randevu sahibi</label>
+                        <select class="form-select" data-appointment-mode>
+                            <!option value="registered" @(registeredPatient ? "selected" : "")>Kayıtlı hasta seç</!option>
+                            <!option value="guest" @(!registeredPatient ? "selected" : "")>Kayıtsız / yeni müşteri</!option>
+                        </select>
+                        <div class="form-text">Yeni müşteri için hasta ve sahip kaydı oluşturmadan randevu alabilirsiniz.</div>
+                    </div>
+                    <div class="mb-3" data-appointment-patient-fields>
                         <label class="form-label fw-semibold">Hasta / Sahip *</label>
                         <select name="PatientId" class="form-select" required data-search-select="patient" data-required="true" data-placeholder="Hasta, sahip veya telefon ara...">
                             <option value="">-- Hasta Seç --</option>
@@ -40,6 +49,20 @@
                                 <!option value="@patient.Id" @(Model.PatientId == patient.Id ? "selected" : "")>@patient.Name @(!string.IsNullOrEmpty(details) ? $"({details})" : "")</!option>
                             }
                         </select>
+                    </div>
+                    <div data-appointment-guest-fields>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="GuestName">Yeni müşteri adı</label>
+                            <input id="GuestName" name="GuestName" class="form-control" value="@Model.GuestName" maxlength="200" placeholder="Bilinmiyorsa boş bırakılabilir">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="GuestPhone">Telefon</label>
+                            <input id="GuestPhone" name="GuestPhone" type="tel" class="form-control" value="@Model.GuestPhone" maxlength="64" placeholder="Varsa telefon numarası">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="GuestNotes">Kayıtsız müşteri notu</label>
+                            <textarea id="GuestNotes" name="GuestNotes" class="form-control" rows="2" maxlength="1000" placeholder="Hayvan/kişi hakkında eldeki sınırlı bilgi...">@Model.GuestNotes</textarea>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Randevu Tarihi ve Saati *</label>

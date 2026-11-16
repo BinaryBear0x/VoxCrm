@@ -44,7 +44,11 @@
                         <div class="col-6">
                             <label class="form-label fw-semibold">Cinsiyet</label>
                             <select name="cinsiyet" class="form-select">
-                                <option value="">-- Seçiniz --</option>
+                                @if (Model.cinsiyet is null) {
+                                    <option value="" selected>Belirtilmemiş</option>
+                                } else {
+                                    <option value="">Belirtilmemiş</option>
+                                }
                                 @if (Model.cinsiyet == 'E') {
                                     <option value="E" selected>Erkek</option>
                                     <option value="D">Dişi</option>
@@ -120,8 +124,7 @@
 
     var fieldLabels = {
         'Name': 'Hayvanın Adı',
-        'Species': 'Tür',
-        'cinsiyet': 'Cinsiyet'
+        'Species': 'Tür'
     };
 
     formEl.addEventListener('submit', function (e) {

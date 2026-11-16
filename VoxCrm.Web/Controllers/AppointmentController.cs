@@ -34,7 +34,7 @@ public class AppointmentController : Controller
         await PopulatePatientsAsync(cancellationToken);
         return View(new AppointmentCommand(
             Guid.Empty,
-            DateTime.Today.AddDays(1).AddHours(9),
+            (await _appointments.GetTodayAsync(cancellationToken)).AddDays(1).ToDateTime(new TimeOnly(9,0)),
             AppointmentRules.AllowedTypes[0],
             30,
             null));
@@ -122,7 +122,10 @@ public class AppointmentController : Controller
             command.DurationMinutes,
             command.AppointmentType,
             existing.Status,
-            command.Reason));
+            command.Reason,
+            command.GuestName,
+            command.GuestPhone,
+            command.GuestNotes));
     }
 
     [HttpPost, ValidateAntiForgeryToken]

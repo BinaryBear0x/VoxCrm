@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 
@@ -8,6 +8,16 @@ from app.config import settings
 
 
 class VoxCrmClient:
+    async def validate_delivery(self, notification_id, clinic_id, phone, message) -> dict:
+        token = create_voxcrm_token("whatsapp.notifications.status")
+        response = await self._client.post(
+            f"/api/whatsapp/notifications/{notification_id}/validate",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"clinicId": str(clinic_id), "phone": phone, "message": message},
+        )
+        response.raise_for_status()
+        return response.json()
+
     def __init__(self) -> None:
         self._client = httpx.AsyncClient(base_url=settings.voxcrm_api_base_url, timeout=30)
 
@@ -18,9 +28,9 @@ class VoxCrmClient:
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "clinicIds": [str(clinic_id) for clinic_id in clinic_ids],
-                "batchSize": settings.default_batch_size,
+                "batchSize": settings.claim_batch_size,
                 "gatewayId": "voxcrm-whatsapp-gateway",
-                "lockSeconds": 180,
+                "lockSeconds": settings.claim_lock_seconds,
             },
         )
         response.raise_for_status()
@@ -34,21 +44,34 @@ class VoxCrmClient:
         last_error: str | None = None,
         retry_count: int | None = None,
         next_attempt_at: datetime | None = None,
-    ) -> None:
+    ) -> bool:
+        """Report a delivery state. Returns False when VoxCRM refuses it (404).
+
+        VoxCRM answers 404 for notifications that were cancelled, sent elsewhere, sent to
+        review or whose state moved on (stale report). That is final, not a transport
+        failure, so callers must not treat it as an exception.
+        """
         token = create_voxcrm_token("whatsapp.notifications.status")
         payload = {
             "status": status,
             "gatewayMessageId": gateway_message_id,
             "lastError": last_error,
             "retryCount": retry_count,
-            "nextAttemptAt": next_attempt_at.isoformat() if next_attempt_at else None,
+            "nextAttemptAt": (
+                next_attempt_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                if next_attempt_at
+                else None
+            ),
         }
         response = await self._client.post(
             f"/api/whatsapp/notifications/{notification_id}/status",
             headers={"Authorization": f"Bearer {token}"},
             json=payload,
         )
+        if response.status_code == 404:
+            return False
         response.raise_for_status()
+        return True
 
     async def recover_expired_processing(self) -> None:
         token = create_voxcrm_token("whatsapp.notifications.recover")

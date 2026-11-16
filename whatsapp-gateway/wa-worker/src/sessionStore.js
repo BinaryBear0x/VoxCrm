@@ -102,12 +102,20 @@ export class FileSessionStore {
       const files = await fs.readdir(directory);
       return (await Promise.all(files.filter((file) => file.endsWith(".json")).map(async (file) => ({
         file,
-        payload: await this.#readJson(path.join(directory, file))
+        // An unreadable queue file must not hide the readable ones next to it.
+        payload: await this.#readJson(path.join(directory, file)).catch(() => null)
       })))).filter((item) => item.payload);
     } catch (error) {
       if (error?.code === "ENOENT") return [];
       throw error;
     }
+  }
+
+  async quarantinePendingInbound(clinicId, file) {
+    const directory = this.#pendingInboundPath(clinicId);
+    const rejected = path.join(directory, "rejected");
+    await ensurePrivateDir(rejected);
+    await fs.rename(path.join(directory, safeName(file)), path.join(rejected, safeName(file)));
   }
 
   async removePendingInbound(clinicId, file) {
@@ -127,6 +135,16 @@ export class FileSessionStore {
       if (error?.code === "ENOENT") return [];
       throw error;
     }
+  }
+
+  // WhatsApp invalidated this device link (for example "log out" on the phone). The stored credentials
+  // can never work again, and reusing them makes every reconnect fail with the same 401 and no QR.
+  // Only the authentication state is removed: sent-message receipts (duplicate protection) and the
+  // inbound queue stay.
+  async resetAuthState(clinicId) {
+    const sessionPath = resolveClinicSessionPath(this.sessionRoot, clinicId);
+    await fs.rm(path.join(sessionPath, AUTH_FILE), { force: true });
+    await fs.rm(path.join(sessionPath, "keys"), { recursive: true, force: true });
   }
 
   async removeClinic(clinicId) {

@@ -2,6 +2,9 @@ using VoxCrm.Api.Security;
 using VoxCrm.Application.Audit;
 using VoxCrm.Application.WhatsApp;
 using VoxCrm.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using VoxCrm.Infrastructure.Data;
+using VoxCrm.Infrastructure.WhatsApp;
 
 namespace VoxCrm.Api.Endpoints;
 
@@ -9,6 +12,42 @@ public static class WhatsAppEndpoints
 {
     public static IEndpointRouteBuilder MapWhatsAppEndpoints(this IEndpointRouteBuilder app)
     {
+        app.MapPost("/api/whatsapp/notifications/{id:guid}/validate", async (
+            Guid id, HttpRequest request, DeliveryValidation input, GatewayJwtAuthenticator authenticator,
+            VoxCrmDbContext db, WhatsAppRecipientGuard guard, CancellationToken ct) =>
+        {
+            if (!authenticator.Authorize(request, "whatsapp.notifications.status").IsAuthorized) return Results.Unauthorized();
+            var n = await db.WhatsAppNotifications.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.ID == id && x.ClinicID == input.ClinicId, ct);
+            if (n == null) return Results.NotFound();
+            if (n.Status is not (WhatsAppNotificationStatuses.Processing or WhatsAppNotificationStatuses.DirectSending)
+                || n.LockExpiresAt == null || n.LockExpiresAt <= DateTime.UtcNow)
+            {
+                // Nothing was sent. VoxCRM keeps ownership of the state (lock recovery requeues it),
+                // so the gateway must not mark it NeedsReview on its own.
+                return Results.Ok(new { allowed = false, retryable = true, error = "Gönderim kilidi geçersiz veya mesaj artık gönderilebilir durumda değil." });
+            }
+            var error = await guard.CheckAsync(n, ct);
+            if (WhatsAppRecipientGuard.Digits(input.Phone) != WhatsAppRecipientGuard.Digits(n.PhoneNumber) || input.Message != n.MessageContent)
+                error = "Gönderim içeriği önizlemeden sonra değişti. Gönderim durduruldu.";
+            if (error != null)
+            {
+                n.Status = WhatsAppNotificationStatuses.NeedsReview; n.LastError = error; n.NextAttemptAt = null;
+                n.LockedAt = null; n.LockedBy = null; n.LockExpiresAt = null;
+                await db.SaveChangesAsync(ct);
+            }
+            else
+            {
+                // The send is about to happen: keep the lock alive long enough that lock recovery
+                // cannot requeue (and double-send) the message while the worker is delivering it.
+                var extended = DateTime.UtcNow.AddMinutes(5);
+                if (n.LockExpiresAt < extended)
+                {
+                    n.LockExpiresAt = extended;
+                    await db.SaveChangesAsync(ct);
+                }
+            }
+            return Results.Ok(new { allowed = error == null, retryable = false, error });
+        });
         app.MapPost("/api/whatsapp/notifications/claim", async (
             HttpRequest httpRequest,
             WhatsAppClaimRequest request,
@@ -94,6 +133,16 @@ public static class WhatsAppEndpoints
                 return Results.Unauthorized();
             }
 
+            // An empty provider id would make every later message look like a duplicate of the
+            // first one, silently dropping them; oversized values would fail in the database.
+            if (request is null
+                || request.ClinicId == Guid.Empty
+                || string.IsNullOrWhiteSpace(request.ProviderMessageId) || request.ProviderMessageId.Length > 256
+                || string.IsNullOrWhiteSpace(request.FromPhone) || request.FromPhone.Length > 64
+                || string.IsNullOrEmpty(request.Message) || request.Message.Length > 4096
+                || string.IsNullOrWhiteSpace(request.GatewaySessionId) || request.GatewaySessionId.Length > 128)
+                return Results.BadRequest("Geçersiz inbound mesaj verisi.");
+
             var messageId = await service.WriteInboundAsync(request, DateTime.UtcNow, cancellationToken);
             return Results.Ok(new { ID = messageId });
         });
@@ -135,3 +184,4 @@ public static class WhatsAppEndpoints
         }, cancellationToken);
     }
 }
+public sealed record DeliveryValidation(Guid ClinicId, string Phone, string Message);

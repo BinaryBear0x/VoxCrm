@@ -56,3 +56,9 @@ class InboundFromWorker(CamelModel):
     received_at: datetime | None = None
     gateway_session_id: Annotated[str, Field(min_length=1, max_length=128)]
     provider_message_id: Annotated[str, Field(min_length=1, max_length=256)]
+
+
+class DirectSendRequest(CamelModel):
+    phone: Annotated[str, Field(min_length=10, max_length=32)]
+    message: Annotated[str, Field(min_length=1, max_length=4096)]
+    request_id: uuid.UUID

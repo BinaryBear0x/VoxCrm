@@ -13,10 +13,12 @@ public sealed class PetOwnerController : Controller
 
     public PetOwnerController(IPetOwnerService service) => _service = service;
 
-    public async Task<IActionResult> Index(string? search, bool partial = false, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Index(string? search, bool partial = false, bool archived = false, CancellationToken cancellationToken = default)
     {
         ViewBag.Search = search;
-        var owners = await _service.ListAsync(search, cancellationToken: cancellationToken);
+        ViewBag.Archived = archived;
+        var owners = await _service.ListAsync(search, includeArchived: archived, cancellationToken: cancellationToken);
+        if (archived) owners = owners.Where(o => !o.IsActive).ToList();
         if (partial || Request.Headers["X-Requested-With"] == "XMLHttpRequest")
             return PartialView("_PetOwnerTablePartial", owners);
         return View(owners);
@@ -50,7 +52,7 @@ public sealed class PetOwnerController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("FirstName,LastName,Phone,Email,Address,WhatsAppConsent,Notes")] PetOwner model,
+        [Bind("FirstName,LastName,Phone,Email,NationalIdentityNumber,Address,WhatsAppConsent,Notes,SubmissionId")] PetOwner model,
         CancellationToken cancellationToken)
     {
         RemoveSystemValidation();
@@ -75,7 +77,7 @@ public sealed class PetOwnerController : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(
         Guid id,
-        [Bind("ID,FirstName,LastName,Phone,Email,Address,WhatsAppConsent,Notes")] PetOwner model,
+        [Bind("ID,FirstName,LastName,Phone,Email,NationalIdentityNumber,Address,WhatsAppConsent,Notes")] PetOwner model,
         CancellationToken cancellationToken)
     {
         if (id != model.ID) return BadRequest();
@@ -89,7 +91,9 @@ public sealed class PetOwnerController : Controller
             return View(model);
         }
 
-        TempData["Success"] = "Müşteri başarıyla güncellendi.";
+        TempData["Success"] = result.CancelledMessages > 0
+            ? $"Müşteri başarıyla güncellendi. WhatsApp izni kapatıldığı için {result.CancelledMessages} bekleyen mesaj iptal edildi."
+            : "Müşteri başarıyla güncellendi.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -107,6 +111,12 @@ public sealed class PetOwnerController : Controller
     {
         var result = await _service.RestoreAsync(id, ActorUserId(), cancellationToken);
         if (result.NotFound) return NotFound();
+        if (!result.Succeeded)
+        {
+            TempData["Error"] = result.Error ?? "Müşteri yeniden aktifleştirilemedi.";
+            return RedirectToAction(nameof(Index), new { archived = true });
+        }
+        TempData["Success"] = "Müşteri yeniden aktifleştirildi.";
         return RedirectToAction(nameof(Details), new { id });
     }
 

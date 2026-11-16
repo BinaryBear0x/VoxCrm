@@ -26,6 +26,7 @@ public sealed class CreateClinicViewModel
 
 public sealed class EditClinicViewModel
 {
+    public long? ModulesRevision {get;set;}
     public Guid ClinicId { get; set; }
 
     [Required(ErrorMessage = "Klinik adı zorunludur.")]

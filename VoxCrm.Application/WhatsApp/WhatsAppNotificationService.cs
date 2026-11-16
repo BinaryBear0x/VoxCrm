@@ -51,6 +51,9 @@ public sealed class WhatsAppNotificationService : IWhatsAppNotificationService
             var decision = _sendWindowCalculator.GetDecision(clinic, now);
             if (decision.IsOpen)
             {
+                // The window may have been widened (or the clock reached it) since the message was
+                // queued with a "next opening" time.
+                await _repository.ReleaseWindowDeferredAsync(clinic.ClinicId, now, cancellationToken);
                 openClinicIds.Add(clinic.ClinicId);
                 continue;
             }
@@ -181,6 +184,8 @@ public sealed class WhatsAppNotificationService : IWhatsAppNotificationService
         CancellationToken cancellationToken)
     {
         var inboundId = await _repository.WriteInboundAsync(request, now, cancellationToken);
+        // Audit rows live longer than the encrypted message tables, so they must not carry
+        // the customer's phone number or text.
         await _auditLogger.LogAsync(new AuditLogEntry
         {
             Level = AuditLogLevels.Info,
@@ -194,11 +199,51 @@ public sealed class WhatsAppNotificationService : IWhatsAppNotificationService
             EntityId = inboundId.ToString(),
             Metadata = new Dictionary<string, object?>
             {
-                ["fromPhone"] = request.FromPhone,
-                ["message"] = request.Message,
+                ["fromPhone"] = MaskPhone(request.FromPhone),
+                ["messageLength"] = request.Message?.Length ?? 0,
                 ["gatewaySessionId"] = request.GatewaySessionId
             }
         }, cancellationToken);
+
+        if (WhatsAppOptOut.IsOptOutMessage(request.Message))
+            await ApplyOptOutAsync(request, cancellationToken);
+
         return inboundId;
+    }
+
+    private async Task ApplyOptOutAsync(WhatsAppInboundRequest request, CancellationToken cancellationToken)
+    {
+        var digits = WhatsAppOptOut.PhoneDigits(request.FromPhone);
+        var result = digits == null
+            ? new WhatsAppOptOutResult(0, 0)
+            : await _repository.ApplyOptOutAsync(request.ClinicId, WhatsAppOptOut.PhoneLookupCandidates(digits), cancellationToken);
+
+        var matched = result.OwnersUpdated > 0;
+        await _auditLogger.LogAsync(new AuditLogEntry
+        {
+            // An unmatched stop request is a compliance risk: the customer asked to be left
+            // alone but we could not find them, so staff has to look at it.
+            Level = matched ? AuditLogLevels.Info : AuditLogLevels.Warning,
+            Source = AuditLogSources.Api,
+            Category = AuditLogCategories.WhatsApp,
+            Outcome = matched ? AuditLogOutcomes.Success : AuditLogOutcomes.Failed,
+            Action = matched ? "WhatsAppInbound.OptOut" : "WhatsAppInbound.OptOutUnmatched",
+            Message = matched
+                ? $"Müşteri WhatsApp mesajlarını durdurmak istedi: izin kaldırıldı, {result.NotificationsCancelled} bekleyen mesaj iptal edildi."
+                : "Müşteri WhatsApp mesajlarını durdurmak istedi ancak eşleşen aktif müşteri bulunamadı. Manuel kontrol gerekli.",
+            ClinicId = request.ClinicId,
+            Metadata = new Dictionary<string, object?>
+            {
+                ["fromPhone"] = MaskPhone(request.FromPhone),
+                ["ownersUpdated"] = result.OwnersUpdated,
+                ["notificationsCancelled"] = result.NotificationsCancelled
+            }
+        }, cancellationToken);
+    }
+
+    private static string MaskPhone(string? value)
+    {
+        var digits = new string((value ?? string.Empty).TakeWhile(c => c != '@').Where(char.IsDigit).ToArray());
+        return digits.Length <= 4 ? "****" : new string('*', digits.Length - 4) + digits[^4..];
     }
 }

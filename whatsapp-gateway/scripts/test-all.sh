@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VOXCRM_ROOT="${VOXCRM_ROOT:-/Users/ozhanyildirim/Documents/Projeler/VoxCrm}"
+VOXCRM_ROOT="${VOXCRM_ROOT:-$(cd "$ROOT_DIR/.." && pwd)}"
 GATEWAY_API_ROOT="$ROOT_DIR/gateway-api"
 WORKER_ROOT="$ROOT_DIR/wa-worker"
 PYTHON_BIN="${PYTHON_BIN:-$ROOT_DIR/.venv/bin/python}"

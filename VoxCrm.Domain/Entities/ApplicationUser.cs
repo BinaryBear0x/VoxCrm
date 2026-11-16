@@ -14,5 +14,7 @@ namespace VoxCrm.Domain.Entities
         public Guid? DealerId { get; set; }
         public Dealer? Dealer { get; set; }
         public bool MustChangePassword { get; set; }
+        public bool LoginDisabled { get; set; }
+        public bool CanApproveCareCards { get; set; }
     }
 }

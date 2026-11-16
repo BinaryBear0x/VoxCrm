@@ -18,11 +18,19 @@ public sealed class GatewayJwtAuthenticator
 
     public GatewayAuthResult Authorize(HttpRequest request, string requiredScope)
     {
+        try { return AuthorizeCore(request, requiredScope); }
+        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException or InvalidOperationException or OverflowException)
+        { return new GatewayAuthResult(false, string.Empty); }
+    }
+
+    private GatewayAuthResult AuthorizeCore(HttpRequest request, string requiredScope)
+    {
         var authHeader = request.Headers.Authorization.ToString();
         if (!authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             return new GatewayAuthResult(false, string.Empty);
 
         var token = authHeader["Bearer ".Length..].Trim();
+        if (token.Length > 8192) return new GatewayAuthResult(false, string.Empty);
         var parts = token.Split('.');
         if (parts.Length != 3) return new GatewayAuthResult(false, string.Empty);
 
@@ -35,6 +43,8 @@ public sealed class GatewayJwtAuthenticator
                 Encoding.UTF8.GetBytes(parts[2])))
             return new GatewayAuthResult(false, string.Empty);
 
+        using var header = JsonDocument.Parse(Base64UrlDecode(parts[0]));
+        if (!TryGetString(header.RootElement, "alg", out var algorithm) || algorithm != "HS256") return new GatewayAuthResult(false, string.Empty);
         using var payload = JsonDocument.Parse(Base64UrlDecode(parts[1]));
         var root = payload.RootElement;
 
@@ -60,10 +70,14 @@ public sealed class GatewayJwtAuthenticator
         if (!TryGetString(root, "jti", out var jti))
             return new GatewayAuthResult(false, string.Empty);
 
+        if (jti.Length > 128) return new GatewayAuthResult(false, string.Empty);
+        if (root.TryGetProperty("nbf", out var nbf) && (nbf.ValueKind != JsonValueKind.Number || !nbf.TryGetInt64(out var notBefore) || DateTimeOffset.FromUnixTimeSeconds(notBefore) > DateTimeOffset.UtcNow)) return new GatewayAuthResult(false, string.Empty);
         var replayKey = $"whatsapp-jti:{jti}";
-        if (_replayCache.TryGetValue(replayKey, out _))
-            return new GatewayAuthResult(false, string.Empty);
-        _replayCache.Set(replayKey, true, expiresAt);
+        lock (_replayCache)
+        {
+            if (_replayCache.TryGetValue(replayKey, out _)) return new GatewayAuthResult(false, string.Empty);
+            _replayCache.Set(replayKey, true, expiresAt);
+        }
 
         TryGetString(root, "sub", out var subject);
         return new GatewayAuthResult(true, subject);
@@ -78,7 +92,7 @@ public sealed class GatewayJwtAuthenticator
     private static bool TryGetString(JsonElement root, string name, out string value)
     {
         value = string.Empty;
-        if (!root.TryGetProperty(name, out var element)) return false;
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty(name, out var element) || element.ValueKind != JsonValueKind.String) return false;
         value = element.GetString() ?? string.Empty;
         return !string.IsNullOrWhiteSpace(value);
     }

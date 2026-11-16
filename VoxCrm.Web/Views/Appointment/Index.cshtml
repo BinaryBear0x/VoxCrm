@@ -81,7 +81,13 @@
                                 @foreach (var a in Model)
                                 {
                                     <tr class="@(!a.IsActive ? "table-secondary" : a.IsToday ? "table-warning" : "")">
-                                        <td class="fw-semibold">@a.PatientName</td>
+                                        <td class="fw-semibold">
+                                            @a.PatientName
+                                            @if (a.PatientId is null && !string.IsNullOrWhiteSpace(a.GuestPhone))
+                                            {
+                                                <small class="d-block text-muted">@a.GuestPhone</small>
+                                            }
+                                        </td>
                                         <td>@a.ScheduledAtLocal.ToString("dd.MM.yyyy HH:mm")</td>
                                         <td>@a.AppointmentType</td>
                                         <td>@a.DurationMinutes dk</td>
@@ -140,7 +146,13 @@
                         {
                             <div class="border-bottom p-3">
                                 <div class="d-flex justify-content-between">
-                                    <div class="fw-semibold">@a.PatientName</div>
+                                    <div class="fw-semibold">
+                                        @a.PatientName
+                                        @if (a.PatientId is null && !string.IsNullOrWhiteSpace(a.GuestPhone))
+                                        {
+                                            <small class="d-block text-muted">@a.GuestPhone</small>
+                                        }
+                                    </div>
                                     @{
                                         var bc = a.Status switch { "Tamamlandı" => "bg-success", "İptal" => "bg-danger", "Gelmedi" => "bg-warning text-dark", _ => "bg-primary" };
                                     }

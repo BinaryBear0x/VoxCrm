@@ -1,0 +1,15 @@
+@model VoxCrm.Domain.Entities.ClinicTask
+@{ ViewData["Title"] = "Görev"; ViewData["ActiveMenu"] = "workday"; var page = (VoxCrm.Application.Workday.WorkdayPage)ViewBag.Page; bool isNew = ViewBag.IsNew; }
+<div class="my-4"><a href="/Workday">← Bugün yapılacaklar</a><h1 class="h3 mt-2">@(isNew ? "Yeni görev" : "Görevi düzenle")</h1></div>
+@if (TempData["Error"] is string error) { <div class="alert alert-danger" role="alert">@error</div> }
+<form method="post" action="/Workday/SaveTask" class="card card-body shadow-sm">@Html.AntiForgeryToken()
+@if (!isNew) { <input type="hidden" name="Id" value="@Model.ID"> }
+<input type="hidden" name="Revision" value="@Model.Revision"><input type="hidden" name="SubmissionId" value="@Model.SubmissionId">
+<div class="mb-3"><label for="title" class="form-label">Görev</label><input id="title" name="Title" value="@Model.Title" maxlength="240" class="form-control" required></div>
+<div class="row"><div class="col-md-6 mb-3"><label for="due" class="form-label">Yapılacak tarih</label><input id="due" name="DueDate" type="date" value="@Model.DueDate.ToString("yyyy-MM-dd")" class="form-control" required></div>
+<div class="col-md-6 mb-3"><label for="staff" class="form-label">Sorumlu</label><select id="staff" name="AssignedUserId" class="form-select"><option value="">Atanmadı</option>@foreach (var s in page.Staff) { <option value="@s.Id" selected="@(s.Id == Model.AssignedUserId)">@s.Label</option> }</select></div></div>
+<div class="mb-3"><label for="patient" class="form-label">İlgili hayvan (isteğe bağlı)</label><select id="patient" name="PatientId" class="form-select"><option value="">Seçilmedi</option>@foreach (var p in page.Patients) { <option value="@p.Id" selected="@(p.Id == Model.PatientId)">@p.Label</option> }</select></div>
+<div class="mb-3"><label for="notes" class="form-label">Not</label><textarea id="notes" name="Notes" rows="4" maxlength="4000" class="form-control">@Model.Notes</textarea></div>
+<div class="form-check mb-3"><input type="checkbox" name="Important" value="true" checked="@Model.Important" id="important" class="form-check-input"><label for="important" class="form-check-label">Öncelikli</label></div>
+<div><button class="btn btn-primary">Kaydet</button><a class="btn btn-outline-secondary" href="/Workday">Vazgeç</a></div>
+</form>

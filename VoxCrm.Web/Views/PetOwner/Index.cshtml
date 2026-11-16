@@ -6,9 +6,15 @@
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-2 mb-4 border-bottom">
     <h1 class="h3 fw-bold text-dark"><i class="bi bi-people me-2 text-primary"></i>Müşteriler</h1>
-    <a href="/PetOwner/Create" class="btn btn-primary">
-        <i class="bi bi-person-plus me-1"></i> Yeni Müşteri
-    </a>
+    @{ var showArchived = ViewBag.Archived == true; }
+    <div class="d-flex gap-2">
+        <a href="@(showArchived ? "/PetOwner" : "/PetOwner?archived=true")" class="btn btn-outline-secondary">
+            <i class="bi bi-archive me-1"></i> @(showArchived ? "Aktif müşteriler" : "Arşivlenenler")
+        </a>
+        <a href="/PetOwner/Create" class="btn btn-primary">
+            <i class="bi bi-person-plus me-1"></i> Yeni Müşteri
+        </a>
+    </div>
 </div>
 
 @if (TempData["Success"] != null)
@@ -22,6 +28,7 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="get" action="/PetOwner" class="d-flex gap-2" id="owner-search-form">
+            @if (showArchived) { <input type="hidden" name="archived" value="true" /> }
             <input type="text" name="search" id="owner-search-input" value="@ViewBag.Search"
                    class="form-control"
                    placeholder="Ad, soyad, telefon, e-posta, adres, hayvan adı ara..."
@@ -38,7 +45,7 @@
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0"
-         data-search-table="/PetOwner?partial=true"
+         data-search-table="@(showArchived ? "/PetOwner?partial=true&archived=true" : "/PetOwner?partial=true")"
          id="owner-table-wrapper">
         @await Html.PartialAsync("_PetOwnerTablePartial", Model)
     </div>

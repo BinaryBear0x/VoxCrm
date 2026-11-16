@@ -34,13 +34,14 @@ public sealed class WebApplicationFactoryForTests : WebApplicationFactory<WebPro
                 ["WhatsAppGateway:Audience"] = "voxcrm-whatsapp-gateway",
                 ["WhatsAppGateway:JwtSecret"] = TestJwt.Secret,
                 ["DataSeeding:SeedDemoData"] = "false",
+                ["BackgroundJobs:Enabled"] = "false",
             });
         });
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<VoxCrmDbContext>>();
             services.AddDbContext<VoxCrmDbContext>(options =>
-                options.UseNpgsql(_connectionString, npgsql => npgsql.MigrationsAssembly("VoxCrm.Infrastructure")));
+                options.UseNpgsql(_connectionString, npgsql => npgsql.MigrationsAssembly("VoxCrm.Infrastructure")).ConfigureWarnings(w => w.Log(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.ManyServiceProvidersCreatedWarning)));
         });
     }
 }

@@ -1,0 +1,43 @@
+@model VoxCrm.Web.Models.WhatsAppPreview
+@{ ViewData["Title"] = "WhatsApp mesaj önizlemesi"; ViewData["ActiveMenu"] = "whatsapp"; var n = Model.Notification; }
+<div class="card shadow-sm my-4"><div class="card-body p-4">
+    <h1 class="h4">Mesaj ve alıcı önizlemesi</h1>
+    <dl class="row mt-4"><dt class="col-sm-3">Müşteri</dt><dd class="col-sm-9">@Model.OwnerName</dd>
+    <dt class="col-sm-3">Gönderilecek telefon</dt><dd class="col-sm-9 fw-bold">@n.PhoneNumber</dd>
+    <dt class="col-sm-3">İlgili hayvan</dt><dd class="col-sm-9">@(Model.PatientName ?? "Hayvan seçilmedi")</dd>
+    <dt class="col-sm-3">Durum</dt><dd class="col-sm-9">@VoxCrm.Web.Services.WhatsAppUi.Status(n.Status)</dd></dl>
+    <div class="border rounded p-3 mb-3" style="white-space:pre-wrap">@n.MessageContent</div>
+    @if (Model.Error != null) { <div class="alert alert-danger" role="alert">@Model.Error</div> }
+    @if (n.LastError != null) { <div class="alert alert-warning">@VoxCrm.Web.Services.WhatsAppUi.Error(n.LastError)</div> }
+    @if (Model.ConfirmationToken != null) {
+        <p>Alıcı adı, telefon ve hayvanı kontrol edin. Onaydan sonra mesaj sıraya alınır. Bu önizleme 10 dakika geçerlidir.</p>
+        <form action="/WhatsApp/ConfirmManual" method="post" class="d-inline">
+            @Html.AntiForgeryToken()<input type="hidden" name="clinicId" value="@n.ClinicID"><input type="hidden" name="confirmationToken" value="@Model.ConfirmationToken">
+            <button class="btn btn-success">Alıcıyı doğruladım, sıraya al</button>
+        </form>
+    }
+    else if (n.Status == "NeedsReview") {
+        <div class="alert alert-info">Bu mesaj, gönderilmeden önce durduruldu. Aşağıda alıcı ve mesajın <strong>şu anki</strong> hâli gösteriliyor. Mesaj gönderilmiş olabilir diye düşünüyorsanız önce WhatsApp telefonunda bu numarayla sohbeti kontrol edin.</div>
+        @if (Model.CanRequeue) {
+            <form action="/WhatsApp/ManageNotification" method="post" class="d-inline">
+                @Html.AntiForgeryToken()<input type="hidden" name="clinicId" value="@n.ClinicID"><input type="hidden" name="id" value="@n.ID"><input type="hidden" name="operation" value="requeue">
+                <div class="form-check mb-3"><input id="acknowledged" class="form-check-input" type="checkbox" name="acknowledged" value="true" required>
+                <label class="form-check-label" for="acknowledged">Alıcıyı ve mesajı kontrol ettim; bu mesaj bu numaraya daha önce gönderilmedi.</label></div>
+                <button class="btn btn-warning">Alıcıyı doğruladım, yeniden sıraya al</button>
+            </form>
+        } else {
+            <p class="text-muted">Bu mesaj şu hâliyle yeniden sıraya alınamaz. Müşteri bilgisini (izin, telefon, sahip bağlantısı) düzeltip tekrar bakabilir veya mesajı iptal edebilirsiniz.</p>
+        }
+        <form action="/WhatsApp/ManageNotification" method="post" class="d-inline" data-confirm="Bu mesaj iptal edilsin mi? İptal edilen mesaj gönderilmez.">
+            @Html.AntiForgeryToken()<input type="hidden" name="clinicId" value="@n.ClinicID"><input type="hidden" name="id" value="@n.ID"><input type="hidden" name="operation" value="cancel">
+            <button class="btn btn-outline-danger">İptal et</button>
+        </form>
+    }
+    else if (Model.Error == null && (n.Status == "Failed" || n.Status == "Cancelled") && n.SentAt == null && n.GatewayMessageId == null) {
+        <form action="/WhatsApp/ManageNotification" method="post" class="d-inline" data-confirm="Bu alıcı ve mesajı kontrol ettiniz mi? Yeniden sıraya alınacak.">
+            @Html.AntiForgeryToken()<input type="hidden" name="clinicId" value="@n.ClinicID"><input type="hidden" name="id" value="@n.ID"><input type="hidden" name="operation" value="retry">
+            <button class="btn btn-warning">Alıcıyı doğruladım, yeniden sıraya al</button>
+        </form>
+    }
+    <a class="btn btn-outline-secondary" href="/WhatsApp?clinicId=@n.ClinicID">Geri dön</a>
+</div></div>

@@ -1,0 +1,5 @@
+@model string
+@{ ViewData["Title"] = "Bakım kartı bağlantısı"; ViewData["ActiveMenu"] = "workday"; }
+<div class="card card-body shadow-sm my-4"><h1 class="h4">Bakım kartı onaylandı</h1><p>Bağlantı 14 gün geçerlidir. Yalnız ilgili hasta sahibiyle paylaşın. Yeni bağlantı oluşturmak eskisini kapatır.</p>
+<label for="careLink" class="form-label">Özel paylaşım bağlantısı</label><div class="input-group mb-3"><input id="careLink" class="form-control" value="@Model" readonly><button type="button" class="btn btn-outline-primary" data-copy-target="#careLink">Kopyala</button></div>
+<div class="alert alert-warning">Hiçbir mesaj gönderilmedi. Yerel 127.0.0.1 bağlantısı yalnız bu bilgisayarda açılır.</div><div><a href="@Model" class="btn btn-success" target="_blank" rel="noreferrer">Hasta sahibi görünümünü aç</a> <a href="/Workday/Care/@ViewBag.ExaminationId" class="btn btn-outline-secondary">Geri dön</a></div></div>

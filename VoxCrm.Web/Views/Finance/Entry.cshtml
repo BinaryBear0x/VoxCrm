@@ -1,0 +1,14 @@
+@model VoxCrm.Application.Finance.FinanceEntryInput
+@using VoxCrm.Application.Finance
+@{ var d = (FinanceDetailsModel)ViewBag.Details; var label = Model.Kind == "charge" ? "Borç kalemi" : Model.Kind == "installment" ? "Taksit" : "Ödeme"; ViewData["Title"] = label + (Model.Id.HasValue ? " düzenle" : " ekle"); ViewData["ActiveMenu"] = "finance"; }
+<a asp-action="Details" asp-route-id="@Model.AccountId" class="text-muted">← @d.Account.CustomerName</a><h1 class="h3 mt-2">@ViewData["Title"]</h1>
+<div class="card card-body mt-3" style="max-width:700px"><p class="text-muted">Toplam: @d.Total.ToString("N2") TL · Ödenen: @d.Paid.ToString("N2") TL · Kalan: @d.Remaining.ToString("N2") TL</p>
+<form asp-action="Entry" method="post"><div asp-validation-summary="All" class="text-danger" role="alert"></div><input asp-for="Id" type="hidden" /><input asp-for="AccountId" type="hidden" /><input asp-for="Kind" type="hidden" /><input asp-for="Revision" type="hidden" />
+@if(Model.Kind != "receipt") { <div class="mb-3"><label asp-for="Description" class="form-label">Açıklama</label><input asp-for="Description" required maxlength="@(Model.Kind == "installment" ? 200 : 1000)" class="form-control" /></div> }
+<div class="row"><div class="col-md-6 mb-3"><label asp-for="Amount" class="form-label">Tutar (TL)</label><input asp-for="Amount" type="number" step="0.01" min="0.01" required class="form-control" /></div><div class="col-md-6 mb-3"><label asp-for="Date" class="form-label">@(Model.Kind == "receipt" ? "Ödendiği tarih" : Model.Kind == "installment" ? "Son ödeme tarihi" : "İşlem tarihi")</label><input asp-for="Date" type="date" required class="form-control" /></div></div>
+@if(Model.Kind == "receipt") {
+<div class="mb-3"><label asp-for="PaymentMethod" class="form-label">Ödeme yöntemi</label><select asp-for="PaymentMethod" class="form-select">@foreach(var method in FinancePaymentMethods.Allowed) { <option value="@method">@method</option> }</select></div>
+<div class="mb-3"><label asp-for="InstallmentId" class="form-label">İlgili taksit</label><select asp-for="InstallmentId" class="form-select"><option value="">Taksit dışı ödeme</option>@foreach(var i in d.Account.Installments.Where(x => x.IsActive).OrderBy(x => x.DueDate)) { <option value="@i.ID">@i.Description · @i.DueDate.ToString("dd.MM.yyyy") · Kalan: @((i.Amount - d.PaidFor(i.ID)).ToString("N2")) TL</option> }</select><div class="form-text">Planlanmış bir taksit ödeniyorsa ilgili taksiti seçin. Taksit dışı ödemeler plansız bakiyeden düşer.</div></div>
+<div class="mb-3"><label asp-for="Notes" class="form-label">Not (isteğe bağlı)</label><textarea asp-for="Notes" class="form-control" maxlength="1000"></textarea></div>
+}
+<button class="btn btn-primary">Kaydet</button> <a asp-action="Details" asp-route-id="@Model.AccountId" class="btn btn-outline-secondary">Vazgeç</a></form></div>

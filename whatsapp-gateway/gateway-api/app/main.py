@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi.responses import JSONResponse
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,7 @@ from app.config import settings
 from app.database import get_session, init_db
 from app.models import ClinicSession
 from app.models import OutboundMessage
-from app.schemas import InboundFromWorker, QrResponse, SessionStatus
+from app.schemas import DirectSendRequest, InboundFromWorker, QrResponse, SessionStatus
 from app.sender import poll_loop, write_gateway_audit
 from app.voxcrm_client import voxcrm_client
 from app.worker_client import worker_client
@@ -52,6 +53,28 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict:
     return {
         "status": "ok" if worker_ok and metrics["database"] == "ok" else "degraded",
         "service": "gateway-api",
+    }
+
+
+@app.get("/api/internal/health")
+async def internal_health(
+    _principal: GatewayPrincipal = Depends(require_scope("whatsapp.health.read")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    worker = None
+    worker_ok = True
+    try:
+        worker = await worker_client.health()
+    except Exception as exc:  # noqa: BLE001
+        worker_ok = False
+        worker = {"status": "error", "error": type(exc).__name__}
+
+    metrics = await global_metrics(session)
+    return {
+        "status": "ok" if worker_ok and metrics["database"] == "ok" else "degraded",
+        "service": "gateway-api",
+        "worker": worker,
+        **metrics,
     }
 
 
@@ -121,6 +144,54 @@ async def disconnect(
     return {"ok": True}
 
 
+@app.post("/api/clinics/{clinic_id}/whatsapp/send", response_model=None)
+async def send_direct(
+    clinic_id: uuid.UUID,
+    payload: DirectSendRequest,
+    principal: GatewayPrincipal = Depends(require_scope("whatsapp.message.write", clinic_bound=True)),
+) -> dict | JSONResponse:
+    ensure_clinic_scope(principal, clinic_id)
+    try:
+        validation = await voxcrm_client.validate_delivery(payload.request_id, clinic_id, payload.phone, payload.message)
+        if not validation.get("allowed"):
+            return JSONResponse(status_code=422, content={"ok": False, "errorCode": "RECIPIENT_CHANGED", "error": validation.get("error") or "Alıcı doğrulanamadı."})
+        result = await worker_client.send(
+            clinic_id,
+            payload.phone,
+            payload.message,
+            payload.request_id,
+        )
+    except httpx.HTTPError as exc:
+        await write_gateway_audit(
+            level="Error", category="WhatsApp", action="Gateway.DirectMessageFailed",
+            message="Aninda WhatsApp gonderimi worker'a ulasamadi.", outcome="Failure",
+            clinic_id=clinic_id, error_code="WORKER_UNAVAILABLE",
+            metadata={"requestId": str(payload.request_id), "exceptionType": type(exc).__name__},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="WhatsApp worker'a ulasilamadi.",
+        ) from exc
+
+    if not result.get("ok"):
+        error_code = str(result.get("errorCode") or "SEND_FAILED")
+        await write_gateway_audit(
+            level="Error", category="WhatsApp", action="Gateway.DirectMessageFailed",
+            message="Aninda WhatsApp gonderimi basarisiz oldu.", outcome="Failure",
+            clinic_id=clinic_id, error_code=error_code,
+            metadata={"requestId": str(payload.request_id)},
+        )
+        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=result)
+
+    await write_gateway_audit(
+        level="Info", category="WhatsApp", action="Gateway.DirectMessageSent",
+        message="WhatsApp mesaji kuyruga alinmadan worker tarafindan gonderildi.", outcome="Success",
+        clinic_id=clinic_id,
+        metadata={"requestId": str(payload.request_id), "gatewayMessageId": result.get("messageId")},
+    )
+    return result
+
+
 @app.get(
     "/api/clinics/{clinic_id}/whatsapp/status",
     response_model=SessionStatus,
@@ -183,14 +254,24 @@ async def worker_inbound(
     if not x_internal_token or not hmac.compare_digest(x_internal_token, settings.worker_internal_token):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    await voxcrm_client.write_inbound(
-        payload.clinic_id,
-        payload.from_phone,
-        payload.message,
-        payload.received_at or datetime.now(timezone.utc),
-        payload.gateway_session_id,
-        payload.provider_message_id,
-    )
+    try:
+        await voxcrm_client.write_inbound(
+            payload.clinic_id,
+            payload.from_phone,
+            payload.message,
+            payload.received_at or datetime.now(timezone.utc),
+            payload.gateway_session_id,
+            payload.provider_message_id,
+        )
+    except httpx.HTTPStatusError as exc:
+        # VoxCRM refusing the content (400/422) is a property of the message: report it as such so
+        # the worker sets it aside. Anything else is a temporary upstream problem worth retrying.
+        upstream = exc.response.status_code
+        raise HTTPException(
+            status_code=422 if upstream in (400, 413, 422)
+            else status.HTTP_502_BAD_GATEWAY,
+            detail="VoxCRM rejected the inbound message." if upstream in (400, 413, 422) else "VoxCRM is unavailable.",
+        ) from exc
     await write_gateway_audit(
         level="Info", category="WhatsAppInbound", action="Gateway.InboundReceived",
         message="Hasta sahibinden gelen WhatsApp mesaji otomatik cevap verilmeden kaydedildi.",

@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 import uuid
+from urllib.parse import urlsplit
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -27,7 +28,7 @@ async def test_database(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[async_
         "GATEWAY_TEST_ADMIN_DSN",
         "postgresql://voxcrm:voxcrm_dev_password@127.0.0.1:5432/postgres",
     )
-    database_url = f"postgresql+asyncpg://voxcrm:voxcrm_dev_password@127.0.0.1:5432/{database_name}"
+    database_url = urlsplit(admin_dsn)._replace(scheme="postgresql+asyncpg", path=f"/{database_name}").geturl()
 
     admin = await asyncpg.connect(admin_dsn)
     await admin.execute(f'CREATE DATABASE "{database_name}"')
@@ -97,3 +98,12 @@ def gateway_token(
 
 async def sleep_noop(_: float) -> None:
     await asyncio.sleep(0)
+
+
+@pytest.fixture(autouse=True)
+def mock_delivery_validation(monkeypatch):
+    # No CRM or WhatsApp network requests are allowed in these gateway tests.
+    from app.voxcrm_client import voxcrm_client
+    async def validate(*args, **kwargs):
+        return {"allowed": True}
+    monkeypatch.setattr(voxcrm_client, "validate_delivery", validate)

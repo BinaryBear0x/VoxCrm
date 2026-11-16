@@ -15,11 +15,23 @@ export function requireClinicId(value) {
 }
 
 export function normalizePhoneNumber(value) {
-  const digits = String(value || "").replace(/\D/g, "");
+  let digits = String(value || "").replace(/\D/g, "");
+  // International dialing prefix ("0090555...") is the same number as "+90555...".
+  if (digits.startsWith("00")) digits = digits.slice(2);
   if (digits.length < 10 || digits.length > 15) {
     const error = new Error("Invalid phone number.");
     error.errorCode = "INVALID_PHONE";
     throw error;
+  }
+
+  // CRM users commonly enter Turkish mobile numbers in local notation. Baileys'
+  // onWhatsApp lookup requires an international E.164 country prefix.
+  if (digits.length === 11 && digits.startsWith("0")) {
+    digits = `90${digits.slice(1)}`;
+  } else if (digits.length === 10) {
+    // Same rule as the CRM (WhatsAppRecipientGuard.Digits): the CRM validated and stored this
+    // number as Turkish, so the worker must address exactly the number the CRM approved.
+    digits = `90${digits}`;
   }
   return digits;
 }
@@ -44,7 +56,15 @@ export async function ensurePrivateDir(directory) {
 export async function writePrivateFile(filePath, data) {
   await ensurePrivateDir(path.dirname(filePath));
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`;
-  await fs.writeFile(tempPath, data, { mode: 0o600 });
+  // Flush to disk before the rename; otherwise a power loss can leave an empty auth file,
+  // which later makes the clinic's whole session unreadable.
+  const handle = await fs.open(tempPath, "w", 0o600);
+  try {
+    await handle.writeFile(data);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
   await fs.chmod(tempPath, 0o600).catch(() => undefined);
   await ensurePrivateDir(path.dirname(filePath));
   await fs.rename(tempPath, filePath);

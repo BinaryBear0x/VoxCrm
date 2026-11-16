@@ -13,6 +13,6 @@ public class HangfireAuthFilter : IDashboardAuthorizationFilter
             return false;
 
         // Hangfire jobs span tenants and require platform-level authorization.
-        return httpContext.User.IsInRole("SystemAdmin");
+        return httpContext.User.IsInRole("Dealer");
     }
 }

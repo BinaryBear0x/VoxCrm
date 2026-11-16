@@ -520,3 +520,7 @@ prompt.txt
 promot.txt
 prompt*.txt
 archprompt*.txt
+
+# Local PostgreSQL and runtime logs
+.local-db/
+local-*.log

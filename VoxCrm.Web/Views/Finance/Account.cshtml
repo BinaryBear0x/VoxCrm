@@ -1,0 +1,16 @@
+@model VoxCrm.Application.Finance.FinanceAccountInput
+@{ var editId = ViewBag.AccountId as Guid?; var edit = editId.HasValue; var choices = (VoxCrm.Application.Finance.FinanceChoices)ViewBag.Choices; ViewData["Title"] = edit ? "Kaydı düzenle" : "Yeni borç kaydı"; ViewData["ActiveMenu"] = "finance"; }
+<a asp-action="Index" class="text-muted">← Borç ve Tahsilat</a><h1 class="h3 mt-2">@ViewData["Title"]</h1>
+<div class="card card-body mt-3" style="max-width:800px"><form asp-action="@(edit ? "Edit" : "Create")" asp-route-id="@editId" method="post">
+<div asp-validation-summary="All" class="text-danger" role="alert"></div><input asp-for="SubmissionId" type="hidden" /><input asp-for="Revision" type="hidden" />
+<fieldset class="mb-3"><legend class="fs-6">Müşteri bilgisi</legend><label class="me-3"><input asp-for="CustomerMode" type="radio" value="registered" /> Kayıtlı müşteri / hasta</label><label><input asp-for="CustomerMode" type="radio" value="manual" /> Manuel isim</label></fieldset>
+<div data-finance-registered><div class="mb-3"><label asp-for="PetOwnerId" class="form-label">Müşteri</label><select asp-for="PetOwnerId" class="form-select"><option value="">Müşteri seçin</option>@foreach (var o in choices.Owners) { <option value="@o.Id">@o.DisplayName</option> }</select></div>
+<div class="mb-3"><label asp-for="PatientId" class="form-label">Hasta (isteğe bağlı)</label><select asp-for="PatientId" class="form-select"><option value="">Müşteri genel hesabı</option>@foreach (var patient in choices.Patients) { <option value="@patient.Id" data-owner="@patient.OwnerId">@patient.DisplayName</option> }</select></div></div>
+<div data-finance-manual class="mb-3"><label asp-for="CustomerName" class="form-label">İsim / Unvan</label><input asp-for="CustomerName" class="form-control" maxlength="200" /></div>
+<div class="mb-3"><label asp-for="Description" class="form-label">Kayıt açıklaması</label><input asp-for="Description" class="form-control" required maxlength="1000" /></div>
+@if (!edit) { <div class="row"><div class="col-md-6 mb-3"><label asp-for="Amount" class="form-label">İlk borç tutarı (TL)</label><input asp-for="Amount" type="number" step="0.01" min="0.01" class="form-control" required /></div><div class="col-md-6 mb-3"><label asp-for="ChargeDate" class="form-label">İşlem tarihi</label><input asp-for="ChargeDate" type="date" class="form-control" required /></div></div> }
+<div class="mb-3"><label asp-for="DueDate" class="form-label">Taksit dışı bakiyenin son ödeme tarihi</label><input asp-for="DueDate" type="date" class="form-control" required /></div>
+@if(edit) { <p class="text-muted small">Borç tutarını değiştirmek veya ek borç girmek için detay ekranındaki borç kalemlerini kullanın.</p> }
+<button class="btn btn-primary">Kaydet</button> <a asp-action="@(edit ? "Details" : "Index")" asp-route-id="@editId" class="btn btn-outline-secondary">Vazgeç</a>
+</form></div>
+@section Scripts { <script src="~/js/finance.js" asp-append-version="true"></script> }

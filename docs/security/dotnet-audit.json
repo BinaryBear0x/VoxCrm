@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "parameters": "--vulnerable --include-transitive",
+  "sources": [
+    "https://api.nuget.org/v3/index.json",
+    "C:/Program Files (x86)/Microsoft SDKs/NuGetPackages/"
+  ],
+  "projects": [
+    {
+      "path": "<repo>/VoxCrm.Api/VoxCrm.Api.csproj"
+    },
+    {
+      "path": "<repo>/VoxCrm.Application/VoxCrm.Application.csproj"
+    },
+    {
+      "path": "<repo>/VoxCrm.Domain/VoxCrm.Domain.csproj"
+    },
+    {
+      "path": "<repo>/VoxCrm.Infrastructure/VoxCrm.Infrastructure.csproj"
+    },
+    {
+      "path": "<repo>/VoxCrm.IntegrationTests/VoxCrm.IntegrationTests.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "transitivePackages": [
+            {
+              "id": "SSH.NET",
+              "resolvedVersion": "2025.1.0",
+              "vulnerabilities": [
+                {
+                  "severity": "High",
+                  "advisoryurl": "https://github.com/advisories/GHSA-q939-rpr3-3284"
+                },
+                {
+                  "severity": "High",
+                  "advisoryurl": "https://github.com/advisories/GHSA-mggc-4xg6-vcxf"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "<repo>/VoxCrm.Web/VoxCrm.Web.csproj"
+    }
+  ]
+}

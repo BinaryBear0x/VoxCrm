@@ -26,12 +26,28 @@ public sealed class ClinicSendWindowCalculator : IClinicSendWindowCalculator
         if (clinic.SendWindowStart <= clinic.SendWindowEnd && localTime >= clinic.SendWindowEnd)
             nextLocalDate = nextLocalDate.AddDays(1);
 
-        var nextLocal = nextLocalDate + clinic.SendWindowStart.ToTimeSpan();
-        if (clinic.SendWindowStart > clinic.SendWindowEnd && localTime < clinic.SendWindowStart && localTime >= clinic.SendWindowEnd)
-            nextLocal = nextLocalDate + clinic.SendWindowStart.ToTimeSpan();
+        var nextLocal = DateTime.SpecifyKind(nextLocalDate + clinic.SendWindowStart.ToTimeSpan(), DateTimeKind.Unspecified);
+        return new SendWindowDecision(false, LocalToUtc(nextLocal, zone), zone.Id);
+    }
 
-        var nextUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(nextLocal, DateTimeKind.Unspecified), zone);
-        return new SendWindowDecision(false, nextUtc, zone.Id);
+    // The window start can fall into a daylight-saving jump. ConvertTimeToUtc throws for a
+    // local time that does not exist (spring forward) and silently picks one of two instants
+    // for a time that happens twice (fall back); that exception used to fail the whole claim
+    // for every clinic.
+    private static DateTime LocalToUtc(DateTime local, TimeZoneInfo zone)
+    {
+        // The window opens at the first moment after the gap.
+        for (var guard = 0; guard < 12 && zone.IsInvalidTime(local); guard++)
+            local = local.AddMinutes(15);
+
+        if (zone.IsAmbiguousTime(local))
+        {
+            // Open at the first occurrence (daylight time = the larger UTC offset).
+            var offset = zone.GetAmbiguousTimeOffsets(local).Max();
+            return DateTime.SpecifyKind(local - offset, DateTimeKind.Utc);
+        }
+
+        return TimeZoneInfo.ConvertTimeToUtc(local, zone);
     }
 
     public DateTime GetNextAllowedSendUtc(Clinic clinic, DateTime utcNow)
@@ -56,22 +72,8 @@ public sealed class ClinicSendWindowCalculator : IClinicSendWindowCalculator
             : current >= start || current < end;
     }
 
-    private static TimeZoneInfo ResolveZone(string? timeZoneId)
-    {
-        var id = string.IsNullOrWhiteSpace(timeZoneId) ? "Europe/Istanbul" : timeZoneId.Trim();
-        try
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById(id);
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
-        }
-        catch (InvalidTimeZoneException)
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
-        }
-    }
+    private static TimeZoneInfo ResolveZone(string? timeZoneId) =>
+        VoxCrm.Domain.Common.ClinicTime.Zone(timeZoneId?.Trim());
 }
 
 public sealed record SendWindowDecision(bool IsOpen, DateTime NextAllowedUtc, string TimeZoneId);

@@ -23,12 +23,22 @@ export function shouldIgnoreInbound(message) {
 }
 
 export function inboundFromPhone(message) {
-  return message?.key?.remoteJid || "";
+  const key = message?.key || {};
+  const remote = key.remoteJid || "";
+  // WhatsApp may identify a chat by an opaque "@lid" id. When it also tells us the real
+  // phone-number address, use that so the CRM can match the sender to a customer.
+  if (remote.endsWith("@lid") && String(key.remoteJidAlt || "").endsWith("@s.whatsapp.net")) {
+    return key.remoteJidAlt;
+  }
+  return remote;
 }
 
 export function extractInboundText(message) {
   const content = unwrapMessage(message?.message);
   if (!content) return "";
+
+  // Reactions, deletions and key exchanges are protocol traffic, not something a customer wrote.
+  if (content.reactionMessage || content.protocolMessage || content.senderKeyDistributionMessage) return "";
 
   if (content.conversation) return content.conversation;
   if (content.extendedTextMessage?.text) return content.extendedTextMessage.text;

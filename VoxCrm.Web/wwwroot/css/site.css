@@ -466,3 +466,8 @@ h6 {
     padding: 0.8rem;
   }
 }
+
+.care-public { max-width: 720px; }
+.care-unavailable { max-width: 600px; }
+.care-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.workday-date { max-width: 180px; }

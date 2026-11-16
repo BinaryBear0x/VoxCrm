@@ -50,6 +50,10 @@ public sealed class ExaminationService : IExaminationService
         if (error != null) return new(false, Error: error);
         var existing = await _context.Muayeneler.FirstOrDefaultAsync(item => item.ID == examination.ID && item.IsActive, cancellationToken);
         if (existing == null) return new(false, NotFound: true);
+        existing.BillingReviewedAt = null;
+        existing.BillingReviewedBy = null;
+        existing.ReviewedFinanceAccountId = null;
+        existing.BillingReviewNote = null;
         existing.PatientId = examination.PatientId;
         existing.AppointmentId = examination.AppointmentId;
         existing.Subjective = examination.Subjective;

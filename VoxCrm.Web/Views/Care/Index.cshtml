@@ -1,0 +1,13 @@
+@model VoxCrm.Application.Workday.PublicCare
+@{ Layout = null; }
+<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>@Model.PatientName — Evde bakım kartı</title><link rel="stylesheet" href="/lib/bootstrap/dist/css/bootstrap.min.css"><link rel="stylesheet" href="/css/site.css"></head>
+<body class="bg-light"><main class="container py-4 care-public"><div class="card shadow-sm"><div class="card-body p-4"><p class="text-muted">@Model.ClinicName</p><h1 class="h3">@Model.PatientName — Evde bakım kartı</h1><p>Veterinerinizin onayladığı bakım talimatları</p>
+<h2 class="h5 mt-4">Bugün yapılanlar</h2><p class="care-text">@Model.TodayActions</p>
+<h2 class="h5 mt-4">Evde uygulanacak adımlar</h2><p class="care-text">@Model.HomeSteps</p>
+@if (Model.FollowUpDate.HasValue) { <div class="alert alert-info">Kontrol tarihi: <strong>@Model.FollowUpDate.Value.ToString("dd.MM.yyyy")</strong>. Bu tarih tek başına randevu oluşturmaz; klinikle teyitleşin.</div> }
+<h2 class="h5 mt-4">Hangi durumda kliniği aramalısınız?</h2><p class="care-text">@Model.CallInstructions</p>
+@if (Model.ClinicPhone != null) { <p><strong>Klinik telefonu:</strong> @Model.ClinicPhone</p> }
+@if (Model.Response != null) { <div class="alert alert-success" role="status">Yanıtınız kaydedildi: @(Model.Response == "Applied" ? "Uyguladım" : "Klinikle görüşmek istiyorum")</div> }
+<form action="/Care/@ViewBag.Token/Respond" method="post" class="d-grid gap-2 mt-4">@Html.AntiForgeryToken()<button class="btn btn-success" name="response" value="Applied">Uyguladım</button><button class="btn btn-outline-primary" name="response" value="ContactRequested">Klinikle görüşmek istiyorum</button></form>
+<p class="small text-muted mt-3 mb-0">Görüşme isteğiniz kliniğin takip listesine eklenir. Bu alan anlık mesajlaşma veya acil iletişim hattı değildir; acil durumda kliniği doğrudan arayın.</p>
+</div></div></main></body></html>

@@ -4,6 +4,45 @@ VoxCRM, veteriner klinikleri ve klinik ağlarını (bayiler) yönetmek için tas
 
 ---
 
+## Bu sürümde yapılanlar (2026-11-16)
+
+Yayına hazırlık paketi. Ayrıntılı kontrol listesi: [docs/release-whatsapp-hardening-2026-11-10.md](docs/release-whatsapp-hardening-2026-11-10.md).
+
+### WhatsApp mesaj altyapısı
+- **Kuyruk güvenilirliği:** talep edilen mesajlar kilitle (`FOR UPDATE SKIP LOCKED`) alınır; "işleniyor"da takılanlar kurtarılır, üçten fazla denemede "kontrol gerekli" olur. Geçersiz durum geçişleri reddedilir.
+- **Gönderim öncesi doğrulama:** müşteri izni, telefon, klinik ayarı ve aşının arada yenilenip yenilenmediği her gönderimde yeniden kontrol edilir; uygun olmayan mesaj iptal edilir ya da incelemeye alınır.
+- **Alıcı anlık görüntüsü:** aşı tarihi takvim gününe göre karşılaştırılır (saat dilimi kaymasından kaynaklanan sahte "kontrol gerekli" kapandı); eski kayıt biçimleri de eşleşir.
+- **Gönderim penceresi:** pencere dışında kalan mesajlar ertelenir, pencere açılınca bırakılır. DST geçişleri doğru ele alınır.
+- **KVKK / izin:** `DUR`, `STOP` vb. mesajlar tam eşleşmeyle iznin kapatılmasını sağlar; izin geri çekilince bekleyen mesajlar iptal edilir ve kullanıcıya bildirilir. Denetim kayıtlarında telefon maskelenir.
+- **Telefon biçimleri:** `+90`, `0090`, `0…`, `5…` yazımları aynı numara sayılır (mükerrer kayıt ve arama); saklanan anahtar değişmedi.
+- **Otomatik hatırlatma:** şablon düzenleme formu geri geldi, açmadan önce "ne olacak" özeti (tahmin) gösterilir, tek tek iptal edilebilir. "Kontrol gerekli" mesajlar için önizleme / yeniden kuyruğa alma / iptal akışı eklendi.
+- **Worker (Node / Baileys):** bağlantı kopma ve oturum geri yükleme izolasyonu, hatalı mesaj karantinası, QR'ın kullanıcı çıkışından sonra yeniden açılması düzeltildi; gelen mesaj yinelemeleri engellendi.
+- **Gateway (Python):** talep boyutu ve kilit süresi ayarlanabilir; VoxCRM yanıt kodları doğru eşlenir.
+- Gerçek bir telefonla uçtan uca gönderim, cevap alma ve `DUR` ile izin kapatma yerelde denendi.
+
+### CRM ekranları
+- Arşivlenen **hasta ve müşteri** için "Arşivlenenler" görünümü ve "Geri al" düğmesi; geri alma hatası bildirim olarak gösterilir.
+- Müşteri aramasında **ad + soyad** birlikte yazılınca sonuç dönmüyordu, düzeltildi.
+- Kaydedilemeyen formlarda sebep **toast** olarak gösterilir ve yazılan değerler korunur.
+- Finans: fazla ödeme mesajı doğru kuralı açıklıyor.
+- Aşı takvimi, randevu, muayene, borç/ödeme ve Hızlı Ziyaret akışları elle denendi.
+
+### Bayi paneli: modül anahtarı
+- **Görevler ve Kapanış Asistanı** artık ayrı bir modül (`EnabledModules` bit 4). Kapalıyken Bugün ekranındaki Yapılacaklar, kapanış asistanı, Bekleyen işler, Geri Arama Talepleri, menü öğesi ve `/Workday` sayfaları (403) kapanır. Geri Arama Talepleri için Hasta Sahibi Takibi **ve** Görevler birlikte açık olmalı.
+- Migration `AddWorkdayModuleSwitch` mevcut kliniklerde anahtarı açık bırakır (davranış değişmez).
+
+### Testler
+- .NET entegrasyon: 224, Node (vitest): 47, Python (pytest): 37 test geçiyor.
+
+### Yayın öncesi açık maddeler
+- Prod veritabanının migration durumunu kontrol edin; PG16 üzerinde prova yapın ve `SHOW timezone;` değerinin UTC olduğunu doğrulayın.
+- Web, API ve WhatsApp gateway/worker **birlikte** yayınlanmalı; deploy sırasında gönderimi durdurun, sonra açın.
+- Deploy öncesi/sonrası kuyruğu kontrol edin: `SELECT "Status", count(*) FROM "WhatsAppNotifications" GROUP BY 1;`
+- Otomatik hatırlatmayı deploy ile birlikte açmayın; eski kuyruğun temiz olduğunu doğruladıktan sonra açın.
+- Bayi hesabı (2FA) ve varsayılan şablon metni canlıda bir kez elle kontrol edilmeli.
+
+---
+
 ## Ekran Görüntüleri
 
 **Giriş Sayfası**
@@ -244,6 +283,10 @@ Bildirim akışı kasıtlı olarak asenkroniktir: Web uygulaması doğrudan gate
 +---------------------------+     +-------------------+
 ```
 
+Production'da PostgreSQL, API, gateway ve worker için public port yayınlanmaz. `wa-worker`,
+gateway ile private `backend` ağından konuşur; WhatsApp Web'e bağlanabilmesi için ayrıca
+yalnız outbound erişim sağlayan `egress` ağına bağlıdır. Worker'a host portu eklenmemelidir.
+
 ---
 
 ## Teknoloji Yığını
@@ -323,6 +366,86 @@ npm run dev
 
 Tarayıcıda `VoxCrm.Web > WhatsApp` menüsünden kliniğe ait "Bağla" düğmesine tıklayarak QR kod taranır. QR kodunu wa-worker üretir, gateway-api aracılığıyla Web'e iletilir.
 
+### WhatsApp kapsamı, mesai saati ve gönderim aralığı
+
+Otomatik outbound kapsamı yalnız `VaccinationReminder` tipindeki aşı süresi
+hatırlatmalarıdır. Randevu hatırlatması üretilmez. Hangfire `daily-reminders` işi,
+hatırlatma günü gelen aşı kaydını yalnız şu şartların tamamında kuyruğa alır:
+
+- klinik aktif ve WhatsApp gönderimi açık;
+- birincil sahipte geçerli telefon numarası var;
+- sahip için WhatsApp izni kaydedilmiş;
+- aşı kaydı daha önce hatırlatılmış değil.
+
+Klinik gönderim penceresi varsayılan olarak `09:00-19:00 Europe/Istanbul` değeridir ve
+Dealer klinik düzenleme ekranından değiştirilebilir. Pencere dışındaki mesaj silinmez;
+sonraki pencere başlangıcına ertelenir. Aynı kliniğin mesajları production'da varsayılan
+olarak `60 ± 15 saniye` arayla gönderilir. Son gönderim zamanı gateway PostgreSQL
+veritabanından okunduğu için container restart sonrasında da aralık korunur.
+
+Production aralığı gerektiğinde `/etc/voxcrm/secrets/production.env` içinde artırılabilir:
+
+```dotenv
+WHATSAPP_SEND_INTERVAL_SECONDS=60
+WHATSAPP_SEND_JITTER_SECONDS=15
+```
+
+Production'da aralık 30 saniyenin altına indirilemez. Bu mekanizma spam veya ban
+garantisi sağlamaz; yalnız kontrollü kuyruk tüketimi sağlar.
+
+### WhatsApp test prosedürü
+
+Gerçek müşterilere mesaj göndermeden önce dört aşamalı kontrol uygulanır:
+
+1. Kod ve sahte sağlayıcı testleri:
+
+   ```bash
+   ./whatsapp-gateway/scripts/test-all.sh
+   dotnet test VoxCrm.slnx --no-restore
+   cd whatsapp-gateway/wa-worker
+   npm audit --omit=dev
+   ```
+
+2. İzole test kliniği:
+
+   - yalnız size ait test numarasını ve test hayvanını kullanın;
+   - WhatsApp iznini açıkça işaretleyin;
+   - test aşısının `NextDueDate` değerini, aşı tipindeki
+     `ReminderDaysBefore` kadar ileri ayarlayın;
+   - Hangfire panelinden yalnız `daily-reminders` işini bir kez çalıştırın;
+   - tek bir `VaccinationReminder/Pending` kaydı oluştuğunu doğrulayın;
+   - aynı işi yeniden çalıştırıp ikinci kayıt oluşmadığını doğrulayın.
+
+3. Zamanlama testi:
+
+   - gönderim penceresini test sırasında kısa ve kontrollü bir aralığa ayarlayın;
+   - pencere dışında kaydın `Pending` kaldığını ve `NextAttemptAt` değerinin sonraki
+     pencere başlangıcına taşındığını doğrulayın;
+   - iki test aşısı oluşturup gateway loglarındaki başarılı gönderimler arasında
+     en az yapılandırılmış eksi jitter kadar süre bulunduğunu doğrulayın;
+   - gateway container'ını yeniden başlatıp aralığın korunmasını kontrol edin.
+
+4. Canary gerçek mesaj:
+
+   - önce bağlı numaraya tek test mesajı gönderin;
+   - sonra önceden izin vermiş ikinci bir test numarasına tek aşı hatırlatması gönderin;
+   - uygulamada `Sent`, gateway'de provider message ID ve telefonda tek teslim
+     doğrulanmadan toplu kullanıma geçmeyin;
+   - `Failed` veya `NeedsReview` kaydını körlemesine tekrar göndermeyin.
+
+Production kontrol komutları:
+
+```bash
+docker compose --env-file /etc/voxcrm/secrets/production.env \
+  -f deploy/docker-compose.prod.yml ps
+docker compose --env-file /etc/voxcrm/secrets/production.env \
+  -f deploy/docker-compose.prod.yml logs --since=30m gateway-api wa-worker
+sudo journalctl -u voxcrm-monitor.service -n 100 --no-pager
+```
+
+Test boyunca gerçek hasta verisi kullanılmaz. İzin kaydı olmayan numara, rastgele numara
+listesi veya aynı mesajın hızlı tekrarlarıyla test yapılmaz.
+
 ---
 
 ## Yedekleme
@@ -379,6 +502,24 @@ hesapları için yalnızca `deploy/production.env.example` içindeki placeholder
 tek kullanımlık secret'larla değiştirin. İlk başarılı production girişinden sonra
 bootstrap ayarlarını kapatın ve parolaları secret dosyasından kaldırın.
 
+### Kayıtsız randevu ve aşı kodu
+
+Randevu oluşturma/düzenleme ekranında `Kayıtlı hasta seç` veya `Kayıtsız / yeni
+müşteri` akışı kullanılabilir. Kayıtsız randevuda ad, telefon ve not alanları
+opsiyoneldir; boş bırakıldığında kayıt `Kayıtsız müşteri` olarak gösterilir. Telefon
+verilmişse aynı telefon için zaman çakışması kontrol edilir. Kayıtsız müşteri alanları
+AES-256-GCM ile şifrelenir, telefon eşleştirmesi tenant'a bağlı blind-index üzerinden
+yapılır.
+
+Aşı kaydındaki `Aşı Kodu` opsiyonel ve serbest metindir. Aşı takviminde ve hasta
+detayında gösterilir; WhatsApp aşı hatırlatma şablonuna aktarılmaz.
+
+Hayvan sahibindeki `T.C. Kimlik No` alanı opsiyoneldir. Girildiğinde 11 hane ve T.C.
+kimlik kontrol basamakları doğrulanır; değer AES-256-GCM ile şifrelenir ve tenant içi
+arama/benzersizlik kontrolü yalnız HMAC blind-index üzerinden yapılır. Liste ekranında
+gösterilmez, yalnız yetkili klinik kullanıcısının müşteri detayında görüntülenir ve
+WhatsApp mesajlarına aktarılmaz.
+
 ---
 
 ## Production teslim ve işletim rehberi
@@ -389,12 +530,12 @@ için [docs/PRODUCTION_RUNBOOK.md](docs/PRODUCTION_RUNBOOK.md) esas alınır.
 
 ### Mevcut durum
 
-Kod ve yerel production-preflight doğrulandı; canlı sunucuya deployment yapılmış değildir.
-Canlıya çıkmadan önce salt-okunur sunucu envanteri, sunucu sertleştirmesi, DNS/TLS, gerçek
-alarm kanalları, production restore ve rollback tatbikatı tamamlanmalıdır. Yedeklerin
-yalnızca aynı VPS'te tutulması hâlâ kritik felaket kurtarma riskidir.
+Kod ve yerel production-preflight release öncesinde doğrulanır. Canlı sunucunun güncel
+durumu ayrıca container health, DNS/TLS, alarm ve backup bütünlük kontrolleriyle
+doğrulanmalıdır. Yedeklerin yalnızca aynı VPS'te tutulması hâlâ kritik felaket kurtarma
+riskidir.
 
-Son yerel doğrulama kaydı: 15 Temmuz 2026 — .NET 37/37, Python 12/12, Worker 15/15;
+Son yerel doğrulama kaydı: 1 Ağustos 2026 — .NET 43/43, Python 18/18, Worker 15/15;
 build 0 hata/0 uyarı; EF model pending değişikliği yok; NuGet/Python/npm audit temiz;
 şifreli backup ve geçici DB restore başarılı; production image Trivy taramasında
 High/Critical bulgu 0. Bu kayıt yerel ortam içindir; production sunucusu için aynı
@@ -416,7 +557,7 @@ kontroller release sonrasında tekrar edilir.
 ### Çalışma ağacını ve değişiklikleri kontrol etme
 
 ```bash
-cd /Users/ozhanyildirim/Documents/Projeler/VoxCrm
+cd /path/to/VoxCrm
 git status --short
 git diff --check
 git diff --stat
@@ -431,7 +572,7 @@ PII anahtarı, backup anahtarı, WhatsApp session veya `bin/obj` dosyaları comm
 Tek komut bütün zorunlu kontrolleri çalıştırır:
 
 ```bash
-cd /Users/ozhanyildirim/Documents/Projeler/VoxCrm
+cd /path/to/VoxCrm
 ./whatsapp-gateway/scripts/test-all.sh
 ```
 
@@ -449,7 +590,7 @@ PYTHON_BIN=/private/tmp/voxcrm-test-venv/bin/python \
 rm -rf /private/tmp/voxcrm-test-venv
 ```
 
-Beklenen sonuç: .NET 37, Python 12 ve Worker 15 testin başarılı olmasıdır. Test sırasında
+Beklenen sonuç: .NET 43, Python 18 ve Worker 15 testin başarılı olmasıdır. Test sırasında
 EF tools/runtime sürüm uyarısı görülebilir; `No changes have been made to the model`
 çıktısı migration modelinin senkron olduğunu gösterir.
 
@@ -582,7 +723,7 @@ Kaynak kodun resmi uzak deposu `https://github.com/BinaryBear0x/VoxCrm`'dir. Sec
 Değişiklik önce ayrı bir branch'e gönderilir:
 
 ```bash
-cd /Users/ozhanyildirim/Documents/Projeler/VoxCrm
+cd /path/to/VoxCrm
 git status --short
 git add -A
 git diff --cached --check
