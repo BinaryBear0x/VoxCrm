@@ -31,7 +31,7 @@ Onayla birlikte muayene, seçili çoklu aşı uygulamaları, isteğe bağlı fin
 
 - Excel ve ziyaret için 10 yeni entegrasyon testi: gerçek login/form/upload/map/preview/confirm/ziyaret commit akışı; CSRF; kullanıcı/klinik izolasyonu; mükerrer ve formül kontrolü; metin olarak export; güvenli geri alma; idempotency; başarısız ziyarette tam rollback; hatalı finans ve değişmiş alıcı kontrolü.
 - Tam .NET regresyon sonucu: 123 test. Log: excel-visit-full-tests.log.
-- ClosedXML 0.105.1 eklendikten sonra NuGet doğrudan/geçişli açık taraması: 0 bilinen advisory. docs/security/excel-visit-dotnet-audit.json.
+- ClosedXML 0.105.1 eklendikten sonra NuGet doğrudan/geçişli açık taraması: 0 bilinen advisory..
 - JavaScript sözdizimi node --check ile doğrulandı. Fiziksel mikrofonla konuşma testi yapılmadı; ses tanıma doğruluğu ve desteği tarayıcıya bağlıdır.
 - Yeni migration yok; mevcut audit tabloları kullanılır. Üretime uygulanmadı, sunucuya bağlanılmadı ve gerçek mesaj gönderilmedi.
 

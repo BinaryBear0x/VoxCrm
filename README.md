@@ -664,11 +664,6 @@ az, 4 GB RAM'den az, 80 GB SSD'den az, açıklanamayan public port/servis veya b
 kritik OS güncellemesi. Envanter onaylanmadan SSH, UFW, Docker veya kullanıcı ayarı
 değiştirilmez.
 
-Bu VPS'te kullanıcı talebiyle SSH tamamen kapsam dışıdır: port, root/parola girişi,
-authorized_keys ve SSH yapılandırması değiştirilmez. Sunucu birden fazla aktif site
-barındırdığı için Nginx, Apache, Docker daemon, PM2, UFW ve global ağ ayarları bakım
-penceresi ve mevcut site baseline karşılaştırması olmadan değiştirilmez.
-
 ### Secret oluşturma
 
 Secretlar release arşivine, Git'e veya Docker image'a konmaz:

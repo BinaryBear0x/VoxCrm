@@ -14,10 +14,6 @@ Dağıtımı durdurma koşulları: Ubuntu 22.04/24.04 dışında sürüm; 2 vCPU
 
 ## 2. Sertleştirme (ayrı onay gerektirir)
 
-- Bu VPS için kullanıcı talebiyle SSH kapsam dışıdır: port 22, root girişi, parola girişi,
-  SSH yapılandırması ve authorized_keys değiştirilmez.
-- Sunucu çok sayıda aktif site barındırır. Nginx, Apache, Docker daemon, PM2, UFW ve
-  global ağ ayarları mevcut sitelerin baseline kontrolleri alınmadan değiştirilmez.
 - `fail2ban`, `unattended-upgrades`, NTP ve logrotate etkinleştirilir.
 - `voxcrm` sistem kullanıcısı oluşturulur. Docker grubu root eşdeğeri kabul edilir; yalnız deployment kullanıcısı erişir.
 - `/etc/voxcrm/secrets`, `/var/lib/voxcrm/whatsapp-sessions`, `/var/backups/voxcrm` dizinleri `voxcrm:voxcrm`, mod `700`; secret/key dosyaları mod `600` olur.
