@@ -8,14 +8,15 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/lib/bootstrap-icons/font/bootstrap-icons.css" />
 
+<link rel="stylesheet" href="~/css/crm.css" asp-append-version="true" />
 </head>
-<body>
+<body class="crm-shell crm-dealer">
     @await Html.PartialAsync("_ToastNotifications")
 
     <header class="navbar navbar-top sticky-top flex-md-nowrap p-0 shadow-sm">
-        <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3" href="/Dealer">VoxCrm Bayi</a>
+        <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3" href="/Dealer"><span class="brand-mark"><i class="bi bi-heart-pulse-fill"></i></span>VoxCRM <small>Bayi</small></a>
         <button class="navbar-toggler position-absolute d-md-none collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sidebarMenu" aria-label="Menu" class="navbar-dealer">
+                data-bs-toggle="collapse" data-bs-target="#sidebarMenu" aria-label="Menüyü aç" aria-controls="sidebarMenu" aria-expanded="false">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="navbar-nav ms-auto">
@@ -84,7 +85,7 @@
                 </div>
             </nav>
 
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 mt-4 pb-5">
+            <main class="crm-main">
                 @RenderBody()
             </main>
         </div>

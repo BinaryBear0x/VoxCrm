@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using VoxCrm.Application.Audit;
 using VoxCrm.Domain.Entities;
 using VoxCrm.Infrastructure.Data;
@@ -23,11 +24,19 @@ public sealed class DbAuditLogger : IAuditLogger
         "secret"
     };
 
-    private readonly VoxCrmDbContext _context;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly VoxCrmDbContext? _legacyContext;
 
     public DbAuditLogger(VoxCrmDbContext context)
     {
-        _context = context;
+        _scopeFactory = null!;
+        _legacyContext = context;
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public DbAuditLogger(IServiceScopeFactory scopeFactory)
+    {
+        _scopeFactory = scopeFactory;
     }
 
     public async Task LogAsync(AuditLogEntry entry, CancellationToken cancellationToken = default)
@@ -65,8 +74,19 @@ public sealed class DbAuditLogger : IAuditLogger
                     : JsonSerializer.Serialize(MaskMetadata(entry.Metadata))
             };
 
-            _context.SystemAuditLogs.Add(log);
-            await _context.SaveChangesAsync(cancellationToken);
+            // Audit must never reuse the request's unit of work.  In particular, a
+            // failed create can leave Added entities tracked; reusing that context
+            // would retry the primary write while trying to persist the audit entry.
+            if (_legacyContext != null)
+            {
+                _legacyContext.SystemAuditLogs.Add(log);
+                await _legacyContext.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<VoxCrmDbContext>();
+            context.SystemAuditLogs.Add(log);
+            await context.SaveChangesAsync(cancellationToken);
         }
         catch
         {

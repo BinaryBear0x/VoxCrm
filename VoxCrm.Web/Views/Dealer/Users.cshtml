@@ -1,0 +1,44 @@
+@model VoxCrm.Application.Clinics.ClinicAccessPage
+@{ ViewData["Title"] = "Klinik kullanıcıları"; ViewData["ActiveMenu"] = "dealer"; }
+<div class="d-flex justify-content-between align-items-center my-4 gap-2 flex-wrap">
+    <div><a href="/Dealer">Kliniklerim</a><h1 class="h3 mt-2">@Model.ClinicName — Kullanıcılar ve güvenlik</h1></div>
+    <a href="/Dealer/Edit/@Model.ClinicId" class="btn btn-outline-primary">Klinik bilgileri</a>
+</div>
+@if (TempData["AccessError"] is string error) { <div class="alert alert-danger" role="alert">@error</div> }
+@if (TempData["Success"] is string success) { <div class="alert alert-success" role="status">@success</div> }
+<p class="text-muted">Giriş e-postası klinik iletişim e-postasından bağımsızdır. Hesap işlemleri gerekçe ve bayi parolanızla doğrulanır; güvenlik loguna kaydedilir.</p>
+@if (!Model.ClinicActive) { <div class="alert alert-warning">Klinik pasif. Kullanıcı eklemek, parola/aktivasyon vermek veya hesap açmak için önce kliniği aktifleştirin.</div> }
+<div class="card shadow-sm mb-4"><div class="table-responsive"><table class="table align-middle mb-0">
+    <thead><tr><th>Kullanıcı</th><th>Giriş e-postası</th><th>Durum</th><th>Güvenlik</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var u in Model.Users)
+    {
+        <tr><td>@u.FirstName @u.LastName</td><td>@u.Email</td><td>
+            @if (u.LoginDisabled) { <span class="badge bg-danger">Askıda</span> }
+            else if (!Model.ClinicActive) { <span class="badge bg-secondary">Klinik pasif</span> }
+            else if (u.LockedOut) { <span class="badge bg-warning text-dark">Kilitli</span> }
+            else { <span class="badge bg-success">Açık</span> }
+            @if (!u.HasPassword) { <span class="badge bg-info text-dark">Aktivasyon bekliyor</span> }
+        </td><td><span>MFA: @(u.TwoFactorEnabled ? "Açık" : "Kapalı")</span>
+            <div class="small">Bakım kartı onayı: @(u.CanApproveCareCards ? "Yetkili" : "Yetkisiz")</div>
+            @if (u.MustChangePassword) { <div class="small text-warning">Parola değişikliği zorunlu</div> }
+        </td><td><a class="btn btn-outline-primary btn-sm" href="/Dealer/UserAccess/@Model.ClinicId?userId=@u.Id">Hesabı yönet</a></td></tr>
+    }
+    @if (Model.Users.Count == 0) { <tr><td colspan="5" class="text-muted text-center py-4">Klinik kullanıcısı bulunamadı.</td></tr> }
+    </tbody>
+</table></div></div>
+@if (Model.ClinicActive)
+{
+    <div class="card shadow-sm"><div class="card-body"><h2 class="h5">Yeni klinik kullanıcısı</h2>
+        <p class="text-muted">Kullanıcı kendi parolasını 24 saatlik aktivasyon bağlantısıyla belirler. Bağlantıyı bu ekrandan alıp kullanıcıyla paylaşabilirsiniz.</p>
+        <form method="post" action="/Dealer/CreateUser/@Model.ClinicId" class="row g-3">
+            @Html.AntiForgeryToken()
+            <div class="col-md-4"><label for="firstName" class="form-label">Ad</label><input id="firstName" name="FirstName" class="form-control" maxlength="100" required autocomplete="off"></div>
+            <div class="col-md-4"><label for="lastName" class="form-label">Soyad</label><input id="lastName" name="LastName" class="form-control" maxlength="100" required autocomplete="off"></div>
+            <div class="col-md-4"><label for="email" class="form-label">Giriş e-postası</label><input id="email" name="Email" type="email" class="form-control" maxlength="254" required autocomplete="off"></div>
+            <div class="col-md-8"><label for="reason" class="form-label">İşlem gerekçesi</label><input id="reason" name="Reason" class="form-control" maxlength="500" required></div>
+            <div class="col-md-4"><label for="dealerPassword" class="form-label">Bayi parolanız</label><input id="dealerPassword" name="DealerPassword" type="password" class="form-control" maxlength="128" required autocomplete="current-password"></div>
+            <div class="col-12"><button class="btn btn-primary">Kullanıcı ekle ve aktivasyon bağlantısı oluştur</button></div>
+        </form>
+    </div></div>
+}

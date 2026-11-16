@@ -3,7 +3,7 @@ using VoxCrm.Domain.Entities;
 namespace VoxCrm.Application.PetOwners;
 
 public sealed record PetOwnerDetails(PetOwner Owner, IReadOnlyList<Patient> AvailablePatients);
-public sealed record PetOwnerCommandResult(bool Succeeded, PetOwner? Owner = null, string? Error = null, bool NotFound = false);
+public sealed record PetOwnerCommandResult(bool Succeeded, PetOwner? Owner = null, string? Error = null, bool NotFound = false, int CancelledMessages = 0);
 
 public interface IPetOwnerService
 {

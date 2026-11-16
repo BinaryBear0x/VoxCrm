@@ -3,6 +3,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import asyncpg
 import pytest
@@ -15,7 +16,7 @@ async def test_alembic_upgrade_head_creates_gateway_schema():
         "GATEWAY_TEST_ADMIN_DSN",
         "postgresql://voxcrm:voxcrm_dev_password@127.0.0.1:5432/postgres",
     )
-    database_url = f"postgresql+asyncpg://voxcrm:voxcrm_dev_password@127.0.0.1:5432/{database_name}"
+    database_url = urlsplit(admin_dsn)._replace(scheme="postgresql+asyncpg", path=f"/{database_name}").geturl()
 
     admin = await asyncpg.connect(admin_dsn)
     await admin.execute(f'CREATE DATABASE "{database_name}"')

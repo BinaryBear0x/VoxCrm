@@ -60,6 +60,7 @@
                                     { <span class="badge bg-danger">Pasif</span> }
                                 </td>
                                 <td class="text-end">
+                                    <a href="/Dealer/Modules/@c.ID" class="btn btn-outline-primary btn-sm">Modüller</a> <a href="/Dealer/Users/@c.ID" class="btn btn-outline-dark btn-sm me-1">Kullanıcılar / Güvenlik</a>
                                     <a href="/Dealer/Edit/@c.ID" class="btn btn-outline-primary btn-sm me-1">Duzenle</a>
                                     @if (c.IsActive)
                                     {
@@ -91,7 +92,10 @@
                                 <div class="fw-semibold">@c.Name</div>
                                 <div class="text-muted small">@(c.phone ?? "") @(c.Email != null ? $"· {c.Email}" : "")</div>
                             </div>
-                            <a href="/Dealer/Edit/@c.ID" class="btn btn-outline-primary btn-sm">Duzenle</a>
+                            <div class="d-flex gap-1 flex-wrap">
+                                <a href="/Dealer/Modules/@c.ID" class="btn btn-outline-primary btn-sm">Modüller</a> <a href="/Dealer/Users/@c.ID" class="btn btn-outline-dark btn-sm">Kullanıcılar / Güvenlik</a>
+                                <a href="/Dealer/Edit/@c.ID" class="btn btn-outline-primary btn-sm">Duzenle</a>
+                            </div>
                         </div>
                     </div>
                 }

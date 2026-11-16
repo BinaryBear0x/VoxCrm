@@ -23,6 +23,7 @@
 
                 <form method="post" action="/PetOwner/Create" id="petOwnerCreateForm">
                     @Html.AntiForgeryToken()
+                    <input type="hidden" name="SubmissionId" value="@Guid.NewGuid()" />
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Ad</label>
@@ -42,6 +43,11 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold">E-posta</label>
                         <input type="email" name="Email" class="form-control" placeholder="ornek@mail.com">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">T.C. Kimlik No <span class="text-muted fw-normal">(isteğe bağlı)</span></label>
+                        <input type="text" name="NationalIdentityNumber" class="form-control" inputmode="numeric" maxlength="11" autocomplete="off" placeholder="11 haneli">
                     </div>
 
                     <div class="mb-3">
@@ -105,6 +111,15 @@
     var formEl = document.getElementById('petOwnerCreateForm');
     var confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
     var confirmed = false;
+    var submitting = false;
+    function lockSubmit() {
+        if (submitting) return false;
+        submitting = true;
+        var button = document.getElementById('saveBtn');
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Kaydediliyor...';
+        return true;
+    }
 
     var fieldLabels = {
         'FirstName': 'Ad',
@@ -115,7 +130,7 @@
     };
 
     formEl.addEventListener('submit', function (e) {
-        if (confirmed) return; // onay verildi, devam et
+        if (confirmed) { lockSubmit(); return; }
 
         var missing = [];
         Object.keys(fieldLabels).forEach(function (name) {
@@ -135,10 +150,13 @@
                 list.appendChild(li);
             });
             confirmModal.show();
+        } else {
+            lockSubmit();
         }
     });
 
     document.getElementById('confirmSaveBtn').addEventListener('click', function () {
+        if (!lockSubmit()) return;
         confirmed = true;
         confirmModal.hide();
         formEl.submit();

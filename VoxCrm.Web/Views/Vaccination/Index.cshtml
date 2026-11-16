@@ -4,33 +4,53 @@
     ViewData["ActiveMenu"] = "vaccines";
     var today = DateTime.Today;
     var includeArchived = ViewBag.IncludeArchived is true;
+    var history = ViewBag.History is true;
     var nextArchiveMode = (!includeArchived).ToString().ToLowerInvariant();
+
+    (string Text, string Css, string? Title) ReminderBadge(VoxCrm.Domain.Entities.VaccinationRecord vaccination)
+    {
+        var notification = vaccination.WhatsAppNotifications
+            .Where(item => item.NotificationType == VoxCrm.Domain.Entities.WhatsAppNotificationTypes.VaccinationReminder)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefault();
+
+        if (notification == null)
+            return vaccination.IsReminderSent
+                ? ("Eski kayıt", "bg-secondary", "Bu kayıt eski sürümde işlendi; gerçek teslim bilgisi bağlı değil.")
+                : ("Planlanmadı", "bg-light text-muted", null);
+
+        return notification.Status switch
+        {
+            VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Pending => ("Kuyrukta", "bg-warning text-dark", null),
+            VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Processing => ("İşleniyor", "bg-primary", null),
+            VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.DirectSending => ("Anında gönderiliyor", "bg-primary", null),
+            VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.RetryScheduled => ("Tekrar denenecek", "bg-warning text-dark", notification.LastError),
+            VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Sent => ("Gönderildi", "bg-success", null),
+            VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Failed => ("Başarısız", "bg-danger", notification.LastError),
+            VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.NeedsReview => ("Kontrol gerekli", "bg-danger", notification.LastError),
+            VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Cancelled => ("Planlanmadı", "bg-light text-muted", null),
+            _ => (notification.Status, "bg-secondary", notification.LastError),
+        };
+    }
 }
 
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
-    <h1 class="h3 fw-bold mb-0">Aşı Takvimi</h1>
-    <div class="d-flex gap-2">
-        <a href="/Vaccination?includeArchived=@nextArchiveMode" class="btn btn-outline-secondary btn-sm">
+    <h1 class="h3 fw-bold mb-0">@(history ? "Uygulama geçmişi" : "Aşı ve uygulama gündemi")</h1>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="/Vaccination?history=@((!history).ToString().ToLowerInvariant())" class="btn btn-outline-primary btn-sm">@(history ? "Güncel gündem" : "Tüm uygulama geçmişi")</a>
+        <a href="/Vaccination?includeArchived=@nextArchiveMode&amp;history=@history.ToString().ToLowerInvariant()" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-archive me-1"></i> @(includeArchived ? "Aktifleri Göster" : "Arşivi Göster")
         </a>
         <a href="/Vaccination/Create" class="btn btn-primary btn-sm">
-            <i class="bi bi-plus-lg me-1"></i> Aşı Kaydı Ekle
+            <i class="bi bi-plus-lg me-1"></i> Birden fazla uygulama ekle
         </a>
     </div>
 </div>
 
-@if (TempData["Success"] != null)
-{
-    <div class="alert alert-success alert-dismissible fade show">
-        @TempData["Success"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-}
-
 <!-- Özet Bantları -->
 @{
-    var overdue = Model.Where(v => v.NextDueDate.Date < today).Count();
-    var upcoming = Model.Where(v => v.NextDueDate.Date >= today && v.NextDueDate.Date <= today.AddDays(7)).Count();
+    var overdue = Model.Where(v => v.RenewedOn == null && v.NextDueDate.Date < today).Count();
+    var upcoming = Model.Where(v => v.RenewedOn == null && v.NextDueDate.Date >= today && v.NextDueDate.Date <= today.AddDays(7)).Count();
 }
 @if (overdue > 0 || upcoming > 0)
 {
@@ -68,6 +88,7 @@
                             <th>Hasta</th>
                             <th>Aşı</th>
                             <th>Yapıldı</th>
+                            <th>Aşı Kodu</th>
                             <th>Sonraki Aşı</th>
                             <th>Durum</th>
                             <th>Bot</th>
@@ -77,15 +98,28 @@
                     <tbody>
                         @foreach (var v in Model)
                         {
-                            var isOverdue = v.NextDueDate.Date < today;
-                            var isUpcoming = !isOverdue && v.NextDueDate.Date <= today.AddDays(7);
+                            var isOverdue = v.RenewedOn == null && v.NextDueDate.Date < today;
+                            var isUpcoming = v.RenewedOn == null && !isOverdue && v.NextDueDate.Date <= today.AddDays(7);
+                            var reminderBadge = ReminderBadge(v);
+                            var reminder = v.WhatsAppNotifications
+                                .Where(item => item.NotificationType == VoxCrm.Domain.Entities.WhatsAppNotificationTypes.VaccinationReminder)
+                                .OrderByDescending(item => item.CreatedAt)
+                                .FirstOrDefault();
+                            var canRetry = v.IsActive && v.RenewedOn == null && reminder?.Status == VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Failed;
+                            var canSendNow = v.IsActive && v.RenewedOn == null && !isOverdue
+                                && reminder?.Status != VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Sent
+                                && reminder?.Status != VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Processing
+                                && reminder?.Status != VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.DirectSending;
                             <tr class="@(isOverdue ? "table-danger" : isUpcoming ? "table-warning" : "")">
                                 <td class="fw-semibold">@v.Patient?.Name</td>
                                 <td>@v.VaccineType?.Name</td>
                                 <td>@v.AdministeredDate.ToString("dd.MM.yyyy")</td>
+                                <td>@(string.IsNullOrWhiteSpace(v.VaccineCode) ? "-" : v.VaccineCode)</td>
                                 <td>@v.NextDueDate.ToString("dd.MM.yyyy")</td>
                                 <td>
-                                    @if (isOverdue)
+                                    @if (v.RenewedOn.HasValue)
+                                    { <span class="badge bg-success" title="@v.RenewedOn.Value.ToString("dd.MM.yyyy") tarihinde aynı türde daha yeni uygulama var.">Yenilendi</span> }
+                                    else if (isOverdue)
                                     { <span class="badge bg-danger">Vadesi Geçmiş</span> }
                                     else if (isUpcoming)
                                     { <span class="badge bg-warning text-dark">Yaklaşan</span> }
@@ -93,16 +127,29 @@
                                     { <span class="badge bg-success">Bekliyor</span> }
                                 </td>
                                 <td>
-                                    @if (v.IsReminderSent)
-                                    { <span class="badge bg-info text-dark">Gönderildi</span> }
-                                    else
-                                    { <span class="badge bg-light text-muted">Bekliyor</span> }
+                                    <span class="badge @reminderBadge.Css" title="@reminderBadge.Title">@reminderBadge.Text</span>
                                 </td>
                                 <td class="text-end">
                                     @if (v.IsActive)
                                     {
+                                        @if (canSendNow)
+                                        {
+                                            <form method="post" action="/Vaccination/SendReminderNow" class="d-inline" data-confirm="Bu aşı için alıcı ve mesaj önizlemesi açılsın mı?">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@v.ID">
+                                                <button type="submit" class="btn btn-success btn-sm" aria-label="Aşı hatırlatmasını anında gönder"><i class="bi bi-send"></i></button>
+                                            </form>
+                                        }
+                                        @if (canRetry)
+                                        {
+                                            <form method="post" action="/Vaccination/RetryReminder" class="d-inline ms-1">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@v.ID">
+                                                <button type="submit" class="btn btn-warning btn-sm" aria-label="Başarısız bildirimi yeniden kuyruğa al"><i class="bi bi-arrow-repeat"></i></button>
+                                            </form>
+                                        }
                                         <a href="/Vaccination/Edit/@v.ID" class="btn btn-primary btn-sm" aria-label="Aşı kaydını düzenle"><i class="bi bi-pencil"></i></a>
-                                        <form method="post" action="/Vaccination/Delete" class="d-inline ms-1" data-confirm="Bu aşı kaydını silmek istediğinize emin misiniz?">
+                                        <form method="post" action="/Vaccination/Delete" class="d-inline ms-1" data-confirm="Bu aşı kaydı arşive taşınsın mı? Arşivden geri alabilirsiniz.">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="id" value="@v.ID">
                                             <button type="submit" class="btn btn-danger btn-sm" aria-label="Aşı kaydını arşivle"><i class="bi bi-trash"></i></button>
@@ -125,21 +172,50 @@
             <div class="d-md-none">
                 @foreach (var v in Model)
                 {
-                    var isOverdue = v.NextDueDate.Date < today;
+                    var isOverdue = v.RenewedOn == null && v.NextDueDate.Date < today;
+                    var reminderBadge = ReminderBadge(v);
+                    var reminder = v.WhatsAppNotifications
+                        .Where(item => item.NotificationType == VoxCrm.Domain.Entities.WhatsAppNotificationTypes.VaccinationReminder)
+                        .OrderByDescending(item => item.CreatedAt)
+                        .FirstOrDefault();
+                    var canRetry = v.IsActive && v.RenewedOn == null && reminder?.Status == VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Failed;
+                    var canSendNow = v.IsActive && v.RenewedOn == null && !isOverdue
+                        && reminder?.Status != VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Sent
+                        && reminder?.Status != VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.Processing
+                        && reminder?.Status != VoxCrm.Domain.Entities.WhatsAppNotificationStatuses.DirectSending;
                     <div class="border-bottom p-3">
                         <div class="d-flex justify-content-between">
                             <div class="fw-semibold">@v.Patient?.Name</div>
-                            @if (isOverdue)
+                            @if (v.RenewedOn.HasValue)
+                                    { <span class="badge bg-success" title="@v.RenewedOn.Value.ToString("dd.MM.yyyy") tarihinde aynı türde daha yeni uygulama var.">Yenilendi</span> }
+                                    else if (isOverdue)
                             { <span class="badge bg-danger">Vadesi Geçti</span> }
                             else
                             { <span class="badge bg-success">Bekliyor</span> }
                         </div>
-                        <div class="text-muted small mb-2">@v.VaccineType?.Name · Sonraki: @v.NextDueDate.ToString("dd.MM.yyyy")</div>
+                        <div class="text-muted small mb-2">@v.VaccineType?.Name · Kod: @(string.IsNullOrWhiteSpace(v.VaccineCode) ? "-" : v.VaccineCode) · Sonraki: @v.NextDueDate.ToString("dd.MM.yyyy")</div>
+                        <div class="small mb-2">Bot: <span class="badge @reminderBadge.Css" title="@reminderBadge.Title">@reminderBadge.Text</span></div>
                         <div class="d-flex justify-content-end gap-1">
                             @if (v.IsActive)
                             {
+                                @if (canSendNow)
+                                {
+                                    <form method="post" action="/Vaccination/SendReminderNow" class="d-inline" data-confirm="Bu aşı için alıcı ve mesaj önizlemesi açılsın mı?">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@v.ID">
+                                        <button type="submit" class="btn btn-success btn-sm" aria-label="Aşı hatırlatmasını anında gönder"><i class="bi bi-send"></i></button>
+                                    </form>
+                                }
+                                @if (canRetry)
+                                {
+                                    <form method="post" action="/Vaccination/RetryReminder" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@v.ID">
+                                        <button type="submit" class="btn btn-warning btn-sm" aria-label="Başarısız bildirimi yeniden kuyruğa al"><i class="bi bi-arrow-repeat"></i></button>
+                                    </form>
+                                }
                                 <a href="/Vaccination/Edit/@v.ID" class="btn btn-primary btn-sm" aria-label="Aşı kaydını düzenle"><i class="bi bi-pencil"></i></a>
-                                <form method="post" action="/Vaccination/Delete" class="d-inline" data-confirm="Bu aşı kaydını silmek istediğinize emin misiniz?">
+                                <form method="post" action="/Vaccination/Delete" class="d-inline" data-confirm="Bu aşı kaydı arşive taşınsın mı? Arşivden geri alabilirsiniz.">
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="id" value="@v.ID">
                                     <button type="submit" class="btn btn-danger btn-sm" aria-label="Aşı kaydını arşivle"><i class="bi bi-trash"></i></button>

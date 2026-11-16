@@ -9,6 +9,11 @@ namespace VoxCrm.Domain.Entities
 
         public Guid PetOwnerId { get; set; }
         public PetOwner PetOwner { get; set; } = null!;
+        public Guid? VaccinationRecordId { get; set; }
+        public Guid? PatientId { get; set; }
+        public bool IsAutomatic { get; set; }
+        public string? RecipientSnapshot { get; set; }
+        public VaccinationRecord? VaccinationRecord { get; set; }
         public string PhoneNumber { get; set; } = string.Empty;
         public string MessageContent { get; set; } = string.Empty;
         public string NotificationType { get; set; } = WhatsAppNotificationTypes.VaccinationReminder;

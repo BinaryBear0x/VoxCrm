@@ -23,7 +23,9 @@ public sealed class ApiApplicationFactory : WebApplicationFactory<ApiProgram>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        builder
+            .UseEnvironment("Development")
+            .UseSetting("ConnectionStrings:DefaultConnection", _connectionString);
         builder.ConfigureAppConfiguration(configuration =>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -38,7 +40,7 @@ public sealed class ApiApplicationFactory : WebApplicationFactory<ApiProgram>
         {
             services.RemoveAll<DbContextOptions<VoxCrmDbContext>>();
             services.AddDbContext<VoxCrmDbContext>(options =>
-                options.UseNpgsql(_connectionString, npgsql => npgsql.MigrationsAssembly("VoxCrm.Infrastructure")));
+                options.UseNpgsql(_connectionString, npgsql => npgsql.MigrationsAssembly("VoxCrm.Infrastructure")).ConfigureWarnings(w => w.Log(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.ManyServiceProvidersCreatedWarning)));
         });
     }
 }

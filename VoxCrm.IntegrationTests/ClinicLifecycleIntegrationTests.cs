@@ -184,7 +184,7 @@ public sealed class ClinicLifecycleIntegrationTests
         services.AddLogging();
         services.AddDataProtection();
         services.AddDbContext<VoxCrmDbContext>(options =>
-            options.UseNpgsql(
+            options.ConfigureWarnings(w => w.Log(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.ManyServiceProvidersCreatedWarning)).UseNpgsql(
                 _database.ConnectionString,
                 builder => builder.MigrationsAssembly("VoxCrm.Infrastructure")));
         services

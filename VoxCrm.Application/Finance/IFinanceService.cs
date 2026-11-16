@@ -1,11 +1,14 @@
 namespace VoxCrm.Application.Finance;
-
 public interface IFinanceService
 {
-    Task<FinanceIndexModel> GetIndexAsync(bool? collected, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<FinanceOwnerListItem>> GetOwnersAsync(CancellationToken cancellationToken = default);
-    Task<Guid> CreateDebtAsync(CreateDebtRequest request, CancellationToken cancellationToken = default);
-    Task<Guid> AddPaymentAsync(AddPaymentRequest request, CancellationToken cancellationToken = default);
-    Task<Guid> ReversePaymentAsync(ReversePaymentRequest request, CancellationToken cancellationToken = default);
-    Task CancelDebtAsync(CancelDebtRequest request, CancellationToken cancellationToken = default);
+    Task<DateOnly> GetTodayAsync(CancellationToken ct = default);
+    Task<FinanceIndexModel> GetIndexAsync(string? search, string? status, bool showDeleted, CancellationToken ct = default);
+    Task<FinanceChoices> GetChoicesAsync(CancellationToken ct = default);
+    Task<FinanceDetailsModel> GetDetailsAsync(Guid id, CancellationToken ct = default);
+    Task<Guid> CreateAsync(FinanceAccountInput input, FinanceActor actor, CancellationToken ct = default);
+    Task UpdateAsync(Guid id, FinanceAccountInput input, FinanceActor actor, CancellationToken ct = default);
+    Task DeleteAsync(Guid id, long revision, FinanceActor actor, CancellationToken ct = default);
+    Task SaveEntryAsync(FinanceEntryInput input, FinanceActor actor, CancellationToken ct = default);
+    Task DeleteEntryAsync(Guid accountId, string kind, Guid id, long revision, FinanceActor actor, CancellationToken ct = default);
+    Task GenerateInstallmentsAsync(Guid accountId, int count, DateOnly firstDate, long revision, FinanceActor actor, CancellationToken ct = default);
 }

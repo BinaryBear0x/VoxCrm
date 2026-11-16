@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using VoxCrm.Application.Vaccinations;
 using VoxCrm.Domain.Common;
 using VoxCrm.Domain.Entities;
 using VoxCrm.Infrastructure.Audit;
@@ -63,6 +65,42 @@ public sealed class ArchiveVaccinationIntegrationTests
     }
 
     [Fact]
+    public async Task Repeating_the_same_owner_submission_creates_only_one_record()
+    {
+        var data = await SeedTwoClinicsAsync();
+        var submissionId = Guid.NewGuid();
+
+        await using (var tenantDb = CreateTenantContext(data.ClinicA.ID))
+        {
+            var service = new PetOwnerService(
+                tenantDb,
+                new FixedTenantService(data.ClinicA.ID),
+                new DbAuditLogger(tenantDb));
+
+            var first = await service.CreateAsync(new PetOwner
+            {
+                FirstName = "Retry safe owner",
+                Phone = "+905551234567",
+                SubmissionId = submissionId,
+            });
+            var repeat = await service.CreateAsync(new PetOwner
+            {
+                FirstName = "Retry safe owner",
+                Phone = "+905551234567",
+                SubmissionId = submissionId,
+            });
+
+            Assert.True(first.Succeeded);
+            Assert.True(repeat.Succeeded);
+            Assert.Equal(first.Owner!.ID, repeat.Owner!.ID);
+        }
+
+        await using var verification = _database.CreateDbContext();
+        Assert.Equal(1, await verification.PetOwners.IgnoreQueryFilters()
+            .CountAsync(x => x.ClinicID == data.ClinicA.ID && x.SubmissionId == submissionId));
+    }
+
+    [Fact]
     public async Task Malformed_or_excessive_intake_data_is_rejected_without_partial_rows()
     {
         var data = await SeedTwoClinicsAsync();
@@ -79,12 +117,14 @@ public sealed class ArchiveVaccinationIntegrationTests
         var hugeNote = await patients.CreateAsync(new Patient { Notes = new string('x', 2001) }, null);
         var invalidPhone = await owners.CreateAsync(new PetOwner { Phone = "123" });
         var invalidEmail = await owners.CreateAsync(new PetOwner { Email = "not-an-email" });
+        var invalidIdentity = await owners.CreateAsync(new PetOwner { NationalIdentityNumber = "12345678901" });
 
         Assert.False(futureBirth.Succeeded);
         Assert.False(invalidGender.Succeeded);
         Assert.False(hugeNote.Succeeded);
         Assert.False(invalidPhone.Succeeded);
         Assert.False(invalidEmail.Succeeded);
+        Assert.False(invalidIdentity.Succeeded);
         Assert.False(await tenantDb.Patients.AnyAsync(patient =>
             patient.ID == futureBirthInput.ID || patient.ID == invalidGenderInput.ID));
     }
@@ -297,6 +337,27 @@ public sealed class ArchiveVaccinationIntegrationTests
     }
 
     [Fact]
+    public async Task Vaccination_create_immediately_reconciles_its_reminder()
+    {
+        var data = await SeedTwoClinicsAsync(includeHistory: true);
+        await using var tenantDb = CreateTenantContext(data.ClinicA.ID);
+        var scheduler = new RecordingReminderScheduler();
+        var service = new VaccinationService(
+            tenantDb,
+            new FixedTenantService(data.ClinicA.ID),
+            new DbAuditLogger(tenantDb),
+            NullLogger<VaccinationService>.Instance,
+            scheduler);
+        var administered = DateTime.UtcNow.Date.AddDays(1 - data.VaccineA!.ValidityDays);
+
+        var result = await service.CreateAsync(NewRecord(data.PatientA!.ID, data.VaccineA.ID, administered));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(result.Record!.ID, scheduler.LastVaccinationRecordId);
+        Assert.Equal(1, scheduler.CallCount);
+    }
+
+    [Fact]
     public async Task Vaccination_rejects_a_future_or_missing_administered_date()
     {
         var data = await SeedTwoClinicsAsync(includeHistory: true);
@@ -415,7 +476,7 @@ public sealed class ArchiveVaccinationIntegrationTests
 
     private VoxCrmDbContext CreateTenantContext(Guid clinicId)
     {
-        var options = new DbContextOptionsBuilder<VoxCrmDbContext>()
+        var options = new DbContextOptionsBuilder<VoxCrmDbContext>().ConfigureWarnings(w => w.Log(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.ManyServiceProvidersCreatedWarning))
             .UseNpgsql(
                 _database.ConnectionString,
                 builder => builder.MigrationsAssembly("VoxCrm.Infrastructure"))
@@ -491,5 +552,44 @@ public sealed class ArchiveVaccinationIntegrationTests
 
         public Guid GetClinicId() => _clinicId;
         public bool IsSystemContext => false;
+    }
+
+    private sealed class RecordingReminderScheduler : IVaccinationReminderScheduler
+    {
+        public Guid? LastVaccinationRecordId { get; private set; }
+        public int CallCount { get; private set; }
+
+        public Task<int> ReconcileAsync(
+            Guid? vaccinationRecordId = null,
+            DateTime? utcNow = null,
+            CancellationToken cancellationToken = default)
+        {
+            LastVaccinationRecordId = vaccinationRecordId;
+            CallCount++;
+            return Task.FromResult(0);
+        }
+
+        public Task<VaccinationReminderActionResult> RetryFailedAsync(
+            Guid vaccinationRecordId,
+            DateTime? utcNow = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new VaccinationReminderActionResult(true));
+
+        public Task<VaccinationReminderDispatchResult> StartImmediateAsync(
+            Guid vaccinationRecordId,
+            DateTime? utcNow = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new VaccinationReminderDispatchResult(false));
+
+        public Task CompleteImmediateAsync(
+            Guid vaccinationRecordId,
+            string? gatewayMessageId,
+            DateTime? utcNow = null,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task FailImmediateAsync(
+            Guid vaccinationRecordId,
+            string error,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

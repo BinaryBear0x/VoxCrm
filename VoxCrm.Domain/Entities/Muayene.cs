@@ -19,5 +19,9 @@ namespace VoxCrm.Domain.Entities
         public string? Plan { get; set; }
         public decimal? WeightAtVisit { get; set; }
         public decimal? Temperature { get; set; }
+        public Guid? ReviewedFinanceAccountId { get; set; }
+        public DateTime? BillingReviewedAt { get; set; }
+        public Guid? BillingReviewedBy { get; set; }
+        public string? BillingReviewNote { get; set; }
     }
 }

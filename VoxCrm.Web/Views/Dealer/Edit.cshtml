@@ -9,6 +9,7 @@
         <a href="/Dealer" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Kliniklerim</a>
         <h1 class="h3 fw-bold mb-0 mt-1">@Model.Name — Duzenle</h1>
     </div>
+    <a href="/Dealer/Users/@Model.ClinicId" class="btn btn-outline-dark">Kullanıcılar / Güvenlik</a>
 </div>
 
 <div class="row justify-content-center">
@@ -17,6 +18,7 @@
             <div class="card-body p-4">
                 <form method="post" action="/Dealer/Edit/@Model.ClinicId">
                     @Html.AntiForgeryToken()
+                    <input asp-for="ModulesRevision" type="hidden"/>
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Klinik Adi *</label>

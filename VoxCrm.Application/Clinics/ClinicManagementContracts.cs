@@ -25,7 +25,8 @@ public sealed record UpdateClinicCommand(
     bool WhatsAppSendWindowEnabled,
     TimeOnly WhatsAppSendWindowStart,
     TimeOnly WhatsAppSendWindowEnd,
-    string? WhatsAppTimeZoneId);
+    string? WhatsAppTimeZoneId,
+    long? ModulesRevision = null);
 
 public sealed record ProvisionedClinic(
     Guid ClinicId,
@@ -76,7 +77,8 @@ public sealed record ClinicUpdate(
     bool WhatsAppSendWindowEnabled,
     TimeOnly WhatsAppSendWindowStart,
     TimeOnly WhatsAppSendWindowEnd,
-    string WhatsAppTimeZoneId);
+    string WhatsAppTimeZoneId,
+    long? ModulesRevision = null);
 
 public sealed record ClinicProvisioning(
     Clinic Clinic,

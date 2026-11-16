@@ -76,6 +76,7 @@ public sealed class ClinicManagementService : IClinicManagementService
             phone = Normalize(command.Phone),
             Email = Normalize(command.Email),
             Address = Normalize(command.Address),
+            EnabledModules = 4, // tasks + closing assistant stay on like before; QuickVisit / follow-up / WhatsApp are opt-in
             IsWhatsAppEnabled = command.IsWhatsAppEnabled,
         };
         var userEmail = command.InitialUserEmail.Trim();
@@ -116,7 +117,7 @@ public sealed class ClinicManagementService : IClinicManagementService
                 command.WhatsAppSendWindowEnd,
                 string.IsNullOrWhiteSpace(command.WhatsAppTimeZoneId)
                     ? "Europe/Istanbul"
-                    : command.WhatsAppTimeZoneId.Trim()),
+                    : command.WhatsAppTimeZoneId.Trim(), command.ModulesRevision),
             cancellationToken);
     }
 

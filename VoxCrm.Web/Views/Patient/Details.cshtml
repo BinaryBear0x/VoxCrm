@@ -1,3 +1,4 @@
+@inject VoxCrm.Web.Services.ClinicModules Modules
 @model VoxCrm.Domain.Entities.Patient
 @{
     ViewData["Title"] = Model.Name;
@@ -6,15 +7,25 @@
     var muayeneler = ViewBag.Muayeneler as IEnumerable<VoxCrm.Domain.Entities.Muayene>;
     var vaccinations = ViewBag.Vaccinations as IEnumerable<VoxCrm.Domain.Entities.VaccinationRecord>;
     var appointments = ViewBag.Appointments as IEnumerable<VoxCrm.Domain.Entities.Appointment>;
-    var debts = ViewBag.Debts as IEnumerable<VoxCrm.Domain.Entities.Debt>;
+    var debts = ViewBag.Debts as IEnumerable<VoxCrm.Application.Finance.FinanceSummary>;
 }
 
 <div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
     <div>
         <a href="/Patient" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Hastalar</a>
-        <h1 class="h3 fw-bold mb-0 mt-1">@Model.Name <i class="bi @(Model.cinsiyet == 'E' ? "bi-gender-male text-primary" : "bi-gender-female text-danger") fs-5"></i></h1>
+        <h1 class="h3 fw-bold mb-0 mt-1">@Model.Name
+            @if (Model.cinsiyet == 'E')
+            {
+                <i class="bi bi-gender-male text-primary fs-5"></i>
+            }
+            else if (Model.cinsiyet == 'D')
+            {
+                <i class="bi bi-gender-female text-danger fs-5"></i>
+            }
+        </h1>
     </div>
-    <div class="d-flex align-items-center gap-2">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+@if(await Modules.QuickVisitAsync()){        <a href="/QuickVisit?patientId=@Model.ID" class="btn btn-sm btn-primary"><i class="bi bi-mic me-1"></i> Hızlı Ziyaret</a>}
         <a href="/Muayene/Create?patientId=@Model.ID" class="btn btn-sm btn-primary">
             <i class="bi bi-file-medical me-1"></i> Muayene Ekle
         </a>
@@ -55,6 +66,8 @@
                         <dd class="col-7 fw-semibold">@Model.Species</dd>
                         <dt class="col-5 text-muted small">Irk</dt>
                         <dd class="col-7">@(Model.Breed ?? "-")</dd>
+                        <dt class="col-5 text-muted small">Cinsiyet</dt>
+                        <dd class="col-7">@(Model.cinsiyet == 'E' ? "Erkek" : Model.cinsiyet == 'D' ? "Dişi" : "Belirtilmemiş")</dd>
                         <dt class="col-5 text-muted small">Doğum Tarihi</dt>
                         <dd class="col-7">@(Model.DateOfBirth?.ToString("dd.MM.yyyy") ?? "-")</dd>
                         <dt class="col-5 text-muted small">Çip No</dt>
@@ -105,6 +118,7 @@
                                         <a href="/PetOwner/Details/@o.PetOwner.ID" class="btn btn-sm btn-outline-secondary" title="Profile Git">
                                             <i class="bi bi-person"></i>
                                         </a>
+                                        @if(!o.IsPrimaryOwner){<form method="post" action="/Patient/SetPrimaryOwner" class="d-inline" data-confirm="İletişimde kullanılacak birincil sahip değiştirilsin mi?">@Html.AntiForgeryToken()<input type="hidden" name="patientId" value="@Model.ID"/><input type="hidden" name="ownerId" value="@o.PetOwnerId"/><button class="btn btn-sm btn-outline-primary">Birincil yap</button></form>}
                                         <form method="post" action="/Patient/RemoveOwner" class="d-inline" data-confirm="Bu sahibi hastadan koparmak istediğinize emin misiniz?">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="patientId" value="@Model.ID" />
@@ -205,6 +219,7 @@
                     <thead class="table-light">
                         <tr>
                             <th>Aşı Adı</th>
+                            <th>Aşı Kodu</th>
                             <th>Yapılma Tarihi</th>
                             <th>Sonraki Doz</th>
                             <th>Durum</th>
@@ -216,6 +231,7 @@
                             bool isPastDue = v.NextDueDate < DateTime.UtcNow.Date;
                             <tr>
                                 <td>@(v.VaccineType?.Name ?? "-")</td>
+                                <td>@(string.IsNullOrWhiteSpace(v.VaccineCode) ? "-" : v.VaccineCode)</td>
                                 <td>@v.AdministeredDate.ToLocalTime().ToString("dd.MM.yyyy")</td>
                                 <td class="@(isPastDue ? "text-danger fw-bold" : "")">@v.NextDueDate.ToLocalTime().ToString("dd.MM.yyyy")</td>
                                 <td>
@@ -292,40 +308,12 @@
             }
             else
             {
-                <table class="table mb-0 table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Oluşturulma</th>
-                            <th>Sahip</th>
-                            <th>Açıklama</th>
-                            <th>Tutar</th>
-                            <th>Son Ödeme</th>
-                            <th>Durum</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var d in debts)
-                        {
-                            <tr>
-                                <td>@d.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
-                                <td>@d.PetOwner?.FirstName @d.PetOwner?.LastName</td>
-                                <td>@d.Description</td>
-                                <td class="fw-semibold">@d.Amount.ToString("C2")</td>
-                                <td>@d.DueDate.ToString("dd.MM.yyyy")</td>
-                                <td>
-                                    @if (d.IsCollected)
-                                    {
-                                        <span class="badge bg-success">Ödendi</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-danger">Ödenmedi</span>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+                <p class="small text-muted px-3">Bu hastaya bağlı kayıtlar ve sahiplerinin hasta seçilmemiş genel hesapları gösterilir.</p>
+                <div class="table-responsive"><table class="table mb-0 table-hover"><thead><tr><th>İsim</th><th>Açıklama</th><th>Toplam</th><th>Ödenen</th><th>Kalan</th><th></th></tr></thead><tbody>
+                @foreach(var d in debts) {
+                    <tr><td>@d.CustomerName</td><td>@d.Description</td><td>@d.Total.ToString("N2") TL</td><td>@d.Paid.ToString("N2") TL</td><td>@d.Remaining.ToString("N2") TL</td><td><a href="/Finance/Details/@d.Id">Aç</a></td></tr>
+                }
+                </tbody></table></div>
             }
         </div>
     </div>

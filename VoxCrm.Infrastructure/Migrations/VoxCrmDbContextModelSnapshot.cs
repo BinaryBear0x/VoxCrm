@@ -161,6 +161,9 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("CanApproveCareCards")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid?>("ClinicId")
                         .HasColumnType("uuid");
 
@@ -191,6 +194,9 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("LoginDisabled")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("MustChangePassword")
                         .HasColumnType("boolean");
@@ -263,13 +269,26 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<int>("DurationMinutes")
                         .HasColumnType("integer");
 
+                    b.Property<string>("GuestName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GuestNotes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GuestPhone")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GuestPhoneLookupHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsReminderSent")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("PatientId")
+                    b.Property<Guid?>("PatientId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Reason")
@@ -288,12 +307,103 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasIndex("PatientId");
 
+                    b.HasIndex("ClinicID", "GuestPhoneLookupHash");
+
                     b.HasIndex("ClinicID", "ScheduledAt");
 
                     b.ToTable("Appointments", t =>
                         {
                             t.HasCheckConstraint("CK_Appointments_DurationMinutes", "\"DurationMinutes\" BETWEEN 10 AND 240");
                         });
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.CareCard", b =>
+                {
+                    b.Property<Guid>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CallInstructions")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ClinicID")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ExaminationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("FollowUpDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("HomeSteps")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("OwnerResponse")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("PetOwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RecipientSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TodayActions")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TokenHash")
+                        .HasColumnType("text");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("ExaminationId");
+
+                    b.HasIndex("PetOwnerId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasFilter("\"TokenHash\" IS NOT NULL");
+
+                    b.HasIndex("ClinicID", "ExaminationId")
+                        .IsUnique();
+
+                    b.ToTable("CareCards");
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Clinic", b =>
@@ -311,8 +421,17 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("AutomaticVaccinationRemindersEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DashboardNote")
+                        .HasColumnType("text");
+
+                    b.Property<long>("DashboardNoteRevision")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid>("DealerId")
                         .HasColumnType("uuid");
@@ -320,11 +439,22 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<string>("Email")
                         .HasColumnType("text");
 
+                    b.Property<int>("EnabledModules")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(7);
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsWhatsAppEnabled")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("ManualWhatsAppEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("ModulesRevision")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -366,6 +496,134 @@ namespace VoxCrm.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Clinics");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.ClinicTask", b =>
+                {
+                    b.Property<Guid>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssignedUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CareCardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicID")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CompletedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("Important")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("CareCardId", "Kind")
+                        .IsUnique()
+                        .HasFilter("\"CareCardId\" IS NOT NULL");
+
+                    b.HasIndex("ClinicID", "SubmissionId")
+                        .IsUnique();
+
+                    b.ToTable("ClinicTasks");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.ClosingAcknowledgement", b =>
+                {
+                    b.Property<Guid>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicID")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("IssueKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("ClinicID", "Date", "IssueKey")
+                        .IsUnique();
+
+                    b.ToTable("ClosingAcknowledgements");
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Dealer", b =>
@@ -468,6 +726,321 @@ namespace VoxCrm.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("VoxCrm.Domain.Entities.ExcelImportBatch", b =>
+                {
+                    b.Property<Guid>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicID")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ManifestJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("PatientCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UndoneAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UndoneBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("ClinicID", "SubmissionId")
+                        .IsUnique();
+
+                    b.ToTable("ExcelImportBatches");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceAccount", b =>
+                {
+                    b.Property<Guid>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicID")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PetOwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("PetOwnerId");
+
+                    b.HasIndex("ClinicID", "SubmissionId")
+                        .IsUnique();
+
+                    b.ToTable("FinanceAccounts");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceChange", b =>
+                {
+                    b.Property<Guid>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ActorName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AfterJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BeforeJson")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ClinicID")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("FinanceAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("FinanceAccountId");
+
+                    b.ToTable("FinanceChanges");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceCharge", b =>
+                {
+                    b.Property<Guid>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("ChargeDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("ClinicID")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("FinanceAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("FinanceAccountId");
+
+                    b.ToTable("FinanceCharges", t =>
+                        {
+                            t.HasCheckConstraint("CK_FinanceCharges_Amount", "\"Amount\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceInstallment", b =>
+                {
+                    b.Property<Guid>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicID")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("FinanceAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("FinanceAccountId");
+
+                    b.ToTable("FinanceInstallments", t =>
+                        {
+                            t.HasCheckConstraint("CK_FinanceInstallments_Amount", "\"Amount\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceReceipt", b =>
+                {
+                    b.Property<Guid>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicID")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FinanceAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FinanceInstallmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("PaidDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("FinanceAccountId");
+
+                    b.HasIndex("FinanceInstallmentId");
+
+                    b.ToTable("FinanceReceipts", t =>
+                        {
+                            t.HasCheckConstraint("CK_FinanceReceipts_Amount", "\"Amount\" > 0");
+                        });
+                });
+
             modelBuilder.Entity("VoxCrm.Domain.Entities.Muayene", b =>
                 {
                     b.Property<Guid>("ID")
@@ -485,6 +1058,15 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.Property<string>("Assessment")
                         .HasColumnType("text");
+
+                    b.Property<string>("BillingReviewNote")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("BillingReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("BillingReviewedBy")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ClinicID")
                         .HasColumnType("uuid");
@@ -504,6 +1086,9 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<string>("Plan")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("ReviewedFinanceAccountId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Subjective")
                         .HasColumnType("text");
 
@@ -522,6 +1107,85 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.HasIndex("PatientId");
 
                     b.ToTable("Muayeneler");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.OwnerFollowUpShare", b =>
+                {
+                    b.Property<Guid>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicID")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("LastIssueId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("NoteApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PatientIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("PetOwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PublicNote")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RecipientSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("ShowAppointments")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowCare")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowHistory")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowVaccinations")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TokenHash")
+                        .HasColumnType("text");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("ClinicID");
+
+                    b.HasIndex("PetOwnerId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasFilter("\"TokenHash\" IS NOT NULL");
+
+                    b.HasIndex("ClinicID", "PetOwnerId")
+                        .IsUnique();
+
+                    b.ToTable("OwnerFollowUpShares");
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Patient", b =>
@@ -563,6 +1227,9 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<string>("Species")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("SubmissionId")
+                        .HasColumnType("uuid");
+
                     b.Property<char?>("cinsiyet")
                         .HasColumnType("character(1)");
 
@@ -576,6 +1243,9 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.HasIndex("ClinicID", "MicrochipNumber")
                         .IsUnique()
                         .HasFilter("\"IsActive\" = TRUE AND \"MicrochipNumber\" IS NOT NULL AND \"MicrochipNumber\" <> ''");
+
+                    b.HasIndex("ClinicID", "SubmissionId")
+                        .IsUnique();
 
                     b.ToTable("Patients");
                 });
@@ -733,6 +1403,13 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<string>("LastName")
                         .HasColumnType("text");
 
+                    b.Property<string>("NationalIdentityLookupHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("NationalIdentityNumber")
+                        .HasColumnType("text");
+
                     b.Property<string>("NormalizedPhone")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -743,6 +1420,9 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("SubmissionId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("WhatsAppConsent")
                         .HasColumnType("boolean");
 
@@ -752,9 +1432,16 @@ namespace VoxCrm.Infrastructure.Migrations
 
                     b.HasIndex("ClinicID", "EmailLookupHash");
 
+                    b.HasIndex("ClinicID", "NationalIdentityLookupHash")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = TRUE AND \"NationalIdentityLookupHash\" IS NOT NULL");
+
                     b.HasIndex("ClinicID", "NormalizedPhone")
                         .IsUnique()
                         .HasFilter("\"IsActive\" = TRUE AND \"NormalizedPhone\" IS NOT NULL");
+
+                    b.HasIndex("ClinicID", "SubmissionId")
+                        .IsUnique();
 
                     b.ToTable("PetOwners");
                 });
@@ -933,6 +1620,12 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<Guid?>("ArchivedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BatchFingerprint")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("BatchSubmissionId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ClinicID")
                         .HasColumnType("uuid");
 
@@ -951,6 +1644,12 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("SubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("VaccineCode")
+                        .HasColumnType("text");
+
                     b.Property<Guid>("VaccineTypeId")
                         .HasColumnType("uuid");
 
@@ -961,6 +1660,12 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.HasIndex("PatientId");
 
                     b.HasIndex("VaccineTypeId");
+
+                    b.HasIndex("ClinicID", "BatchSubmissionId")
+                        .HasFilter("\"BatchSubmissionId\" IS NOT NULL");
+
+                    b.HasIndex("ClinicID", "SubmissionId")
+                        .IsUnique();
 
                     b.ToTable("VaccinationRecords");
                 });
@@ -1089,6 +1794,9 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsAutomatic")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("LastError")
                         .HasColumnType("text");
 
@@ -1112,11 +1820,17 @@ namespace VoxCrm.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("PatientId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("PetOwnerId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RecipientSnapshot")
                         .HasColumnType("text");
 
                     b.Property<int>("RetryCount")
@@ -1129,6 +1843,9 @@ namespace VoxCrm.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("VaccinationRecordId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("ID");
 
                     b.HasIndex("ClinicID");
@@ -1136,6 +1853,12 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.HasIndex("GatewayMessageId");
 
                     b.HasIndex("PetOwnerId");
+
+                    b.HasIndex("VaccinationRecordId");
+
+                    b.HasIndex("ClinicID", "VaccinationRecordId", "NotificationType")
+                        .IsUnique()
+                        .HasFilter("\"VaccinationRecordId\" IS NOT NULL");
 
                     b.HasIndex("ClinicID", "NotificationType", "Status", "NextAttemptAt");
 
@@ -1257,10 +1980,30 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.HasOne("VoxCrm.Domain.Entities.Patient", "Patient")
                         .WithMany()
                         .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.CareCard", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Patient");
+                    b.HasOne("VoxCrm.Domain.Entities.Muayene", null)
+                        .WithMany()
+                        .HasForeignKey("ExaminationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VoxCrm.Domain.Entities.PetOwner", null)
+                        .WithMany()
+                        .HasForeignKey("PetOwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Clinic", b =>
@@ -1272,6 +2015,34 @@ namespace VoxCrm.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Dealer");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.ClinicTask", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.CareCard", null)
+                        .WithMany()
+                        .HasForeignKey("CareCardId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VoxCrm.Domain.Entities.Patient", null)
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.ClosingAcknowledgement", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Debt", b =>
@@ -1289,6 +2060,113 @@ namespace VoxCrm.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("PetOwner");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.ExcelImportBatch", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceAccount", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VoxCrm.Domain.Entities.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("VoxCrm.Domain.Entities.PetOwner", "PetOwner")
+                        .WithMany()
+                        .HasForeignKey("PetOwnerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Patient");
+
+                    b.Navigation("PetOwner");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceChange", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VoxCrm.Domain.Entities.FinanceAccount", "FinanceAccount")
+                        .WithMany("Changes")
+                        .HasForeignKey("FinanceAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("FinanceAccount");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceCharge", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VoxCrm.Domain.Entities.FinanceAccount", "FinanceAccount")
+                        .WithMany("Charges")
+                        .HasForeignKey("FinanceAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("FinanceAccount");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceInstallment", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VoxCrm.Domain.Entities.FinanceAccount", "FinanceAccount")
+                        .WithMany("Installments")
+                        .HasForeignKey("FinanceAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("FinanceAccount");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceReceipt", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VoxCrm.Domain.Entities.FinanceAccount", "FinanceAccount")
+                        .WithMany("Receipts")
+                        .HasForeignKey("FinanceAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VoxCrm.Domain.Entities.FinanceInstallment", "FinanceInstallment")
+                        .WithMany("Receipts")
+                        .HasForeignKey("FinanceInstallmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("FinanceAccount");
+
+                    b.Navigation("FinanceInstallment");
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Muayene", b =>
@@ -1313,6 +2191,21 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Navigation("Appointment");
 
                     b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.OwnerFollowUpShare", b =>
+                {
+                    b.HasOne("VoxCrm.Domain.Entities.Clinic", null)
+                        .WithMany()
+                        .HasForeignKey("ClinicID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("VoxCrm.Domain.Entities.PetOwner", null)
+                        .WithMany()
+                        .HasForeignKey("PetOwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.Patient", b =>
@@ -1448,7 +2341,14 @@ namespace VoxCrm.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("VoxCrm.Domain.Entities.VaccinationRecord", "VaccinationRecord")
+                        .WithMany("WhatsAppNotifications")
+                        .HasForeignKey("VaccinationRecordId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("PetOwner");
+
+                    b.Navigation("VaccinationRecord");
                 });
 
             modelBuilder.Entity("VoxCrm.Domain.Entities.WhatsAppTemplate", b =>
@@ -1470,6 +2370,22 @@ namespace VoxCrm.Infrastructure.Migrations
                     b.Navigation("Payments");
                 });
 
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceAccount", b =>
+                {
+                    b.Navigation("Changes");
+
+                    b.Navigation("Charges");
+
+                    b.Navigation("Installments");
+
+                    b.Navigation("Receipts");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.FinanceInstallment", b =>
+                {
+                    b.Navigation("Receipts");
+                });
+
             modelBuilder.Entity("VoxCrm.Domain.Entities.Patient", b =>
                 {
                     b.Navigation("Owners");
@@ -1483,6 +2399,11 @@ namespace VoxCrm.Infrastructure.Migrations
             modelBuilder.Entity("VoxCrm.Domain.Entities.PetOwner", b =>
                 {
                     b.Navigation("OwnedPatients");
+                });
+
+            modelBuilder.Entity("VoxCrm.Domain.Entities.VaccinationRecord", b =>
+                {
+                    b.Navigation("WhatsAppNotifications");
                 });
 #pragma warning restore 612, 618
         }

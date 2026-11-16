@@ -1,0 +1,9 @@
+@model VoxCrm.Web.Models.ClinicUserActivationViewModel
+@{ ViewData["Title"] = "Kullanıcı aktivasyonu"; ViewData["ActiveMenu"] = "dealer"; }
+<div class="card shadow-sm my-4"><div class="card-body p-4">
+    <h1 class="h4">Aktivasyon bağlantısı hazır</h1><p>Giriş e-postası: <strong>@Model.Email</strong></p>
+    <label class="form-label" for="activationUrl">24 saatlik aktivasyon bağlantısı</label>
+    <div class="input-group mb-3"><input id="activationUrl" class="form-control" value="@Model.ActivationUrl" readonly><button type="button" class="btn btn-outline-secondary" data-copy-target="#activationUrl">Kopyala</button></div>
+    <p class="alert alert-warning">Bu bağlantıyı yalnız ilgili kullanıcıyla paylaşın. Bağlantı tek kullanımlıktır; yenisini oluşturmak eskisini geçersiz kılar.</p>
+    <a class="btn btn-primary" href="/Dealer/Users/@Model.ClinicId">Kullanıcılara dön</a>
+</div></div>

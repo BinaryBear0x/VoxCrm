@@ -1,463 +1,122 @@
 @model VoxCrm.Web.Models.WhatsAppSettingsViewModel
-@{
-    ViewData["Title"] = "WhatsApp";
-    ViewData["ActiveMenu"] = "whatsapp";
-    var connectStarted = TempData["WhatsAppConnectStarted"] != null;
+@using VoxCrm.Web.Services
+@using VoxCrm.Application.WhatsApp
+@{ ViewData["Title"] = "WhatsApp"; ViewData["ActiveMenu"] = "whatsapp";
+    var connected = Model.SessionStatus?.Status == "ready";
     var sessionStatus = Model.SessionStatus?.Status ?? Model.Qr?.Status ?? "offline";
-    var hasQr = !string.IsNullOrWhiteSpace(Model.Qr?.Qr);
-    var shouldPollQr = connectStarted || sessionStatus is "connecting" or "qr" || hasQr;
+    var poll = TempData["WhatsAppConnectStarted"] != null || sessionStatus is "connecting" or "qr";
 }
-
-<div class="d-flex justify-content-between align-items-center pt-2 pb-2 mb-4 border-bottom">
-    <div>
-        <h1 class="h3 fw-bold mb-0">WhatsApp</h1>
-        <div class="text-muted small">@Model.Clinic.Name</div>
-    </div>
-    @if (Model.IsDealer && Model.AvailableClinics.Any())
-    {
-        <form method="get" class="d-flex align-items-center gap-2">
-            <select name="clinicId" class="form-select form-select-sm" data-submit-on-change>
-                @foreach (var clinic in Model.AvailableClinics)
-                {
-                    if (clinic.ID == Model.Clinic.ID)
-                    {
-                        <option value="@clinic.ID" selected>@clinic.Name</option>
-                    }
-                    else
-                    {
-                        <option value="@clinic.ID">@clinic.Name</option>
-                    }
-                }
-            </select>
-        </form>
+<div class="d-flex justify-content-between align-items-center my-4 flex-wrap gap-2">
+    <div><h1 class="h3">WhatsApp</h1><span class="text-muted">@Model.Clinic.Name</span></div>
+    @if (Model.IsDealer) {
+        <form method="get"><select name="clinicId" class="form-select" data-submit-on-change>
+        @foreach (var c in Model.AvailableClinics) { <option value="@c.ID" selected="@(c.ID == Model.Clinic.ID)">@c.Name</option> }
+        </select></form>
     }
 </div>
-
-@if (!string.IsNullOrWhiteSpace(Model.GatewayWarning))
-{
-    <div class="alert alert-warning">@Model.GatewayWarning</div>
+@foreach (var notice in new[] { "Error", "Warning" }) {
+    if (TempData[notice] is string message) { <div class="alert alert-@(notice == "Error" ? "danger" : notice == "Warning" ? "warning" : notice == "Success" ? "success" : "info")" role="alert">@message</div> }
 }
-
-@if (Model.SessionStatus?.Status == "ready" && !Model.Clinic.IsWhatsAppEnabled)
-{
-    <div class="alert alert-warning">
-        WhatsApp oturumu bağlı görünüyor ancak klinik WhatsApp gönderimi kapalı. QR/status kontrolü ready durumunu doğruladığında sistem bunu otomatik açacak.
-    </div>
-}
-
+@if (Model.GatewayWarning != null) { <div class="alert alert-danger" role="alert">WhatsApp servisine erişilemiyor. Hiçbir bağlantı doğrulanamadı. Yerel servis çalışmıyorsa mesajlar gönderilmeden kuyrukta bekler.</div> }
+@if (!Model.Clinic.IsWhatsAppEnabled) { <div class="alert alert-warning">WhatsApp gönderimi kapalı. Bağlantı kurmak tek başına gönderimi açmaz; aşağıdaki ayarlardan ayrıca etkinleştirin.</div> }
+@if (Model.Notifications.Any(x => x.Status == "NeedsReview")) { <div class="alert alert-danger" role="alert">İncelenmesi gereken mesajlar var (kuyrukta "İnceleme gerekiyor" durumunda). Her birinde <strong>Gözden geçir</strong> ile nedenini görün: alıcı bilgisi düzelmişse kontrol edip yeniden sıraya alabilir, gerekmiyorsa iptal edebilirsiniz. Teslim sonucu belirsizse önce WhatsApp telefonunda sohbeti kontrol edin.</div> }
 <div class="row g-4">
-    <div class="col-12 col-xl-4">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start mb-3">
-                    <div>
-                        <h2 class="h6 fw-bold mb-1">Baglanti</h2>
-                        <span class="badge bg-@(sessionStatus == "ready" ? "success" : sessionStatus == "qr" || sessionStatus == "connecting" ? "warning text-dark" : "secondary")" data-wa-status-badge>
-                            @sessionStatus
-                        </span>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <form method="post" action="/WhatsApp/Connect" data-wa-connect-form>
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="clinicId" value="@Model.Clinic.ID" />
-                            <button class="btn btn-primary btn-sm" type="submit" data-wa-connect-button>
-                                <span class="spinner-border spinner-border-sm me-1 d-none" aria-hidden="true" data-wa-connect-spinner></span>
-                                <i class="bi bi-qr-code me-1" data-wa-connect-icon></i>
-                                <span data-wa-connect-text>Bagla</span>
-                            </button>
-                        </form>
-                        <form method="post" action="/WhatsApp/Disconnect">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="clinicId" value="@Model.Clinic.ID" />
-                            <button class="btn btn-outline-danger btn-sm" type="submit">
-                                <i class="bi bi-x-circle me-1"></i> Kes
-                            </button>
-                        </form>
-                    </div>
-                </div>
-
-                <dl class="row small mb-3">
-                    <dt class="col-5">Telefon</dt>
-                    <dd class="col-7">@(Model.SessionStatus?.ConnectedPhone ?? "-")</dd>
-                    <dt class="col-5">Son gorulme</dt>
-                    <dd class="col-7">@(Model.SessionStatus?.LastSeenAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "-")</dd>
-                    <dt class="col-5">Hata</dt>
-                    <dd class="col-7">@(Model.SessionStatus?.LastError ?? "-")</dd>
-                    <dt class="col-5">Kuyruk gecikmesi</dt>
-                    <dd class="col-7">@(Model.SessionStatus?.QueueLagSeconds ?? 0) sn</dd>
-                    <dt class="col-5">Son gonderim</dt>
-                    <dd class="col-7">@(Model.SessionStatus?.LastSentAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "-")</dd>
-                    <dt class="col-5">Needs review</dt>
-                    <dd class="col-7">@(Model.SessionStatus?.NeedsReviewCount ?? 0)</dd>
-                    <dt class="col-5">Failed</dt>
-                    <dd class="col-7">@(Model.SessionStatus?.FailedCount ?? 0)</dd>
-                    <dt class="col-5">Gönderim penceresi</dt>
-                    <dd class="col-7">
-                        @(Model.Clinic.WhatsAppSendWindowEnabled
-                            ? $"{Model.Clinic.WhatsAppSendWindowStart:HH\\:mm}-{Model.Clinic.WhatsAppSendWindowEnd:HH\\:mm} {Model.Clinic.WhatsAppTimeZoneId}"
-                            : "24 saat açık")
-                    </dd>
-                    <dt class="col-5">Sıradaki izin</dt>
-                    <dd class="col-7">@(Model.NextAllowedSendAtUtc?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "-")</dd>
-                </dl>
-
-                <div class="text-center border rounded p-3 @(shouldPollQr ? "" : "d-none")"
-                     data-wa-qr-panel
-                     data-wa-qr-url="@Url.Action("QrStatus", "WhatsApp", new { clinicId = Model.Clinic.ID })"
-                     data-wa-auto-poll="@shouldPollQr.ToString().ToLowerInvariant()">
-                    <div class="@(hasQr ? "d-none" : "")" data-wa-qr-loading>
-                        <div class="spinner-border text-primary mb-2" role="status" aria-label="QR hazirlaniyor"></div>
-                        <div class="fw-semibold small">QR hazirlaniyor...</div>
-                        <div class="text-muted small">Bu islem birkaç saniye surebilir.</div>
-                    </div>
-                    <img src="@(Model.Qr?.Qr ?? "")" alt="WhatsApp QR" class="img-fluid qr-image @(hasQr ? "" : "d-none")" data-wa-qr-image />
-                    <div class="small text-muted mt-2" data-wa-qr-status>
-                        @(hasQr ? "QR hazir. Klinik telefonundan okutun." : shouldPollQr ? "Baglanti baslatildi, QR bekleniyor." : "")
-                    </div>
-                    <div class="alert alert-warning small mt-3 mb-0 d-none" data-wa-qr-error></div>
-                </div>
-            </div>
-        </div>
+<div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-body">
+    <h2 class="h5">Bağlantı</h2><span class="badge bg-@(connected ? "success" : "warning text-dark")" data-wa-status-badge>@WhatsAppUi.Status(sessionStatus)</span>
+    <dl class="row mt-3"><dt class="col-5">Bağlı numara</dt><dd class="col-7" data-wa-phone>@(string.IsNullOrEmpty(Model.SessionStatus?.ConnectedPhone) ? "Bağlı numara yok" : WhatsAppUi.ConnectedPhone(Model.SessionStatus.ConnectedPhone))</dd>
+    <dt class="col-5">Son görülme</dt><dd class="col-7">@(Model.SessionStatus?.LastSeenAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</dd>
+    <dt class="col-5">Kopma / hata nedeni</dt><dd class="col-7" data-wa-last-error>@(string.IsNullOrWhiteSpace(Model.SessionStatus?.LastError) ? "Bildirilmiş hata yok" : WhatsAppUi.Error(Model.SessionStatus.LastError))</dd></dl>
+    <form method="post" action="/WhatsApp/Connect" class="d-inline" data-wa-connect-form>@Html.AntiForgeryToken()<input type="hidden" name="clinicId" value="@Model.Clinic.ID"><button class="btn btn-primary" data-wa-connect-button><span data-wa-connect-text>QR ile bağla / yeniden bağla</span></button></form>
+    <form method="post" action="/WhatsApp/Disconnect" class="d-inline" data-confirm="WhatsApp bağlantısını kesmek istiyor musunuz?">@Html.AntiForgeryToken()<input type="hidden" name="clinicId" value="@Model.Clinic.ID"><button class="btn btn-outline-danger">Bağlantıyı kes</button></form>
+    <div class="mt-3 @(poll || Model.Qr?.Qr != null ? "" : "d-none")" data-wa-qr-panel data-wa-auto-poll="@(poll ? "true" : "false")" data-wa-qr-url="/WhatsApp/QrStatus?clinicId=@Model.Clinic.ID">
+        <div data-wa-qr-loading>Bağlantı durumu kontrol ediliyor…</div><img data-wa-qr-image src="@Model.Qr?.Qr" alt="WhatsApp bağlantı QR kodu" class="img-fluid @(Model.Qr?.Qr == null ? "d-none" : "")" style="max-width:280px">
+        <p data-wa-qr-status>Telefonunuzda WhatsApp → Bağlı cihazlar → Cihaz bağla yolundan okutun.</p><div data-wa-qr-error class="alert alert-danger d-none" role="alert"></div>
     </div>
-
-    <!-- ── Test Mesajı + Manuel Gönderim ──────────────────────────── -->
-    <div class="col-12 col-xl-4">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body d-flex flex-column gap-4">
-
-                <!-- Test Mesajı -->
-                <div>
-                    <h2 class="h6 fw-bold mb-1">
-                        <i class="bi bi-send-check me-2 text-success"></i>Test Mesajı
-                    </h2>
-                    <p class="small text-muted mb-3">
-                        Bağlı kendi numaranıza otomatik test mesajı gönderir.
-                        @if (!string.IsNullOrWhiteSpace(Model.SessionStatus?.ConnectedPhone))
-                        {
-                            <br /><strong>Hedef:</strong> @Model.SessionStatus.ConnectedPhone
-                        }
-                    </p>
-                    <form method="post" action="/WhatsApp/TestMessage">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="clinicId" value="@Model.Clinic.ID" />
-                        <button type="submit" class="btn btn-success btn-sm w-100"
-                                @(Model.SessionStatus?.Status == "ready" ? "" : "disabled")>
-                            <i class="bi bi-phone me-1"></i>
-                            @(Model.SessionStatus?.Status == "ready"
-                                ? "Kendime Test Mesajı Gönder"
-                                : "Bağlantı gerekli (ready)")
-                        </button>
-                    </form>
-                </div>
-
-                <hr class="my-0" />
-
-                <!-- Manuel Bildirim -->
-                <div>
-                    <h2 class="h6 fw-bold mb-2">
-                        <i class="bi bi-megaphone me-2 text-primary"></i>Manuel Bildirim Gönder
-                    </h2>
-                    <form method="post" action="/WhatsApp/SendManual" id="manualSendForm">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="clinicId" value="@Model.Clinic.ID" />
-                        <div class="mb-2">
-                            <label class="form-label small fw-semibold">Telefon Numarası</label>
-                            <input type="tel" name="phone" class="form-control form-control-sm"
-                                   placeholder="0532 123 45 67 veya 905321234567" required>
-                            <div class="form-text">Başına 90 otomatik eklenir.</div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-semibold">Mesaj</label>
-                            <textarea name="message" class="form-control form-control-sm" rows="4"
-                                      placeholder="Gönderilecek mesajı yazın..." required
-                                      id="manualMessageText"></textarea>
-                            <div class="text-end mt-1">
-                                <span class="small text-muted" id="charCount">0 karakter</span>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-sm w-100"
-                                @(Model.SessionStatus?.Status == "ready" ? "" : "disabled")>
-                            <i class="bi bi-send me-1"></i>
-                            @(Model.SessionStatus?.Status == "ready"
-                                ? "Gönder"
-                                : "Bağlantı gerekli (ready)")
-                        </button>
-                    </form>
-                </div>
-
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12 col-xl-8">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <h2 class="h6 fw-bold mb-3">Aşı Mesaj Şablonu</h2>
-                <form method="post" action="/WhatsApp/SaveTemplate">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="clinicId" value="@Model.Clinic.ID" />
-                    <textarea name="body" class="form-control font-monospace" rows="6" required>@Model.Template.Body</textarea>
-                    <div class="d-flex flex-wrap gap-2 small text-muted mt-2">
-                        <span>{ownerFirstName}</span>
-                        <span>{patientName}</span>
-                        <span>{vaccineName}</span>
-                        <span>{dueDate}</span>
-                        <span>{clinicName}</span>
-                    </div>
-                    <div class="text-end mt-3">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-save me-1"></i> Kaydet
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <div class="d-flex flex-wrap gap-3 small">
-                    <span><strong>Gateway:</strong> @(Model.GatewayHealth?.Status ?? "unknown")</span>
-                    <span><strong>DB:</strong> @(Model.GatewayHealth?.Database ?? "unknown")</span>
-                    <span><strong>Ready clinic:</strong> @(Model.GatewayHealth?.ReadyClinicCount ?? 0)</span>
-                    <span><strong>Session:</strong> @(Model.GatewayHealth?.SessionCount ?? 0)</span>
-                    <span><strong>Failed:</strong> @(Model.GatewayHealth?.FailedCount ?? 0)</span>
-                    <span><strong>Needs review:</strong> @(Model.GatewayHealth?.NeedsReviewCount ?? 0)</span>
-                    <span><strong>Queue lag:</strong> @(Model.GatewayHealth?.QueueLagSeconds ?? 0) sn</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body p-0">
-                <div class="p-3 border-bottom">
-                    <h2 class="h6 fw-bold mb-0">Gonderim Kayitlari</h2>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0 align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Tarih</th>
-                                <th>Alici</th>
-                                <th>Tip</th>
-                                <th>Durum</th>
-                                <th>Retry</th>
-                                <th>Hata</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var item in Model.Notifications)
-                        {
-                            <tr>
-                                <td class="small">@item.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                                <td>@item.PhoneNumber</td>
-                                <td>@item.NotificationType</td>
-                                <td><span class="badge bg-secondary">@item.Status</span></td>
-                                <td>@item.RetryCount</td>
-                                <td class="small text-muted">@(item.LastError ?? "-")</td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body p-0">
-                <div class="p-3 border-bottom">
-                    <h2 class="h6 fw-bold mb-0">Gelen Mesajlar</h2>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0 align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Tarih</th>
-                                <th>Numara</th>
-                                <th>Mesaj</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var item in Model.InboundMessages)
-                        {
-                            <tr>
-                                <td class="small">@item.ReceivedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                                <td>@item.FromPhone</td>
-                                <td>@item.Message</td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
+</div></div></div>
+<div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-body">
+    <h2 class="h5">Gönderim izinleri</h2>
+    <form method="post" action="/WhatsApp/SaveSendingSettings">@Html.AntiForgeryToken()<input type="hidden" name="clinicId" value="@Model.Clinic.ID">
+    @if (Model.IsDealer) {
+    <div class="form-check mb-3"><input id="enabled" class="form-check-input" type="checkbox" name="enabled" value="true" checked="@Model.Clinic.IsWhatsAppEnabled"><label class="form-check-label" for="enabled">WhatsApp gönderimini etkinleştir (bayi izni)</label></div>
+    }
+    <div class="form-check mb-3"><input id="automatic" class="form-check-input" type="checkbox" name="automatic" value="true" checked="@Model.Clinic.AutomaticVaccinationRemindersEnabled"><label class="form-check-label" for="automatic">Otomatik aşı hatırlatmalarını etkinleştir</label></div>
+    <div class="form-check mb-3"><input id="manual" class="form-check-input" type="checkbox" name="manual" value="true" checked="@Model.Clinic.ManualWhatsAppEnabled"><label class="form-check-label" for="manual">Önizleme ve onay ile manuel gönderime izin ver</label></div>
+    <p class="small text-muted">Otomatik aşı hatırlatmaları varsayılan olarak kapalıdır. Kapatılan türün bekleyen mesajları iptal edilir. Tahsilat işlemleri WhatsApp mesajı oluşturmaz.</p><button class="btn btn-primary">Ayarları kaydet</button></form>
+    <p class="small text-muted mt-3 mb-0">Gönderim saatleri: @(Model.Clinic.WhatsAppSendWindowEnabled ? $"{Model.Clinic.WhatsAppSendWindowStart}–{Model.Clinic.WhatsAppSendWindowEnd} ({Model.Clinic.WhatsAppTimeZoneId})" : "24 saat"). Sıradaki izin: @Model.NextAllowedSendAtUtc?.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</p>
+</div></div></div>
+<div class="col-12"><div class="card shadow-sm"><div class="card-body">
+    @{ var forecast = Model.ReminderPreview; var goingNow = forecast?.Items.Count(i => i.GoesNow) ?? 0; }
+    <h2 class="h5">Otomatik hatırlatma özeti <span class="text-muted fs-6">(önümüzdeki 30 gün)</span></h2>
+    @if (Model.Clinic.AutomaticVaccinationRemindersEnabled) {
+        <p class="mb-2"><span class="badge bg-success">Otomatik hatırlatma açık</span> Aşağıdaki mesajlar ek onay gerekmeden günlük çalışmada sıraya alınır ve gönderim saatlerinde gider. Göndermek istemediklerinizi kuyruktan iptal edebilir, metni aşağıdaki şablondan değiştirebilirsiniz.</p>
+    } else {
+        <p class="mb-2"><span class="badge bg-secondary">Otomatik hatırlatma kapalı</span> Gönderim izinlerinden açarsanız aşağıdaki mesajlar ek onay gerekmeden sıraya alınır. Açmadan önce metni ve alıcıları buradan kontrol edebilirsiniz.</p>
+    }
+    @if (forecast == null || forecast.TotalEligible == 0) {
+        <p class="text-muted mb-0">Önümüzdeki 30 günde otomatik gidecek hatırlatma yok.@(forecast != null && forecast.AlreadyQueued > 0 ? $" ({forecast.AlreadyQueued} aşı için mesaj zaten kuyrukta veya işlenmiş.)" : "")</p>
+    } else {
+        <p class="mb-2"><strong>@forecast.TotalEligible</strong> müşteriye hatırlatma gidecek; <strong>@goingNow</strong> tanesi hatırlatma günü gelmiş olduğu için bir sonraki günlük çalışmada sıraya girer.</p>
+        @if (forecast.SkippedNoConsent + forecast.SkippedNoPhone + forecast.SkippedNoPrimaryOwner + forecast.AlreadyQueued > 0) {
+            <ul class="small text-muted">
+                @if (forecast.SkippedNoConsent > 0) { <li>@forecast.SkippedNoConsent aşı için müşterinin WhatsApp izni yok, <strong>gitmeyecek</strong>.</li> }
+                @if (forecast.SkippedNoPhone > 0) { <li>@forecast.SkippedNoPhone aşı için müşterinin telefonu yok, <strong>gitmeyecek</strong>.</li> }
+                @if (forecast.SkippedNoPrimaryOwner > 0) { <li>@forecast.SkippedNoPrimaryOwner aşı için aktif birincil sahip yok, <strong>gitmeyecek</strong>.</li> }
+                @if (forecast.AlreadyQueued > 0) { <li>@forecast.AlreadyQueued aşı için mesaj zaten kuyrukta veya işlenmiş.</li> }
+            </ul>
+        }
+        <div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Gideceği gün</th><th>Müşteri / hayvan</th><th>Aşı (vade)</th><th>Mesaj</th></tr></thead><tbody>
+        @foreach (var item in forecast.Items.Take(15)) {
+            <tr><td>@(item.GoesNow ? "Sıradaki çalışmada" : item.PlannedDate.ToString("dd.MM.yyyy"))</td><td>@item.OwnerName<div class="small text-muted">@item.PatientName</div></td>
+            <td>@item.VaccineName <span class="text-muted">(@item.DueDate.ToString("dd.MM.yyyy"))</span></td>
+            <td><details><summary class="small">Metni göster</summary><div class="small border rounded p-2 mt-1" style="white-space:pre-wrap">@item.Message</div></details></td></tr>
+        }
+        </tbody></table></div>
+        @if (forecast.TotalEligible > 15) { <p class="small text-muted mb-0">İlk 15 kayıt gösteriliyor; toplam @forecast.TotalEligible.</p> }
+    }
+</div></div></div>
+<div class="col-12"><div class="card shadow-sm"><div class="card-body">
+    <h2 class="h5">Aşı hatırlatma şablonu</h2>
+    @{ var unknownFields = VaccinationMessageTemplate.UnknownPlaceholders(Model.TemplateBody); }
+    @if (unknownFields.Count > 0) {
+        <div class="alert alert-warning" role="alert">Kayıtlı şablonda tanınmayan alanlar var; müşteriye <strong>olduğu gibi</strong> gidecek: @string.Join(", ", unknownFields.Select(name => "{" + name + "}")). Düzeltip kaydedin.</div>
+    }
+    <p class="small text-muted">Otomatik ve aşı kaydından hazırlanan mesajlar bu metinle oluşturulur. Kullanılabilir alanlar:
+    @foreach (var placeholder in VaccinationMessageTemplate.Placeholders) { <code class="me-1">@("{" + placeholder + "}")</code> }
+    Alan boşsa (ör. soyad yok) fazladan boşluk bırakılmaz. Kaydedince bekleyen hatırlatmaların metni günlük çalışmada yenilenir; gönderilmiş mesajlar değişmez.</p>
+    <form method="post" action="/WhatsApp/SaveTemplate">@Html.AntiForgeryToken()<input type="hidden" name="clinicId" value="@Model.Clinic.ID">
+        <textarea id="templateBody" name="body" class="form-control mb-2" rows="5" maxlength="1000" required>@Model.TemplateBody</textarea>
+        <div class="border rounded p-2 mb-3 bg-light"><div class="small text-muted">Örnek (kayıtlı şablonla):</div><div style="white-space:pre-wrap">@Model.TemplateSample</div></div>
+        <button class="btn btn-primary">Şablonu kaydet</button>
+        <button type="button" class="btn btn-outline-secondary" data-wa-load-default="@VaccinationMessageTemplate.DefaultBody" data-wa-target="#templateBody">Varsayılan metni yükle</button>
+    </form>
+</div></div></div>
+<div class="col-12"><div class="card shadow-sm"><div class="card-body">
+    <h2 class="h5">Manuel mesaj hazırla</h2>
+    <form method="post" action="/WhatsApp/SendManual" class="row g-3">@Html.AntiForgeryToken()<input type="hidden" name="clinicId" value="@Model.Clinic.ID">
+    <div class="col-md-6"><label for="recipient" class="form-label">Müşteri — ad, soyad ve telefon</label><select id="recipient" name="ownerId" class="form-select" required><option value="">Müşteri seçin</option>
+        @foreach (var o in Model.Owners) { <option value="@o.ID">@o.FirstName @o.LastName — @o.Phone @(o.WhatsAppConsent ? "" : "(WhatsApp izni yok)")</option> }
+    </select></div>
+    <div class="col-md-6"><label for="patient" class="form-label">İlgili hayvan (varsa)</label><select id="patient" name="patientId" class="form-select"><option value="">Hayvan seçilmedi</option>
+        @foreach (var o in Model.Owners) { foreach (var link in o.OwnedPatients.Where(x => x.IsActive && x.Patient.IsActive)) { <option value="@link.PatientId" data-owner="@o.ID">@link.Patient.Name — @o.FirstName @o.LastName — @o.Phone</option> } }
+    </select></div>
+    <div class="col-12"><label for="manualMessageText" class="form-label">Mesaj</label><textarea id="manualMessageText" name="message" class="form-control" rows="3" maxlength="4000" required></textarea></div>
+    <div class="col-12"><button class="btn btn-success">Alıcı ve mesajı önizle</button></div></form>
+</div></div></div>
+<div class="col-12"><div class="card shadow-sm"><div class="card-body">
+    <h2 class="h5">Mesaj kuyruğu</h2><p class="text-muted small">Son 100 mesaj. Önizleme, iptal ve güvenli yeniden deneme bu alandan yönetilir.</p>
+    <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Alıcı / hayvan</th><th>Tür</th><th>Durum</th><th>Sebep / sonraki deneme</th><th>İşlem</th></tr></thead><tbody>
+    @foreach (var n in Model.Notifications) {
+        var petName = n.VaccinationRecord?.Patient?.Name ?? Model.Owners.SelectMany(o => o.OwnedPatients).FirstOrDefault(x => x.PatientId == n.PatientId)?.Patient.Name;
+        <tr><td><strong>@n.PetOwner.FirstName @n.PetOwner.LastName</strong><div>@n.PhoneNumber</div><div class="small text-muted">@(petName ?? "Hayvan belirtilmedi")</div></td>
+        <td>@(n.IsAutomatic ? "Otomatik aşı" : n.VaccinationRecordId.HasValue ? "Manuel aşı" : "Manuel mesaj")</td>
+        <td><span class="badge bg-@(n.Status == "Sent" ? "success" : n.Status is "Failed" or "NeedsReview" ? "danger" : "secondary")">@WhatsAppUi.Status(n.Status, connected)</span><div class="small">Deneme: @n.RetryCount</div></td>
+        <td class="small">@(n.LastError != null ? WhatsAppUi.Error(n.LastError) : n.Status == "Pending" && !connected ? "Bağlantı kurulunca, izin verilen saatte işlenecek." : "—")<div>@(n.NextAttemptAt.HasValue ? "Sonraki deneme: " + n.NextAttemptAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "Planlı deneme yok")</div></td>
+        <td><a class="btn btn-outline-primary btn-sm" href="/WhatsApp/Preview?clinicId=@Model.Clinic.ID&amp;id=@n.ID">@(n.Status == "NeedsReview" ? "Gözden geçir" : "Önizle")</a>
+        @if (n.Status is "Pending" or "RetryScheduled" or "NeedsReview") { <form method="post" action="/WhatsApp/ManageNotification" class="d-inline" data-confirm="Bu bekleyen mesaj iptal edilsin mi?">@Html.AntiForgeryToken()<input type="hidden" name="clinicId" value="@Model.Clinic.ID"><input type="hidden" name="id" value="@n.ID"><input type="hidden" name="operation" value="cancel"><button class="btn btn-outline-danger btn-sm">İptal</button></form> }
+        </td></tr>
+    }
+    @if (!Model.Notifications.Any()) { <tr><td colspan="5" class="text-muted text-center">Kuyrukta mesaj yok.</td></tr> }
+    </tbody></table></div>
+</div></div></div>
 </div>
-
-@section Scripts {
-    <script>
-        (() => {
-            const connectForm = document.querySelector('[data-wa-connect-form]');
-            const connectButton = document.querySelector('[data-wa-connect-button]');
-            const connectSpinner = document.querySelector('[data-wa-connect-spinner]');
-            const connectIcon = document.querySelector('[data-wa-connect-icon]');
-            const connectText = document.querySelector('[data-wa-connect-text]');
-            const panel = document.querySelector('[data-wa-qr-panel]');
-            const image = document.querySelector('[data-wa-qr-image]');
-            const loading = document.querySelector('[data-wa-qr-loading]');
-            const statusText = document.querySelector('[data-wa-qr-status]');
-            const errorBox = document.querySelector('[data-wa-qr-error]');
-            const statusBadge = document.querySelector('[data-wa-status-badge]');
-            let enabledToastShown = false;
-
-            const showElement = (element) => element?.classList.remove('d-none');
-            const hideElement = (element) => element?.classList.add('d-none');
-
-            connectForm?.addEventListener('submit', () => {
-                connectButton?.setAttribute('disabled', 'disabled');
-                connectButton?.setAttribute('aria-busy', 'true');
-                showElement(connectSpinner);
-                hideElement(connectIcon);
-                if (connectText) connectText.textContent = 'Baglaniyor...';
-                showElement(panel);
-                showElement(loading);
-                if (statusText) statusText.textContent = 'Baglanti istegi gonderiliyor...';
-            });
-
-            if (!panel || panel.dataset.waAutoPoll !== 'true') return;
-
-            let attempts = 0;
-            let hasShownQr = Boolean(image?.getAttribute('src'));
-            const maxAttempts = 60;
-
-            const setBadge = (status) => {
-                if (!statusBadge || !status) return;
-                statusBadge.textContent = status;
-                statusBadge.className = 'badge';
-                if (status === 'ready') {
-                    statusBadge.classList.add('bg-success');
-                } else if (status === 'qr' || status === 'connecting') {
-                    statusBadge.classList.add('bg-warning', 'text-dark');
-                } else {
-                    statusBadge.classList.add('bg-secondary');
-                }
-            };
-
-            const showError = (message) => {
-                if (!errorBox) return;
-                errorBox.textContent = message;
-                showElement(errorBox);
-            };
-
-            const showToast = (message, level) => {
-                const container = document.querySelector('.toast-container') || document.body.appendChild(document.createElement('div'));
-                container.classList.add('toast-container', 'position-fixed', 'bottom-0', 'end-0', 'p-3');
-                container.style.zIndex = '1090';
-
-                const toastEl = document.createElement('div');
-                toastEl.className = `toast align-items-center text-bg-${level || 'info'} border-0 shadow-sm`;
-                toastEl.setAttribute('role', 'alert');
-                toastEl.setAttribute('aria-live', 'assertive');
-                toastEl.setAttribute('aria-atomic', 'true');
-                toastEl.setAttribute('data-bs-autohide', 'true');
-                toastEl.setAttribute('data-bs-delay', '4500');
-                const row = document.createElement('div');
-                row.className = 'd-flex';
-                const body = document.createElement('div');
-                body.className = 'toast-body';
-                body.textContent = String(message || '');
-                const close = document.createElement('button');
-                close.type = 'button';
-                close.className = 'btn-close btn-close-white me-2 m-auto';
-                close.setAttribute('data-bs-dismiss', 'toast');
-                close.setAttribute('aria-label', 'Kapat');
-                row.append(body, close);
-                toastEl.appendChild(row);
-                container.appendChild(toastEl);
-                new bootstrap.Toast(toastEl).show();
-            };
-
-            const pollQr = async () => {
-                attempts += 1;
-
-                try {
-                    const response = await fetch(panel.dataset.waQrUrl, {
-                        headers: { 'Accept': 'application/json' },
-                        cache: 'no-store'
-                    });
-
-                    const payload = await response.json();
-                    if (!response.ok || payload.ok === false) {
-                        throw new Error(payload.error || 'QR durumu alinamadi.');
-                    }
-
-                    hideElement(errorBox);
-                    setBadge(payload.status);
-
-                    if (payload.qr && image) {
-                        image.src = payload.qr;
-                        showElement(image);
-                        hideElement(loading);
-                        hasShownQr = true;
-                        if (statusText) statusText.textContent = 'QR hazir. Klinik telefonundan okutun.';
-                    } else if (payload.status === 'ready') {
-                        hideElement(loading);
-                        hideElement(image);
-                        if (statusText) statusText.textContent = payload.connectedPhone
-                            ? `Baglandi: ${payload.connectedPhone}`
-                            : 'WhatsApp baglantisi hazir.';
-                        if (payload.whatsAppEnabledChanged && !enabledToastShown) {
-                            enabledToastShown = true;
-                            showToast('Klinik WhatsApp gönderimi otomatik aktifleştirildi.', 'info');
-                        }
-                        return;
-                    } else if (payload.status === 'auth_failed') {
-                        hideElement(loading);
-                        hideElement(image);
-                        showError(payload.lastError || 'WhatsApp yetkilendirmesi basarisiz oldu.');
-                        return;
-                    } else if (payload.status === 'disconnected' && payload.lastError) {
-                        hideElement(loading);
-                        hideElement(image);
-                        showError(payload.lastError);
-                        return;
-                    } else if (!hasShownQr && statusText) {
-                        showElement(loading);
-                        statusText.textContent = payload.status === 'connecting'
-                            ? 'Baglanti kuruluyor, QR bekleniyor.'
-                            : 'QR bekleniyor.';
-                    }
-                } catch (error) {
-                    if (attempts >= 3) {
-                        showError(error.message || 'QR durumu alinamadi.');
-                    }
-                }
-
-                if (attempts < maxAttempts) {
-                    window.setTimeout(pollQr, hasShownQr ? 3000 : 2000);
-                } else if (!hasShownQr) {
-                    hideElement(loading);
-                    showError('QR zamaninda uretilmedi. Tekrar Bagla ile yeni istek baslatabilirsiniz.');
-                }
-            };
-
-            window.setTimeout(pollQr, 800);
-        })();
-
-        // Manuel mesaj karakter sayacı
-        (function() {
-            var msgText = document.getElementById('manualMessageText');
-            var charCount = document.getElementById('charCount');
-            if(msgText && charCount) {
-                msgText.addEventListener('input', function() {
-                    charCount.textContent = this.value.length + ' karakter';
-                });
-            }
-        })();
-    </script>
-}
+@section Scripts { <script src="~/js/app-toast.js" asp-append-version="true"></script><script src="~/js/whatsapp.js" asp-append-version="true"></script> }

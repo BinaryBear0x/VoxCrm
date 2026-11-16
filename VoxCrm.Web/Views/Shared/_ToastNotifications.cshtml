@@ -8,6 +8,12 @@
     };
 }
 
+@if (ViewData[VoxCrm.Web.Services.ValidationFeedbackFilter.AttemptedValuesKey] is string attemptedValues)
+{
+    @* Not executed as script: the shared script reads it to refill the form the user just submitted. *@
+    <script type="application/json" id="attempted-values">@Html.Raw(attemptedValues)</script>
+}
+
 <div class="toast-container position-fixed bottom-0 end-0 p-3 toast-layer">
     @foreach (var item in notifications)
     {

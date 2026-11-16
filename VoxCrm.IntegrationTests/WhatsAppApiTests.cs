@@ -168,7 +168,8 @@ public sealed class WhatsAppApiTests
             {
                 ClinicID = clinic.ID,
                 PetOwnerId = owner.ID,
-                PhoneNumber = "+905551112233",
+                PhoneNumber = owner.Phone!,
+                RecipientSnapshot = VoxCrm.Infrastructure.WhatsApp.WhatsAppRecipientGuard.Snapshot(owner, null),
                 MessageContent = "Manual test message",
                 NotificationType = WhatsAppNotificationTypes.ManualMessage,
                 Status = WhatsAppNotificationStatuses.Pending,
@@ -223,7 +224,8 @@ public sealed class WhatsAppApiTests
             {
                 ClinicID = clinic.ID,
                 PetOwnerId = owner.ID,
-                PhoneNumber = "+905551112233",
+                PhoneNumber = owner.Phone!,
+                RecipientSnapshot = VoxCrm.Infrastructure.WhatsApp.WhatsAppRecipientGuard.Snapshot(owner, null),
                 MessageContent = "Window deferred message",
                 NotificationType = WhatsAppNotificationTypes.ManualMessage,
                 Status = WhatsAppNotificationStatuses.Pending,
@@ -310,6 +312,37 @@ public sealed class WhatsAppApiTests
         Assert.Equal(
             HttpStatusCode.Unauthorized,
             (await wrongSignature.PostAsJsonAsync("/api/whatsapp/notifications/claim", emptyClaimRequest)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Inbound_message_with_offset_timestamp_is_stored_as_utc()
+    {
+        Guid clinicId;
+        await using (var db = _database.CreateDbContext())
+        {
+            await TestData.ClearWhatsAppDataAsync(db);
+            var (clinic, _) = await TestData.CreateClinicWithOwnerAsync(db, "Inbound UTC Clinic");
+            clinicId = clinic.ID;
+        }
+
+        await using var factory = new ApiApplicationFactory(_database.ConnectionString);
+        var client = CreateAuthorizedClient(factory, "whatsapp.inbound.write");
+        var receivedAt = DateTimeOffset.Parse("2026-08-12T14:00:00+03:00");
+        var response = await client.PostAsJsonAsync("/api/whatsapp/inbound", new
+        {
+            clinicId,
+            fromPhone = "+905551234567",
+            message = "Merhaba",
+            receivedAt = receivedAt.ToString("O"),
+            gatewaySessionId = "gateway-test",
+            providerMessageId = "inbound-offset-timestamp",
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await using var verifyDb = _database.CreateDbContext();
+        var inbound = await verifyDb.WhatsAppInboundMessages.SingleAsync(item => item.ProviderMessageId == "inbound-offset-timestamp");
+        Assert.Equal(DateTimeKind.Utc, inbound.ReceivedAt.Kind);
+        Assert.Equal(receivedAt.UtcDateTime, inbound.ReceivedAt);
     }
 
     private static HttpClient CreateAuthorizedClient(ApiApplicationFactory factory, string scope)

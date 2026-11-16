@@ -19,6 +19,7 @@ namespace VoxCrm.Infrastructure.Data
             _tenantService = tenantService;
         }
 
+        public DbSet<ExcelImportBatch> ExcelImportBatches {get;set;}
         public DbSet<Dealer> Dealers { get; set; }
         public DbSet<Clinic> Clinics { get; set; }
         public DbSet<PetOwner> PetOwners { get; set; }
@@ -35,10 +36,41 @@ namespace VoxCrm.Infrastructure.Data
         public DbSet<SystemAuditLog> SystemAuditLogs { get; set; }
         public DbSet<ServiceItem> ServiceItems { get; set; }
         public DbSet<Payment> Payments { get; set; }
+        public DbSet<FinanceAccount> FinanceAccounts { get; set; }
+        public DbSet<FinanceCharge> FinanceCharges { get; set; }
+        public DbSet<FinanceInstallment> FinanceInstallments { get; set; }
+        public DbSet<FinanceReceipt> FinanceReceipts { get; set; }
+        public DbSet<FinanceChange> FinanceChanges { get; set; }
+        public DbSet<ClinicTask> ClinicTasks { get; set; }
+        public DbSet<OwnerFollowUpShare> OwnerFollowUpShares { get; set; }
+        public DbSet<CareCard> CareCards { get; set; }
+        public DbSet<ClosingAcknowledgement> ClosingAcknowledgements { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+            builder.Entity<ExcelImportBatch>().HasQueryFilter(e=>IsSystemContext||e.ClinicID==TenantClinicId);
+            builder.Entity<ExcelImportBatch>().HasIndex(e=>new{e.ClinicID,e.SubmissionId}).IsUnique();
+            builder.Entity<Clinic>().Property(x=>x.EnabledModules).HasDefaultValue(7).HasSentinel(-1);
+            builder.Entity<OwnerFollowUpShare>().HasQueryFilter(x => IsSystemContext || x.ClinicID == TenantClinicId);
+            builder.Entity<OwnerFollowUpShare>().HasIndex(x => new { x.ClinicID, x.PetOwnerId }).IsUnique();
+            builder.Entity<OwnerFollowUpShare>().HasIndex(x => x.TokenHash).IsUnique().HasFilter("\"TokenHash\" IS NOT NULL");
+            builder.Entity<OwnerFollowUpShare>().Property(x => x.Revision).IsConcurrencyToken();
+            builder.Entity<OwnerFollowUpShare>().HasOne<PetOwner>().WithMany().HasForeignKey(x => x.PetOwnerId).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<ClinicTask>().HasQueryFilter(x => IsSystemContext || x.ClinicID == TenantClinicId);
+            builder.Entity<CareCard>().HasQueryFilter(x => IsSystemContext || x.ClinicID == TenantClinicId);
+            builder.Entity<ClosingAcknowledgement>().HasQueryFilter(x => IsSystemContext || x.ClinicID == TenantClinicId);
+            builder.Entity<ClinicTask>().Property(x => x.Revision).IsConcurrencyToken();
+            builder.Entity<CareCard>().Property(x => x.Revision).IsConcurrencyToken();
+            builder.Entity<ClinicTask>().HasIndex(x => new { x.ClinicID, x.SubmissionId }).IsUnique();
+            builder.Entity<ClinicTask>().HasIndex(x => new { x.CareCardId, x.Kind }).IsUnique().HasFilter("\"CareCardId\" IS NOT NULL");
+            builder.Entity<ClinicTask>().HasOne<Patient>().WithMany().HasForeignKey(x => x.PatientId).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<ClinicTask>().HasOne<CareCard>().WithMany().HasForeignKey(x => x.CareCardId).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<CareCard>().HasOne<Muayene>().WithMany().HasForeignKey(x => x.ExaminationId).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<CareCard>().HasOne<PetOwner>().WithMany().HasForeignKey(x => x.PetOwnerId).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<CareCard>().HasIndex(x => new { x.ClinicID, x.ExaminationId }).IsUnique();
+            builder.Entity<CareCard>().HasIndex(x => x.TokenHash).IsUnique().HasFilter("\"TokenHash\" IS NOT NULL");
+            builder.Entity<ClosingAcknowledgement>().HasIndex(x => new { x.ClinicID, x.Date, x.IssueKey }).IsUnique();
             builder.ApplyConfigurationsFromAssembly(typeof(VoxCrmDbContext).Assembly);
 
             builder.Entity<PetOwner>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
@@ -54,6 +86,11 @@ namespace VoxCrm.Infrastructure.Data
             builder.Entity<WhatsAppInboundMessage>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
             builder.Entity<ServiceItem>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
             builder.Entity<Payment>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<FinanceAccount>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<FinanceCharge>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<FinanceInstallment>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<FinanceReceipt>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
+            builder.Entity<FinanceChange>().HasQueryFilter(e => IsSystemContext || e.ClinicID == TenantClinicId);
 
             foreach (var entityType in builder.Model.GetEntityTypes()
                          .Where(entityType => typeof(ITenantEntity).IsAssignableFrom(entityType.ClrType)))
@@ -81,6 +118,17 @@ namespace VoxCrm.Infrastructure.Data
 
             builder.Entity<WhatsAppNotification>()
                 .HasIndex(n => n.GatewayMessageId);
+
+            builder.Entity<WhatsAppNotification>()
+                .HasOne(n => n.VaccinationRecord)
+                .WithMany(v => v.WhatsAppNotifications)
+                .HasForeignKey(n => n.VaccinationRecordId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<WhatsAppNotification>()
+                .HasIndex(n => new { n.ClinicID, n.VaccinationRecordId, n.NotificationType })
+                .IsUnique()
+                .HasFilter("\"VaccinationRecordId\" IS NOT NULL");
 
             builder.Entity<WhatsAppTemplate>()
                 .HasIndex(t => new { t.ClinicID, t.NotificationType, t.IsActive });
@@ -110,6 +158,11 @@ namespace VoxCrm.Infrastructure.Data
 
             builder.Entity<SystemAuditLog>()
                 .HasIndex(l => new { l.Source, l.Category, l.CreatedAt });
+
+            builder.Entity<PetOwner>().HasIndex(e => new { e.ClinicID, e.SubmissionId }).IsUnique();
+            builder.Entity<Patient>().HasIndex(e => new { e.ClinicID, e.SubmissionId }).IsUnique();
+            builder.Entity<VaccinationRecord>().HasIndex(e => new { e.ClinicID, e.SubmissionId }).IsUnique();
+            builder.Entity<VaccinationRecord>().HasIndex(e => new { e.ClinicID, e.BatchSubmissionId }).HasFilter("\"BatchSubmissionId\" IS NOT NULL");
         }
 
         public override int SaveChanges()
@@ -180,6 +233,8 @@ namespace VoxCrm.Infrastructure.Data
             {
                 foreach (var property in entry.Properties)
                 {
+                    // A status-only update must not rewrite timestamps read with legacy/local semantics.
+                    if (entry.State == EntityState.Modified && !property.IsModified) continue;
                     if (property.Metadata.ClrType == typeof(DateTime) && property.CurrentValue is DateTime value)
                     {
                         property.CurrentValue = ToUtc(value);

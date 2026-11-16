@@ -4,6 +4,7 @@ namespace VoxCrm.Domain.Entities
     {
         public const string Pending = "Pending";
         public const string Processing = "Processing";
+        public const string DirectSending = "DirectSending";
         public const string RetryScheduled = "RetryScheduled";
         public const string Sent = "Sent";
         public const string Failed = "Failed";

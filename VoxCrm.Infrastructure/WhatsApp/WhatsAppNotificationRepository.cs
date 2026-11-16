@@ -2,19 +2,56 @@ using System.Data;
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 using VoxCrm.Application.WhatsApp;
 using VoxCrm.Domain.Entities;
 using VoxCrm.Infrastructure.Data;
+using VoxCrm.Infrastructure.Security;
 
 namespace VoxCrm.Infrastructure.WhatsApp;
 
 public sealed class WhatsAppNotificationRepository : IWhatsAppNotificationRepository
 {
-    private readonly VoxCrmDbContext _context;
+    private const int MaxRecoveries = 3;
+    private const int MaxLastErrorLength = 1000;
 
-    public WhatsAppNotificationRepository(VoxCrmDbContext context)
+    private readonly VoxCrmDbContext _context;
+    private readonly IPiiProtector _protector;
+
+    // A late or stale gateway report must not revive a message that already moved on.
+    // Sent is accepted from any non-terminal state because it records a real delivery.
+    private static bool IsValidTransition(string current, string requested) => requested switch
+    {
+        WhatsAppNotificationStatuses.Sent => current is WhatsAppNotificationStatuses.Processing
+            or WhatsAppNotificationStatuses.DirectSending
+            or WhatsAppNotificationStatuses.RetryScheduled
+            or WhatsAppNotificationStatuses.Failed,
+        _ => current is WhatsAppNotificationStatuses.Processing or WhatsAppNotificationStatuses.DirectSending
+    };
+
+    private static string? Truncate(string? value, int max) =>
+        value is { Length: > 0 } && value.Length > max ? value[..max] : value;
+
+    // JSON timestamps with an offset become local DateTime values; timestamptz needs UTC.
+    // Past values would retry immediately in a loop and far-future values would strand the message.
+    private static DateTime NormalizeNextAttempt(DateTime? requested, DateTime now)
+    {
+        if (requested is null) return now.AddMinutes(5);
+        var utc = requested.Value.Kind switch
+        {
+            DateTimeKind.Utc => requested.Value,
+            DateTimeKind.Unspecified => DateTime.SpecifyKind(requested.Value, DateTimeKind.Utc),
+            _ => requested.Value.ToUniversalTime()
+        };
+        var earliest = now.AddMinutes(1);
+        var latest = now.AddHours(24);
+        return utc < earliest ? earliest : utc > latest ? latest : utc;
+    }
+
+    public WhatsAppNotificationRepository(VoxCrmDbContext context, IPiiProtector protector)
     {
         _context = context;
+        _protector = protector;
     }
 
     public async Task<IReadOnlyList<ClinicSendWindowInfo>> GetClinicSendWindowsAsync(
@@ -35,6 +72,21 @@ public sealed class WhatsAppNotificationRepository : IWhatsAppNotificationReposi
                 c.WhatsAppTimeZoneId,
                 c.DealerId))
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<int> ReleaseWindowDeferredAsync(Guid clinicId, DateTime now, CancellationToken cancellationToken)
+    {
+        // Only Pending: a RetryScheduled message has a back-off delay that must be respected.
+        return await _context.WhatsAppNotifications
+            .IgnoreQueryFilters()
+            .Where(n => n.ClinicID == clinicId
+                        && n.Status == WhatsAppNotificationStatuses.Pending
+                        && n.RetryCount == 0
+                        && n.NextAttemptAt != null && n.NextAttemptAt > now)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(n => n.NextAttemptAt, now)
+                .SetProperty(n => n.LastError, (string?)null),
+                cancellationToken);
     }
 
     public async Task<int> DeferDueNotificationsAsync(
@@ -72,8 +124,51 @@ public sealed class WhatsAppNotificationRepository : IWhatsAppNotificationReposi
             batchSize,
             lockSeconds,
             cancellationToken);
+        var safe = new List<WhatsAppClaimedNotification>();
+        var guard = new WhatsAppRecipientGuard(_context);
+        foreach (var item in claimed.Notifications)
+        {
+            var notification = await _context.WhatsAppNotifications.IgnoreQueryFilters().SingleAsync(n => n.ID == item.NotificationId, cancellationToken);
+            string? error;
+            try
+            {
+                error = await guard.CheckAsync(notification, cancellationToken);
+            }
+            catch (InvalidOperationException)
+            {
+                // Corrupt relationship data (for example two primary owners) must stop
+                // this one message, not the whole claim batch of every clinic.
+                error = "Alıcı ilişkisi doğrulanamadı (tutarsız hasta/sahip kaydı). Gönderim durduruldu.";
+            }
+            if (error == null) safe.Add(item);
+            else
+            {
+                notification.Status = WhatsAppNotificationStatuses.NeedsReview;
+                notification.LastError = error;
+                notification.NextAttemptAt = null;
+                notification.LockedAt = null; notification.LockedBy = null; notification.LockExpiresAt = null;
+            }
+        }
+
+        // Rows whose encrypted phone/message could not be read are quarantined one by one.
+        // ExecuteUpdate avoids materializing (and failing to decrypt) the same bad row again.
+        foreach (var poisonedId in claimed.Undecryptable)
+        {
+            await _context.WhatsAppNotifications
+                .IgnoreQueryFilters()
+                .Where(n => n.ID == poisonedId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(n => n.Status, WhatsAppNotificationStatuses.NeedsReview)
+                    .SetProperty(n => n.LastError, "Mesaj veya telefon verisi çözülemedi; manuel inceleme gerekli.")
+                    .SetProperty(n => n.NextAttemptAt, (DateTime?)null)
+                    .SetProperty(n => n.LockedAt, (DateTime?)null)
+                    .SetProperty(n => n.LockedBy, (string?)null)
+                    .SetProperty(n => n.LockExpiresAt, (DateTime?)null),
+                    cancellationToken);
+        }
+        await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return claimed;
+        return safe;
     }
 
     public async Task<bool> ReportStatusAsync(
@@ -84,10 +179,13 @@ public sealed class WhatsAppNotificationRepository : IWhatsAppNotificationReposi
     {
         var notification = await _context.WhatsAppNotifications.FindAsync(new object?[] { notificationId }, cancellationToken);
         if (notification == null) return false;
+        if (notification.Status == WhatsAppNotificationStatuses.Sent) return request.Status == WhatsAppNotificationStatuses.Sent;
+        if (notification.Status is WhatsAppNotificationStatuses.Cancelled or WhatsAppNotificationStatuses.NeedsReview) return false;
+        if (!IsValidTransition(notification.Status, request.Status)) return false;
 
         notification.Status = request.Status;
         notification.GatewayMessageId = request.GatewayMessageId ?? notification.GatewayMessageId;
-        notification.LastError = request.LastError;
+        notification.LastError = Truncate(request.LastError, MaxLastErrorLength);
         notification.LockedAt = null;
         notification.LockedBy = null;
         notification.LockExpiresAt = null;
@@ -103,7 +201,7 @@ public sealed class WhatsAppNotificationRepository : IWhatsAppNotificationReposi
         }
         else if (request.Status == WhatsAppNotificationStatuses.RetryScheduled)
         {
-            notification.NextAttemptAt = request.NextAttemptAt ?? now.AddMinutes(5);
+            notification.NextAttemptAt = NormalizeNextAttempt(request.NextAttemptAt, now);
         }
         else
         {
@@ -125,11 +223,23 @@ public sealed class WhatsAppNotificationRepository : IWhatsAppNotificationReposi
 
         foreach (var notification in expired)
         {
-            notification.Status = WhatsAppNotificationStatuses.RetryScheduled;
-            notification.NextAttemptAt = now.AddMinutes(5);
+            notification.RetryCount++;
             notification.LockedAt = null;
             notification.LockedBy = null;
             notification.LockExpiresAt = null;
+
+            if (notification.RetryCount > MaxRecoveries)
+            {
+                // The gateway repeatedly lost the delivery result. The message may already
+                // have been delivered, so a human decides instead of risking another send.
+                notification.Status = WhatsAppNotificationStatuses.NeedsReview;
+                notification.NextAttemptAt = null;
+                notification.LastError = "Processing lock expired repeatedly; delivery state is unknown. Manual review required.";
+                continue;
+            }
+
+            notification.Status = WhatsAppNotificationStatuses.RetryScheduled;
+            notification.NextAttemptAt = now.AddMinutes(5);
             notification.LastError = "Processing lock expired before gateway reported a final delivery state.";
         }
 
@@ -150,22 +260,96 @@ public sealed class WhatsAppNotificationRepository : IWhatsAppNotificationReposi
         if (existing != null)
             return existing.ID;
 
+        // JSON timestamps with an offset are materialized by ASP.NET as local
+        // DateTime values. PostgreSQL timestamptz accepts UTC only.
+        var receivedAt = request.ReceivedAt switch
+        {
+            null => now,
+            { Kind: DateTimeKind.Utc } value => value,
+            { Kind: DateTimeKind.Unspecified } value => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+            { } value => value.ToUniversalTime()
+        };
+
         var message = new WhatsAppInboundMessage
         {
             ClinicID = request.ClinicId,
             FromPhone = request.FromPhone,
             Message = request.Message,
-            ReceivedAt = request.ReceivedAt ?? now,
+            ReceivedAt = receivedAt,
             GatewaySessionId = request.GatewaySessionId,
             ProviderMessageId = request.ProviderMessageId
         };
 
         _context.WhatsAppInboundMessages.Add(message);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // The gateway delivered the same WhatsApp message twice at the same moment; the
+            // other request won. Report the stored row instead of failing.
+            _context.Entry(message).State = EntityState.Detached;
+            var stored = await _context.WhatsAppInboundMessages
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.ClinicID == request.ClinicId
+                                             && item.ProviderMessageId == request.ProviderMessageId,
+                    cancellationToken);
+            if (stored == null) throw;
+            return stored.ID;
+        }
         return message.ID;
     }
 
-    private async Task<IReadOnlyList<WhatsAppClaimedNotification>> ClaimNotificationsAsync(
+    public async Task<WhatsAppOptOutResult> ApplyOptOutAsync(
+        Guid clinicId,
+        IReadOnlyCollection<string> phoneCandidates,
+        CancellationToken cancellationToken)
+    {
+        var lookupKeys = phoneCandidates
+            .Select(candidate => _protector.BlindIndex(clinicId, candidate))
+            .Where(key => !string.IsNullOrEmpty(key))
+            .Select(key => key!)
+            .Distinct()
+            .ToArray();
+        if (lookupKeys.Length == 0) return new WhatsAppOptOutResult(0, 0);
+
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        var ownerIds = await _context.PetOwners
+            .IgnoreQueryFilters()
+            .Where(o => o.ClinicID == clinicId && o.IsActive && o.NormalizedPhone != null && lookupKeys.Contains(o.NormalizedPhone))
+            .Select(o => o.ID)
+            .ToListAsync(cancellationToken);
+        if (ownerIds.Count == 0) return new WhatsAppOptOutResult(0, 0);
+
+        // ExecuteUpdate touches only the consent column: the owner's encrypted fields and
+        // lookup hashes are not re-written by this path.
+        await _context.PetOwners
+            .IgnoreQueryFilters()
+            .Where(o => o.ClinicID == clinicId && ownerIds.Contains(o.ID))
+            .ExecuteUpdateAsync(setters => setters.SetProperty(o => o.WhatsAppConsent, false), cancellationToken);
+
+        var cancelled = await _context.WhatsAppNotifications
+            .IgnoreQueryFilters()
+            .Where(n => n.ClinicID == clinicId
+                        && ownerIds.Contains(n.PetOwnerId)
+                        && WhatsAppNotificationStatuses.Claimable.Contains(n.Status))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(n => n.Status, WhatsAppNotificationStatuses.Cancelled)
+                .SetProperty(n => n.NextAttemptAt, (DateTime?)null)
+                .SetProperty(n => n.LastError, "Müşteri WhatsApp mesajlarını durdurmak istedi."),
+                cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+        return new WhatsAppOptOutResult(ownerIds.Count, cancelled);
+    }
+
+    private sealed record ClaimBatch(
+        IReadOnlyList<WhatsAppClaimedNotification> Notifications,
+        IReadOnlyList<Guid> Undecryptable);
+
+    private async Task<ClaimBatch> ClaimNotificationsAsync(
         IReadOnlyCollection<Guid> clinicIds,
         DateTime now,
         string gatewayId,
@@ -213,20 +397,33 @@ RETURNING n."ID", n."ClinicID", n."PetOwnerId", n."PhoneNumber", n."MessageConte
         AddParameter(command, "batch_size", batchSize);
 
         var claimed = new List<WhatsAppClaimedNotification>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        var undecryptable = new List<Guid>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            claimed.Add(new WhatsAppClaimedNotification(
-                reader.GetGuid(0),
-                reader.GetGuid(1),
-                reader.GetGuid(2),
-                reader.GetString(3),
-                reader.GetString(4),
-                reader.GetString(5),
-                reader.GetInt32(6)));
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var id = reader.GetGuid(0);
+                try
+                {
+                    claimed.Add(new WhatsAppClaimedNotification(
+                        id,
+                        reader.GetGuid(1),
+                        reader.GetGuid(2),
+                        _protector.Unprotect(reader.GetString(3))
+                            ?? throw new InvalidOperationException("Claimed WhatsApp phone number could not be decrypted."),
+                        _protector.Unprotect(reader.GetString(4))
+                            ?? throw new InvalidOperationException("Claimed WhatsApp message could not be decrypted."),
+                        reader.GetString(5),
+                        reader.GetInt32(6)));
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    undecryptable.Add(id);
+                }
+            }
         }
 
-        return claimed;
+        return new ClaimBatch(claimed, undecryptable);
     }
 
     private static void AddParameter(DbCommand command, string name, object value)

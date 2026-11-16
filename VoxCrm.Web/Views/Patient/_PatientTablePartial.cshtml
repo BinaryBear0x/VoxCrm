@@ -1,11 +1,19 @@
 @model IEnumerable<VoxCrm.Domain.Entities.Patient>
+@{ var archived = ViewBag.Archived == true; }
 
 @if (!Model.Any())
 {
     <div class="text-center py-5 text-muted">
         <i class="bi bi-heart-pulse fs-1 d-block mb-2"></i>
-        <p>Henüz hasta kaydı yok.</p>
-        <a href="/Patient/Create" class="btn btn-primary btn-sm">Hasta Ekle</a>
+        @if (archived)
+        {
+            <p>Arşivlenmiş hasta yok.</p>
+        }
+        else
+        {
+            <p>Henüz hasta kaydı yok.</p>
+            <a href="/Patient/Create" class="btn btn-primary btn-sm">Hasta Ekle</a>
+        }
     </div>
 }
 else
@@ -48,23 +56,37 @@ else
                         <td>
                             @if (p.cinsiyet == 'E')
                             { <span class="badge bg-info text-dark">Erkek</span> }
-                            else
+                            else if (p.cinsiyet == 'D')
                             { <span class="badge bg-danger">Dişi</span> }
+                            else
+                            { <span class="badge bg-secondary">Belirtilmemiş</span> }
                         </td>
                         <td class="text-end">
                             <div class="d-flex justify-content-end gap-1">
-                                <a href="/Patient/Details/@p.ID" class="btn btn-sm btn-outline-info" title="Detay">
-                                    <i class="bi bi-eye"></i>
-                                </a>
-                                <a href="/Patient/Edit/@p.ID" class="btn btn-sm btn-outline-primary" title="Düzenle">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                <form method="post" action="/Patient/Delete/@p.ID" class="d-inline" data-confirm="Bu hastayı silmek istediğinize emin misiniz?">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Sil">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </form>
+                                @if (archived)
+                                {
+                                    <form method="post" action="/Patient/Restore/@p.ID" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-success" title="Geri al">
+                                            <i class="bi bi-arrow-counterclockwise"></i> Geri al
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <a href="/Patient/Details/@p.ID" class="btn btn-sm btn-outline-info" title="Detay">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="/Patient/Edit/@p.ID" class="btn btn-sm btn-outline-primary" title="Düzenle">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <form method="post" action="/Patient/Delete/@p.ID" class="d-inline" data-confirm="Bu hastayı silmek istediğinize emin misiniz?">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Sil">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                }
                             </div>
                         </td>
                     </tr>
@@ -88,16 +110,28 @@ else
                     }
                     @if (p.cinsiyet == 'E')
                     { <span class="badge bg-info text-dark">Erkek</span> }
-                    else
+                    else if (p.cinsiyet == 'D')
                     { <span class="badge bg-danger">Dişi</span> }
+                    else
+                    { <span class="badge bg-secondary">Belirtilmemiş</span> }
                 </div>
                 <div class="d-flex gap-1">
-                    <a href="/Patient/Details/@p.ID" class="btn btn-sm btn-outline-info">
-                        <i class="bi bi-eye"></i>
-                    </a>
-                    <a href="/Patient/Edit/@p.ID" class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-pencil"></i>
-                    </a>
+                    @if (archived)
+                    {
+                        <form method="post" action="/Patient/Restore/@p.ID" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-sm btn-outline-success"><i class="bi bi-arrow-counterclockwise"></i> Geri al</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <a href="/Patient/Details/@p.ID" class="btn btn-sm btn-outline-info">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        <a href="/Patient/Edit/@p.ID" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                    }
                 </div>
             </div>
         }

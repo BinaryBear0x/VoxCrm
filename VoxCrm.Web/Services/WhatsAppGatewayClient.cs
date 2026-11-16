@@ -29,7 +29,7 @@ public class WhatsAppGatewayClient
 
     public Task<GatewayHealthResponse?> GetHealthAsync(CancellationToken cancellationToken = default)
     {
-        return SendAsync<GatewayHealthResponse>(HttpMethod.Get, "/api/health", "whatsapp.session.read", null, cancellationToken);
+        return SendAsync<GatewayHealthResponse>(HttpMethod.Get, "/api/internal/health", "whatsapp.health.read", null, cancellationToken);
     }
 
     public Task ConnectAsync(Guid clinicId, CancellationToken cancellationToken = default)
@@ -43,22 +43,33 @@ public class WhatsAppGatewayClient
     }
 
     /// <summary>Belirli bir telefona serbest metin mesajı gönderir.</summary>
-    public async Task<GatewaySendResult?> SendMessageAsync(Guid clinicId, string phone, string message, CancellationToken cancellationToken = default)
+    public async Task<GatewayDirectSendResponse?> SendMessageAsync(
+        Guid clinicId,
+        Guid requestId,
+        string phone,
+        string message,
+        CancellationToken cancellationToken = default)
     {
-        var payload = new { phone, message };
+        var payload = new { phone, message, requestId };
         var json = JsonSerializer.Serialize(payload, JsonOptions);
         using var request = CreateRequest(HttpMethod.Post, $"/api/clinics/{clinicId}/whatsapp/send", "whatsapp.message.write", clinicId);
         request.Content = new StringContent(json, Encoding.UTF8, "application/json");
         using var response = await _httpClient.SendAsync(request, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        return new GatewaySendResult(response.IsSuccessStatusCode, (int)response.StatusCode, body);
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var result = await JsonSerializer.DeserializeAsync<GatewayDirectSendResponse>(stream, JsonOptions, cancellationToken);
+        return result is null
+            ? new GatewayDirectSendResponse(false, Error: $"Gateway geçersiz yanıt döndürdü ({(int)response.StatusCode}).")
+            : result with { HttpStatus = (int)response.StatusCode };
     }
 
     private async Task<T?> SendAsync<T>(HttpMethod method, string url, string scope, Guid? clinicId, CancellationToken cancellationToken)
     {
         using var request = CreateRequest(method, url, scope, clinicId);
         using var response = await _httpClient.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode) return default;
+        // A rejected token (401/403) or a gateway error used to come back as "no data", which
+        // the UI showed as a plain "not connected" and hid the real cause.
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"Gateway isteği başarısız oldu ({(int)response.StatusCode}).", null, response.StatusCode);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken);
@@ -70,9 +81,10 @@ public class WhatsAppGatewayClient
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         if (response.IsSuccessStatusCode) return;
 
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        // The response body is not copied into the message: it may carry internal addresses
+        // or stack traces and the message can reach logs and screens.
         throw new HttpRequestException(
-            $"Gateway istegi basarisiz oldu ({(int)response.StatusCode}): {body}",
+            $"Gateway isteği başarısız oldu ({(int)response.StatusCode}).",
             null,
             response.StatusCode);
     }
@@ -151,4 +163,9 @@ public record GatewayHealthResponse(
     DateTime? LastSendAt,
     string? LastError);
 
-public record GatewaySendResult(bool Success, int HttpStatus, string ResponseBody);
+public record GatewayDirectSendResponse(
+    bool Ok,
+    string? MessageId = null,
+    string? ErrorCode = null,
+    string? Error = null,
+    int HttpStatus = 0);

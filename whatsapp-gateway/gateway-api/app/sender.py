@@ -18,40 +18,60 @@ RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=30), timedelta(hours=2))
 _last_send_by_clinic: dict[uuid.UUID, datetime] = {}
 
 
-async def mark_stale_sending_as_needs_review() -> None:
+async def mark_stale_sending_as_needs_review() -> bool:
+    """Settle messages left in flight by a previous gateway process.
+
+    Returns True when every message was reconciled with VoxCRM. Messages whose report
+    could not be delivered (for example VoxCRM is still starting) keep their local state
+    and are retried by the caller, so one failure never aborts the others.
+    """
+    all_settled = True
     async with SessionLocal() as session:
         result = await session.execute(
-            select(OutboundMessage).where(OutboundMessage.state == "Sending")
+            select(OutboundMessage).where(
+                OutboundMessage.state.in_(("Sending", "SentLocally"))
+            )
         )
         messages = result.scalars().all()
         for message in messages:
-            message.state = "NeedsReview"
-            message.last_error = "Gateway restarted while message was in Sending state."
-            await voxcrm_client.report_status(
-                message.voxcrm_notification_id,
-                "NeedsReview",
-                last_error=message.last_error,
-                retry_count=message.retry_count,
-            )
-            await write_gateway_audit(
-                level="Warning", category="WhatsApp", action="Gateway.StaleSendingRecovered",
-                message="Gateway restart sonrasi Sending durumundaki mesaj NeedsReview durumuna alindi.",
-                outcome="NeedsReview", clinic_id=message.clinic_id,
-                entity_type="WhatsAppNotification", entity_id=str(message.voxcrm_notification_id),
-                error_code="STALE_SENDING",
-            )
+            try:
+                error ="Gateway restarted before the final delivery state was acknowledged."
+                await voxcrm_client.report_status(
+                    message.voxcrm_notification_id,
+                    "NeedsReview",
+                    last_error=error,
+                    retry_count=message.retry_count,
+                )
+                message.state = "NeedsReview"
+                message.last_error = error
+                await write_gateway_audit(
+                    level="Warning", category="WhatsApp", action="Gateway.StaleSendingRecovered",
+                    message="Gateway restart sonrasi Sending durumundaki mesaj NeedsReview durumuna alindi.",
+                    outcome="NeedsReview", clinic_id=message.clinic_id,
+                    entity_type="WhatsAppNotification", entity_id=str(message.voxcrm_notification_id),
+                    error_code="STALE_SENDING",
+                )
+            except Exception as exc:  # noqa: BLE001
+                all_settled = False
+                print(f"stale recovery failed for {message.voxcrm_notification_id}: {type(exc).__name__}: {exc!r}")
         await session.commit()
+    return all_settled
 
 
 async def poll_loop(stop_event: asyncio.Event) -> None:
-    await mark_stale_sending_as_needs_review()
+    recovered = False
 
     while not stop_event.is_set():
         try:
-            await voxcrm_client.recover_expired_processing()
-            await poll_once()
+            # Nothing may be claimed before leftovers of the previous process are settled,
+            # otherwise freshly started sends would be mistaken for stale ones.
+            if not recovered:
+                recovered = await mark_stale_sending_as_needs_review()
+            if recovered:
+                await voxcrm_client.recover_expired_processing()
+                await poll_once()
         except Exception as exc:  # noqa: BLE001
-            print(f"poll error: {exc}")
+            print(f"poll error: {type(exc).__name__}: {exc!r}")
 
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=settings.poll_interval_seconds)
@@ -60,38 +80,119 @@ async def poll_loop(stop_event: asyncio.Event) -> None:
 
 
 async def poll_once() -> None:
-    async with SessionLocal() as session:
-        result = await session.execute(
-            select(ClinicSession).where(ClinicSession.status == "ready")
-        )
-        ready_sessions = result.scalars().all()
-
-    if not ready_sessions:
+    clinic_ids = await refresh_session_statuses()
+    if not clinic_ids:
         return
-
-    clinic_ids = [item.clinic_id for item in ready_sessions]
     notifications = await voxcrm_client.claim_notifications(clinic_ids)
 
-    for notification in sorted(notifications, key=next_send_sort_key):
-        await process_notification(notification)
+    by_clinic: dict[str, list[dict]] = {}
+    for notification in notifications:
+        by_clinic.setdefault(notification["clinicId"], []).append(notification)
+
+    async def run_clinic(items: list[dict]) -> None:
+        # Messages of one clinic stay sequential (anti-ban pacing), but one clinic's
+        # waiting must not eat the claim lock of every other clinic.
+        for item in items:
+            try:
+                await process_notification(item)
+            except Exception as exc:  # noqa: BLE001
+                print(f"notification {item.get('notificationId')} failed: {type(exc).__name__}: {exc!r}")
+
+    await asyncio.gather(*(run_clinic(items) for items in by_clinic.values()))
+
+
+async def refresh_session_statuses() -> list[uuid.UUID]:
+    """Read actual device state even when nobody has the WhatsApp UI open."""
+    async with SessionLocal() as session:
+        ids = list((await session.scalars(select(ClinicSession.clinic_id))).all())
+    semaphore = asyncio.Semaphore(5)
+
+    async def refresh(clinic_id):
+        async with semaphore:
+            started_at = datetime.now(timezone.utc)
+            try:
+                payload = await asyncio.wait_for(worker_client.status(clinic_id), timeout=8)
+                device_status = payload.get("status")
+                if device_status not in {"ready", "disconnected", "connecting", "qr", "auth_failed"}:
+                    device_status = "unavailable"
+            except Exception:  # A failed status read must never leave a stale ready state.
+                payload = {"lastError": "Cihaz bağlantı durumu doğrulanamadı. WhatsApp worker servisini kontrol edin."}
+                device_status = "unavailable"
+            async with SessionLocal() as session:
+                row = await session.scalar(select(ClinicSession).where(ClinicSession.clinic_id == clinic_id))
+                if row is None:
+                    return None
+                # Do not overwrite a connect/disconnect operation newer than this read.
+                if row.updated_at and row.updated_at > started_at:
+                    return clinic_id if row.status == "ready" else None
+                previous = row.status
+                row.status = device_status
+                row.last_error = payload.get("lastError")
+                row.qr = None
+                if payload.get("connectedPhone"):
+                    row.connected_phone = payload["connectedPhone"]
+                row.updated_at = datetime.now(timezone.utc)
+                await session.commit()
+            if previous == "ready" and device_status != "ready":
+                await write_gateway_audit(
+                    level="Warning", category="WhatsAppSession", action="Gateway.DeviceDisconnected",
+                    message="WhatsApp cihaz bağlantısı kesildi." if device_status != "unavailable" else "WhatsApp cihaz bağlantısı doğrulanamadı.",
+                    outcome="Disconnected", clinic_id=clinic_id, metadata={"status": device_status},
+                )
+            elif previous != "ready" and device_status == "ready":
+                await write_gateway_audit(
+                    level="Info", category="WhatsAppSession", action="Gateway.DeviceReconnected",
+                    message="WhatsApp cihaz bağlantısı yeniden kuruldu.", outcome="Success", clinic_id=clinic_id,
+                )
+            return clinic_id if device_status == "ready" else None
+
+    return [item for item in await asyncio.gather(*(refresh(i) for i in ids)) if item is not None]
 
 
 async def process_notification(notification: dict) -> None:
     notification_id = uuid.UUID(notification["notificationId"])
     clinic_id = uuid.UUID(notification["clinicId"])
 
-    await wait_for_clinic_rate_limit(clinic_id)
-
     async with SessionLocal() as session:
         outbound = await get_or_create_outbound(session, notification, notification_id, clinic_id)
-        if outbound.state in {"SentLocally", "Sent", "NeedsReview"}:
-            return
+        local_state = outbound.state
+        known_message_id = outbound.gateway_message_id
+        known_error = outbound.last_error
+        known_retry_count = outbound.retry_count
 
-        outbound.state = "Sending"
-        outbound.last_error = None
-        await session.commit()
+    # VoxCRM handed this message out again although the gateway already settled it
+    # (typically because an earlier report was lost). Re-report instead of sending again.
+    if local_state in {"SentLocally", "Sent"}:
+        await voxcrm_client.report_status(
+            notification_id, "Sent", gateway_message_id=known_message_id, retry_count=known_retry_count,
+        )
+        await set_outbound_state(notification_id, "Sent")
+        return
+    if local_state == "NeedsReview":
+        await voxcrm_client.report_status(
+            notification_id, "NeedsReview",
+            last_error=known_error or "Alıcı doğrulanamadı; gönderim durduruldu.",
+            retry_count=known_retry_count,
+        )
+        return
+
+    await wait_for_clinic_rate_limit(clinic_id)
+
+    await set_outbound_state(notification_id, "Sending", clear_error=True)
 
     try:
+        validation = await voxcrm_client.validate_delivery(notification_id, clinic_id, notification["phoneNumber"], notification["messageContent"])
+        if not validation.get("allowed"):
+            if validation.get("retryable"):
+                # The claim lock ran out before sending. Nothing was sent, VoxCRM requeues
+                # the message itself; do not turn a timing problem into NeedsReview.
+                await set_outbound_state(notification_id, "Claimed")
+                return
+            await set_outbound_state(
+                notification_id, "NeedsReview",
+                error=validation.get("error") or "Alıcı doğrulanamadı; gönderim durduruldu.",
+            )
+            return
         response = await worker_client.send(
             clinic_id,
             notification["phoneNumber"],
@@ -164,6 +265,21 @@ async def get_or_create_outbound(
     if outbound is None:
         raise RuntimeError("OutboundMessage could not be created.")
     return outbound
+
+
+async def set_outbound_state(
+    notification_id: uuid.UUID, state: str, *, error: str | None = None, clear_error: bool = False,
+) -> None:
+    async with SessionLocal() as session:
+        outbound = await find_outbound(session, notification_id)
+        if outbound is None:
+            return
+        outbound.state = state
+        if error is not None:
+            outbound.last_error = error
+        elif clear_error:
+            outbound.last_error = None
+        await session.commit()
 
 
 async def find_outbound(session: AsyncSession, notification_id: uuid.UUID) -> OutboundMessage | None:
@@ -255,16 +371,11 @@ async def write_gateway_audit(
         print(f"audit write failed: {exc}")
 
 
-def next_send_sort_key(notification: dict) -> datetime:
-    clinic_id = uuid.UUID(notification["clinicId"])
-    last_send = _last_send_by_clinic.get(clinic_id)
-    if last_send is None:
-        return datetime.min.replace(tzinfo=timezone.utc)
-    return last_send + timedelta(seconds=settings.per_clinic_send_interval_seconds)
-
-
 async def wait_for_clinic_rate_limit(clinic_id: uuid.UUID) -> None:
-    last_send = _last_send_by_clinic.get(clinic_id)
+    memory_last_send = _last_send_by_clinic.get(clinic_id)
+    persisted_last_send = await get_last_send_at(clinic_id)
+    candidates = [value for value in (memory_last_send, persisted_last_send) if value is not None]
+    last_send = max(candidates) if candidates else None
     if last_send is None:
         return
 
@@ -274,3 +385,21 @@ async def wait_for_clinic_rate_limit(clinic_id: uuid.UUID) -> None:
     wait_seconds = (next_allowed - datetime.now(timezone.utc)).total_seconds()
     if wait_seconds > 0:
         await asyncio.sleep(wait_seconds)
+
+
+async def get_last_send_at(clinic_id: uuid.UUID) -> datetime | None:
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(OutboundMessage.updated_at)
+            .where(
+                OutboundMessage.clinic_id == clinic_id,
+                OutboundMessage.state.in_(("SentLocally", "Sent")),
+            )
+            .order_by(OutboundMessage.updated_at.desc())
+            .limit(1)
+        )
+        last_send = result.scalar_one_or_none()
+
+    if last_send is None or last_send.tzinfo is not None:
+        return last_send
+    return last_send.replace(tzinfo=timezone.utc)

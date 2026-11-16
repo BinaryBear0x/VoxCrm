@@ -1,54 +1,20 @@
-@{
-    ViewData["Title"] = "Aşı Kaydı Ekle";
-    ViewData["ActiveMenu"] = "vaccines";
+@model VoxCrm.Web.Models.VaccinationBatchViewModel
+@{ ViewData["Title"] = "Çoklu aşı / uygulama kaydı"; ViewData["ActiveMenu"] = "vaccines"; }
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4"><div><a href="/Vaccination" class="small text-decoration-none">← Aşı ve uygulama gündemi</a><h1 class="h3 mt-2 mb-1">Aynı ziyarette yapılanları kaydet</h1><p class="text-muted mb-0">Bir hasta, bir tarih; birden fazla uygulama. Her uygulama ayrı geçmiş kaydı olarak saklanır.</p></div></div>
+<form method="post" action="/Vaccination/Create" id="vaccinationBatchForm" class="card shadow-sm"><div class="card-body p-4">@Html.AntiForgeryToken()<input type="hidden" name="SubmissionId" value="@Model.SubmissionId">
+@if (!ViewData.ModelState.IsValid)
+{
+<div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
 }
-
-<div class="card shadow-sm mb-4">
-    <div class="card-body pb-0">
-        <a href="/Vaccination" class="text-muted text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Aşı Takvimi</a>
-        <h1 class="h3 fw-bold mb-0 mt-1">Aşı Kaydı Ekle</h1>
-    </div>
-</div>
-
-<div class="row justify-content-center">
-    <div class="col-12 col-md-8 col-lg-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body p-4">
-                <form method="post" action="/Vaccination/Create">
-                    @Html.AntiForgeryToken()
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Hasta *</label>
-                        <select name="PatientId" class="form-select" required data-search-select="patient" data-required="true" data-placeholder="Hasta adı, tür, ırk, çip, sahip telefonu...">
-                            <option value="">-- Hasta Seç --</option>
-                            @foreach (var p in (ViewBag.Patients as List<VoxCrm.Domain.Entities.Patient> ?? new()))
-                            {
-                                <option value="@p.ID">@p.Name (@p.Species)</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Aşı Türü *</label>
-                            <select name="VaccineTypeId" class="form-select" required>
-                                <option value="">-- Aşı Türü Seç --</option>
-                                @foreach (var vt in (ViewBag.VaccineTypes as List<VoxCrm.Domain.Entities.VaccineType> ?? new()))
-                                {
-                                    <option value="@vt.ID">@vt.Name (@vt.ValidityDays gün geçerli)</option>
-                                }
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mb-4">
-                        <label class="form-label fw-semibold">Yapılma Tarihi *</label>
-                        <input type="date" name="AdministeredDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required>
-                        <div class="form-text">Sonraki aşı tarihi, seçilen aşı türüne göre otomatik hesaplanır.</div>
-                    </div>
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">Kaydet</button>
-                        <a href="/Vaccination" class="btn btn-outline-secondary">Iptal</a>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
+<div class="row g-3 mb-4"><div class="col-md-8"><label for="patient" class="form-label fw-semibold">Hasta ve sahibi</label><select id="patient" name="PatientId" class="form-select" required data-search-select="patient" data-required="true" data-placeholder="Hasta, sahip veya telefon ara…"><option value="">Hasta seçin</option>
+@foreach(var p in Model.Patients){var o=p.Owners.FirstOrDefault(x=>x.IsActive&&x.IsPrimaryOwner&&x.PetOwner.IsActive)?.PetOwner;<option value="@p.ID" selected="@(p.ID==Model.PatientId)">@p.Name (@p.Species) — @(o==null?"Sahip belirtilmedi":o.FirstName+" "+o.LastName+" — "+o.Phone)</option>}
+</select></div><div class="col-md-4"><label for="applicationDate" class="form-label fw-semibold">Ortak yapılma tarihi</label><input id="applicationDate" name="AdministeredDate" type="date" value="@Model.AdministeredDate.ToString("yyyy-MM-dd")" class="form-control" required><div class="form-text">Yalnız gerçekten yapılmış işlemleri seçin.</div></div></div>
+<div class="alert alert-info small">Aynı hasta ve aynı uygulama türüne ait daha eski beklentiler güncel gündemde yenilenmiş sayılır; geçmiş kayıtları silinmez. Ayrı tanımlı dozlar/türler birbirini kapatmaz. Sonraki tarihler uygulama tanımlarından hesaplanır.</div>
+<div class="d-flex justify-content-between align-items-center mb-2"><h2 class="h5 mb-0">Yapılan uygulamalar</h2><span data-batch-count class="badge bg-primary">0 seçili</span></div>
+<div class="table-responsive"><table class="table align-middle mb-3"><thead><tr><th>Yapıldı</th><th>Uygulama</th><th>Parti / seri / uygulama kodu</th><th>Sonraki tarih</th></tr></thead><tbody>
+@for(var i=0;i<Model.Rows.Count;i++){var row=Model.Rows[i];<tr data-batch-row data-days="@row.ValidityDays"><td><input type="hidden" name="Rows[@i].VaccineTypeId" value="@row.VaccineTypeId"><input class="form-check-input" type="checkbox" name="Rows[@i].Selected" id="application-@i" value="true" checked="@row.Selected" data-batch-selected aria-label="@row.Name yapıldı"><input type="hidden" name="Rows[@i].Selected" value="false"></td><td><label for="application-@i" class="fw-semibold">@row.Name</label><div class="small text-muted">Tekrar aralığı: @row.ValidityDays gün</div></td><td><input name="Rows[@i].VaccineCode" value="@row.VaccineCode" class="form-control form-control-sm" maxlength="200" placeholder="İsteğe bağlı" aria-label="@row.Name parti veya seri kodu" data-batch-code></td><td><span data-batch-next class="text-muted small">—</span></td></tr>}
+@if(!Model.Rows.Any()){<tr><td colspan="4" class="text-muted py-4">Aktif uygulama türü yok. <a href="/VaccineType/Create">Önce uygulama türü ekleyin.</a></td></tr>}
+</tbody></table></div><p class="text-muted small">Bu kayıt işlemi doğrudan WhatsApp mesajı göndermez. Hatırlatmalar klinik izinlerine ve gönderim kontrollerine bağlıdır.</p>
+<div class="d-flex gap-2 flex-wrap"><button type="submit" class="btn btn-primary" data-batch-submit>Seçili uygulamaları kaydet</button><a class="btn btn-outline-secondary" href="/Vaccination">Vazgeç</a></div>
+</div></form>
+@section Scripts{<script src="~/js/vaccination-batch.js" asp-append-version="true"></script>}

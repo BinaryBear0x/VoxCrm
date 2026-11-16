@@ -54,7 +54,7 @@ public class AuthController : Controller
     {
         var user = await _userManager.FindByEmailAsync(email);
         var isSystemAdmin = user != null && await _userManager.IsInRoleAsync(user, "SystemAdmin");
-        if (user == null || (!isSystemAdmin && !await _clinicManagementService.IsUserScopeActiveAsync(
+        if (user == null || user.LoginDisabled || (!isSystemAdmin && !await _clinicManagementService.IsUserScopeActiveAsync(
                 user.ClinicId,
                 user.DealerId,
                 HttpContext.RequestAborted)))

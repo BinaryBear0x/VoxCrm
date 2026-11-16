@@ -10,9 +10,13 @@ public sealed class PetOwnerConfiguration : IEntityTypeConfiguration<PetOwner>
     {
         builder.Property(owner => owner.NormalizedPhone).HasMaxLength(64);
         builder.Property(owner => owner.EmailLookupHash).HasMaxLength(64);
+        builder.Property(owner => owner.NationalIdentityLookupHash).HasMaxLength(64);
         builder.HasIndex(owner => new { owner.ClinicID, owner.NormalizedPhone })
             .IsUnique()
             .HasFilter("\"IsActive\" = TRUE AND \"NormalizedPhone\" IS NOT NULL");
         builder.HasIndex(owner => new { owner.ClinicID, owner.EmailLookupHash });
+        builder.HasIndex(owner => new { owner.ClinicID, owner.NationalIdentityLookupHash })
+            .IsUnique()
+            .HasFilter("\"IsActive\" = TRUE AND \"NationalIdentityLookupHash\" IS NOT NULL");
     }
 }

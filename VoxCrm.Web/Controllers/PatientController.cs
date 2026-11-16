@@ -13,10 +13,12 @@ public sealed class PatientController : Controller
 
     public PatientController(IPatientService service) => _service = service;
 
-    public async Task<IActionResult> Index(string? search, bool partial = false, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Index(string? search, bool partial = false, bool archived = false, CancellationToken cancellationToken = default)
     {
         ViewBag.Search = search;
-        var patients = await _service.ListAsync(search, cancellationToken: cancellationToken);
+        ViewBag.Archived = archived;
+        var patients = await _service.ListAsync(search, includeArchived: archived, cancellationToken: cancellationToken);
+        if (archived) patients = patients.Where(p => !p.IsActive).ToList();
         if (partial || Request.Headers["X-Requested-With"] == "XMLHttpRequest")
             return PartialView("_PatientTablePartial", patients);
         return View(patients);
@@ -58,7 +60,7 @@ public sealed class PatientController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        [Bind("Name,Species,Breed,cinsiyet,DateOfBirth,MicrochipNumber,pasaportNumarasi,Notes")] Patient model,
+        [Bind("Name,Species,Breed,cinsiyet,DateOfBirth,MicrochipNumber,pasaportNumarasi,Notes,SubmissionId")] Patient model,
         Guid? ownerId,
         CancellationToken cancellationToken)
     {
@@ -123,6 +125,11 @@ public sealed class PatientController : Controller
     {
         var result = await _service.RestoreAsync(id, ActorUserId(), cancellationToken);
         if (result.NotFound) return NotFound();
+        if (!result.Succeeded)
+        {
+            TempData["Error"] = result.Error ?? "Hasta yeniden aktifleştirilemedi.";
+            return RedirectToAction(nameof(Index), new { archived = true });
+        }
         TempData["Success"] = "Hasta yeniden aktifleştirildi.";
         return RedirectToAction(nameof(Details), new { id });
     }
@@ -141,8 +148,16 @@ public sealed class PatientController : Controller
     {
         var result = await _service.RemoveOwnerAsync(patientId, ownerId, ActorUserId(), cancellationToken);
         if (result.NotFound) return NotFound();
-        TempData["Success"] = "Sahip bağlantısı arşivlendi.";
+        TempData[result.Succeeded ? "Success" : "Error"] = result.Succeeded ? "Sahip bağlantısı arşivlendi." : result.Error;
         return RedirectToAction(nameof(Details), new { id = patientId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetPrimaryOwner(Guid patientId, Guid ownerId, CancellationToken cancellationToken)
+    {
+        var result=await _service.SetPrimaryOwnerAsync(patientId,ownerId,ActorUserId(),cancellationToken);
+        if(result.NotFound)return NotFound();TempData[result.Succeeded?"Success":"Error"]=result.Succeeded?"Birincil sahip güncellendi.":result.Error;
+        return RedirectToAction(nameof(Details),new{id=patientId});
     }
 
     private void RemoveSystemValidation()

@@ -25,6 +25,28 @@ describe("BaileysProvider", () => {
     expect(status.connectedPhone).toBe("905550000000@s.whatsapp.net");
   });
 
+  it("uses a Linux desktop profile for fresh QR linking", async () => {
+    const { provider, socketOptions } = createProvider();
+
+    await provider.connect(clinicA);
+
+    expect(socketOptions[0].browser.slice(0, 2)).toEqual(["Ubuntu", "Chrome"]);
+    expect(socketOptions[0]).toMatchObject({ syncFullHistory: false, emitOwnEvents: false });
+  });
+
+  it("explains when WhatsApp rejects linking before a QR is issued", async () => {
+    const { provider, sockets } = createProvider();
+    await provider.connect(clinicA);
+
+    sockets[0].emitConnection({
+      connection: "close",
+      lastDisconnect: { error: { output: { statusCode: 405 }, message: "Connection Failure" } }
+    });
+    await flush();
+
+    expect(provider.status(clinicA).lastError).toContain("HTTP 405");
+  });
+
   it("disconnects only the selected clinic session", async () => {
     const { provider, sockets } = createProvider();
 
@@ -84,6 +106,19 @@ describe("BaileysProvider", () => {
 
     expect(result.statusCode).toBe(502);
     expect(result.body.errorCode).toBe("WORKER_TRANSIENT");
+  });
+
+  it("reconnects with a fresh socket after an unknown server failure", async () => {
+    const { provider, sockets } = createProvider({ reconnectBaseDelayMs: 0 });
+    await provider.connect(clinicA);
+
+    sockets[0].emitConnection({
+      connection: "close",
+      lastDisconnect: { error: { output: { statusCode: 500 }, message: "Connection Failure" } }
+    });
+
+    await waitFor(() => sockets.length === 2);
+    expect(provider.status(clinicA).status).toBe("connecting");
   });
 
   it("forwards only supported inbound direct messages", async () => {
@@ -163,6 +198,7 @@ describe("BaileysProvider", () => {
 
 function createProvider(overrides = {}) {
   const sockets = [];
+  const socketOptions = [];
   const sessionStore = overrides.sessionStore || {
     encryptionStatus: () => "disabled",
     useAuthState: vi.fn(async () => ({
@@ -179,13 +215,15 @@ function createProvider(overrides = {}) {
     workerInternalToken: "test-token",
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
     httpClient: overrides.httpClient || { post: vi.fn().mockResolvedValue({}) },
-    makeSocket: () => {
+    reconnectBaseDelayMs: overrides.reconnectBaseDelayMs,
+    makeSocket: (options) => {
+      socketOptions.push(options);
       const socket = createSocketMock();
       sockets.push(socket);
       return socket;
     }
   });
-  return { provider, sockets, sessionStore };
+  return { provider, sockets, socketOptions, sessionStore };
 }
 
 function createSocketMock() {

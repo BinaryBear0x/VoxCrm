@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VoxCrm.Application.Vaccinations;
 using VoxCrm.Domain.Entities;
+using VoxCrm.Web.Services;
+using VoxCrm.Web.Models;
 
 namespace VoxCrm.Web.Controllers;
 
@@ -10,43 +12,57 @@ namespace VoxCrm.Web.Controllers;
 public sealed class VaccinationController : Controller
 {
     private readonly IVaccinationService _service;
+    private readonly IVaccinationReminderScheduler _reminderScheduler;
 
-    public VaccinationController(IVaccinationService service) => _service = service;
+    public VaccinationController(
+        IVaccinationService service,
+        IVaccinationReminderScheduler reminderScheduler)
+    {
+        _service = service;
+        _reminderScheduler = reminderScheduler;
+    }
 
-    public async Task<IActionResult> Index(bool includeArchived, CancellationToken cancellationToken)
+    public async Task<IActionResult> Index(bool includeArchived, bool history, CancellationToken cancellationToken)
     {
         ViewBag.IncludeArchived = includeArchived;
-        return View(await _service.ListAsync(includeArchived, cancellationToken));
+        var records = await _service.ListAsync(includeArchived, cancellationToken);
+        ViewBag.History = history;
+        return View(history ? records : records.Where(x => x.RenewedOn == null).ToList());
     }
 
     public async Task<IActionResult> Create(CancellationToken cancellationToken)
     {
-        await SetChoicesAsync(cancellationToken);
-        return View();
+        var model = new VaccinationBatchViewModel();
+        await PopulateBatch(model, cancellationToken); return View(model);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(
-        [Bind("PatientId,VaccineTypeId,AdministeredDate")] VaccinationRecord model,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Create(VaccinationBatchViewModel model, CancellationToken cancellationToken)
     {
-        RemoveSystemValidation();
-        if (!ModelState.IsValid)
+        // Names, validity and choices always come from the database, never posted display fields.
+        ModelState.Remove(nameof(model.Patients));
+        if (ModelState.IsValid)
         {
-            await SetChoicesAsync(cancellationToken);
-            return View(model);
+            var result = await _service.CreateBatchAsync(new(model.PatientId, model.AdministeredDate, model.SubmissionId,
+                model.Rows.Where(x => x.Selected).Select(x => new VaccinationBatchItem(x.VaccineTypeId, x.VaccineCode)).ToList()), ActorUserId(), cancellationToken);
+            if (result.Succeeded)
+            {
+                TempData["Success"] = $"{result.Records.Count} uygulama birlikte kaydedildi. Geçmiş kayıtlar korunur; hatırlatma gönderimi ayrı ayarlara bağlıdır.";
+                return RedirectToAction(nameof(Index));
+            }
+            ModelState.AddModelError(string.Empty, result.Error ?? "Uygulamalar kaydedilemedi.");
         }
+        await PopulateBatch(model, cancellationToken); return View(model);
+    }
 
-        var result = await _service.CreateAsync(model, cancellationToken);
-        if (!result.Succeeded)
-        {
-            ModelState.AddModelError(string.Empty, result.Error ?? "Aşı kaydı oluşturulamadı.");
-            await SetChoicesAsync(cancellationToken);
-            return View(model);
-        }
-
-        TempData["Success"] = "Aşı kaydı başarıyla eklendi.";
-        return RedirectToAction(nameof(Index));
+    private async Task PopulateBatch(VaccinationBatchViewModel model, CancellationToken ct)
+    {
+        var choices = await _service.GetChoicesAsync(ct);
+        if (model.AdministeredDate == default) model.AdministeredDate = choices.Today ?? DateTime.UtcNow.Date;
+        var selected = model.Rows.GroupBy(x => x.VaccineTypeId).ToDictionary(x => x.Key, x => x.First());
+        model.Patients = choices.Patients;
+        model.Rows = choices.VaccineTypes.Select(x => new VaccinationBatchRow { VaccineTypeId = x.ID, Name = x.Name, ValidityDays = x.ValidityDays,
+            Selected = selected.TryGetValue(x.ID, out var old) && old.Selected, VaccineCode = selected.TryGetValue(x.ID, out var prior) ? prior.VaccineCode : null }).ToList();
     }
 
     public async Task<IActionResult> Edit(Guid id, CancellationToken cancellationToken)
@@ -59,7 +75,7 @@ public sealed class VaccinationController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(
-        [Bind("ID,PatientId,VaccineTypeId,AdministeredDate")] VaccinationRecord model,
+        [Bind("ID,PatientId,VaccineTypeId,AdministeredDate,VaccineCode")] VaccinationRecord model,
         CancellationToken cancellationToken)
     {
         RemoveSystemValidation();
@@ -99,6 +115,12 @@ public sealed class VaccinationController : Controller
         TempData["Success"] = "Aşı kaydı geri alındı.";
         return RedirectToAction(nameof(Index), new { includeArchived = true });
     }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public IActionResult RetryReminder(Guid id) => RedirectToAction("PrepareVaccination", "WhatsApp", new { id });
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public IActionResult SendReminderNow(Guid id) => RedirectToAction("PrepareVaccination", "WhatsApp", new { id });
 
     private async Task SetChoicesAsync(CancellationToken cancellationToken)
     {
