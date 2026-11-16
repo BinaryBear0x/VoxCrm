@@ -6,7 +6,7 @@ VoxCRM, veteriner klinikleri ve klinik ağlarını (bayiler) yönetmek için tas
 
 ## Bu sürümde yapılanlar (2026-11-16)
 
-Yayına hazırlık paketi. Ayrıntılı kontrol listesi: [docs/release-whatsapp-hardening-2026-11-10.md](docs/release-whatsapp-hardening-2026-11-10.md).
+Yayına hazırlık paketi.
 
 ### WhatsApp mesaj altyapısı
 - **Kuyruk güvenilirliği:** talep edilen mesajlar kilitle (`FOR UPDATE SKIP LOCKED`) alınır; "işleniyor"da takılanlar kurtarılır, üçten fazla denemede "kontrol gerekli" olur. Geçersiz durum geçişleri reddedilir.
@@ -667,8 +667,7 @@ değiştirilmez.
 Bu VPS'te kullanıcı talebiyle SSH tamamen kapsam dışıdır: port, root/parola girişi,
 authorized_keys ve SSH yapılandırması değiştirilmez. Sunucu birden fazla aktif site
 barındırdığı için Nginx, Apache, Docker daemon, PM2, UFW ve global ağ ayarları bakım
-penceresi ve mevcut site baseline karşılaştırması olmadan değiştirilmez. Envanter sonucu
-`docs/SERVER_INVENTORY_2026-07-15.md` dosyasındadır.
+penceresi ve mevcut site baseline karşılaştırması olmadan değiştirilmez.
 
 ### Secret oluşturma
 
